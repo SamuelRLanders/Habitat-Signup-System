@@ -12,7 +12,7 @@ datasource db {
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
-enum OpportunityStatus {
+enum BuildStatus {
   DRAFT // visible to admins only
   PUBLISHED // open for signups
   CLOSED // visible, but no longer accepting signups
@@ -23,6 +23,21 @@ enum SignupStatus {
   CONFIRMED
   WAITLISTED
   CANCELLED
+}
+
+enum Sex {
+  FEMALE
+  MALE
+}
+
+enum TShirtSize {
+  XS
+  S
+  M
+  L
+  XL
+  XXL
+  XXXL
 }
 
 enum MessageChannel {
@@ -51,10 +66,10 @@ model Admin {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  sessions      Session[]
-  accounts      Account[]
-  opportunities Opportunity[]
-  messages      Message[]
+  sessions Session[]
+  accounts Account[]
+  builds   Build[]
+  messages Message[]
 }
 
 // ─── Auth (managed by Better Auth) ───────────────────────────────────────────
@@ -110,45 +125,71 @@ model Verification {
   @@index([identifier])
 }
 
-// ─── Opportunities ───────────────────────────────────────────────────────────
+// ─── Builds & shifts ─────────────────────────────────────────────────────────
 
-model Opportunity {
-  id          String            @id @default(cuid())
-  title       String
-  description String            @db.Text
-  location    String // display name, e.g. "Oak Street Build Site"
-  address     String?
-  startsAt    DateTime
-  endsAt      DateTime
-  capacity    Int // total volunteer spots; group signups use groupSize spots
-  minimumAge  Int?
-  status      OpportunityStatus @default(DRAFT)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+// A home Habitat is building. Volunteers sign up for its shifts.
+model Build {
+  id          String      @id @default(cuid())
+  name        String
+  address     String
+  description String?     @db.Text
+  // IANA time zone the build's shift times are entered and shown in.
+  timeZone    String      @default("America/Indiana/Indianapolis")
+  status      BuildStatus @default(DRAFT)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   createdById String
   createdBy   Admin  @relation(fields: [createdById], references: [id])
 
+  shifts Shift[]
+
+  @@index([status])
+}
+
+// A block of time volunteers can sign up for at a build.
+model Shift {
+  id          String    @id @default(cuid())
+  startsAt    DateTime
+  endsAt      DateTime
+  capacity    Int // total volunteer spots; group signups use groupSize spots
+  notes       String?   @db.Text
+  // Shifts with signups are cancelled rather than deleted, to keep a record.
+  cancelledAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  buildId String
+  build   Build  @relation(fields: [buildId], references: [id], onDelete: Cascade)
+
   signups  Signup[]
   messages Message[]
 
-  @@index([status, startsAt])
+  @@index([buildId, startsAt])
 }
 
 // ─── Volunteers & signups ────────────────────────────────────────────────────
 
-// Volunteers never log in. A returning volunteer is matched by email.
+// Volunteers never log in. A returning volunteer is matched by email, and
+// each signup updates their details to the latest ones entered. The signup
+// form requires most fields; they're optional here for volunteers added in
+// other ways (such as group members).
 model Volunteer {
-  id          String    @id @default(cuid())
-  firstName   String
-  lastName    String
-  email       String    @unique
-  phone       String?
-  smsOptIn    Boolean   @default(false)
-  smsOptInAt  DateTime? // when consent was given (needed for SMS compliance)
-  dateOfBirth DateTime? @db.Date
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                    String      @id @default(cuid())
+  firstName             String
+  lastName              String
+  email                 String      @unique
+  phone                 String? // E.164, e.g. +17655550123
+  address               String?
+  emergencyContactName  String?
+  emergencyContactPhone String? // E.164
+  sex                   Sex?
+  tShirtSize            TShirtSize?
+  smsOptIn              Boolean     @default(false)
+  smsOptInAt            DateTime? // when consent was given (needed for SMS compliance)
+  dateOfBirth           DateTime?   @db.Date
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
 
   signups           Signup[]
   groupMemberships  GroupMember[]
@@ -156,8 +197,8 @@ model Volunteer {
   messageRecipients MessageRecipient[]
 }
 
-// One volunteer signing up for one opportunity: either alone, or as the
-// leader of a group (groupSize > 1).
+// One volunteer signing up for one shift: either alone, or as the leader of
+// a group (groupSize > 1) that takes up several spots.
 model Signup {
   id          String       @id @default(cuid())
   status      SignupStatus @default(CONFIRMED)
@@ -169,8 +210,8 @@ model Signup {
   updatedAt   DateTime     @updatedAt
   cancelledAt DateTime?
 
-  opportunityId String
-  opportunity   Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  shiftId String
+  shift   Shift  @relation(fields: [shiftId], references: [id], onDelete: Cascade)
 
   volunteerId String // the individual, or the group leader
   volunteer   Volunteer @relation(fields: [volunteerId], references: [id])
@@ -178,7 +219,7 @@ model Signup {
   groupMembers      GroupMember[]
   waiverAcceptances WaiverAcceptance[]
 
-  @@unique([opportunityId, volunteerId])
+  @@unique([shiftId, volunteerId])
   @@index([volunteerId])
 }
 
@@ -248,7 +289,7 @@ model WaiverAcceptance {
 
 // ─── Messaging ───────────────────────────────────────────────────────────────
 
-// An email or text sent by an admin, usually to everyone signed up for an opportunity.
+// An email or text sent by an admin, usually to everyone signed up for a shift.
 model Message {
   id        String         @id @default(cuid())
   channel   MessageChannel
@@ -259,8 +300,8 @@ model Message {
   sentById String
   sentBy   Admin  @relation(fields: [sentById], references: [id])
 
-  opportunityId String?
-  opportunity   Opportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  shiftId String?
+  shift   Shift?  @relation(fields: [shiftId], references: [id], onDelete: SetNull)
 
   recipients MessageRecipient[]
 }
