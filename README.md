@@ -1,19 +1,21 @@
 # Habitat Signup System
 
-A web app that lets Habitat for Humanity staff publish volunteer opportunities and lets the public sign up for them, alone or as a group, without creating an account.
+A web app that lets Habitat for Humanity staff schedule volunteer shifts for home builds and lets the public sign up for them, alone or as a group, without creating an account.
 
 ## Features
 
 **For volunteers (no login required)**
-- Browse upcoming opportunities with date, location, open spots, and requirements
-- Sign up as an individual or as a group (group leader enters the group size and member details)
+- Browse upcoming builds and their shifts, with date, time, address, and open spots
+- Sign up as an individual or as a group (one signup that takes several spots)
+- Volunteers must be 18 or older for now
 - Accept the liability waiver online as part of signup
 - Get a confirmation email with event details, a calendar invite, and a private link to view or cancel the signup
 
 **For admins (login required)**
-- Create, edit, duplicate, and close volunteer opportunities (capacity, shifts, minimum age, location, notes)
+- Create builds (name, address, time zone) and add volunteer shifts to them (date, time, spots, notes)
+- Publish, close, or cancel a build's signups
 - View and export rosters, including waiver status for each volunteer
-- Send email or SMS messages to everyone signed up for an opportunity
+- Send email or SMS messages to everyone signed up for a shift
 - Manage waiver text and versions
 - Manage admin accounts
 
@@ -23,7 +25,7 @@ A web app that lets Habitat for Humanity staff publish volunteer opportunities a
 |---|---|---|
 | Framework | [Next.js](https://nextjs.org) (App Router) + TypeScript | One codebase for the public site, admin dashboard, and API |
 | UI | [Tailwind CSS](https://tailwindcss.com) + [shadcn/ui](https://ui.shadcn.com) | Clean, accessible components that are quick to build with |
-| Database | PostgreSQL (hosted on [Neon](https://neon.tech) or [Supabase](https://supabase.com)) | Relational data (opportunities ↔ signups ↔ volunteers); free tiers available |
+| Database | PostgreSQL (hosted on [Neon](https://neon.tech) or [Supabase](https://supabase.com)) | Relational data (builds ↔ shifts ↔ signups ↔ volunteers); free tiers available |
 | ORM | [Prisma](https://www.prisma.io) | Type-safe queries and schema migrations |
 | Admin auth | [Better Auth](https://better-auth.com) with email magic links | No admin passwords to manage; built-in Prisma support |
 | Email | [Resend](https://resend.com) + [React Email](https://react.email) | Transactional email with templates written as React components |
@@ -34,9 +36,10 @@ A web app that lets Habitat for Humanity staff publish volunteer opportunities a
 ## Data Model
 
 - **Admin**: staff who can log in
-- **Opportunity**: title, description, location, start/end time, capacity, minimum age, status
-- **Volunteer**: name, email, phone, SMS opt-in, date of birth. Returning volunteers are matched by email.
-- **Signup**: links a volunteer to an opportunity, with group size, group name, status, and a secret token for the manage/cancel link
+- **Build**: a home being built: name, address, description, time zone, and status (draft, published, closed, cancelled)
+- **Shift**: a block of time at a build: start/end time, number of spots, notes. Shifts with signups are cancelled rather than deleted.
+- **Volunteer**: name, email, phone, home address, emergency contact, birthday, and optionally sex and T-shirt size. Returning volunteers are matched by email, and each signup updates their details.
+- **Signup**: links a volunteer to a shift, with group size (spots taken), group name, status, and a secret token for the manage/cancel link
 - **GroupMember**: individual members listed under a group signup
 - **Waiver**: versioned waiver text; one version is active at a time
 - **WaiverAcceptance**: who accepted which waiver version, when, with typed signature, IP address, and guardian details for minors
@@ -85,6 +88,10 @@ npm run dev                # http://localhost:3000
 - `src/app/`: pages and routes (Next.js App Router)
 - `src/components/ui/`: shadcn/ui components (add more with `npx shadcn@latest add <name>`)
 - `src/app/admin/`: admin dashboard; `(dashboard)/` holds the pages that require login
+- `src/app/builds/[buildId]/`: public signup page for a build (the link behind the admin "Share" button)
+- `src/lib/builds/`: build and shift queries and Server Actions
+- `src/lib/signups/`: the public signup form's query and Server Action (validation, age check, and shift capacity check)
+- `src/lib/time.ts`: time zone conversion and date formatting (shift times are stored in UTC)
 - `src/lib/auth/`: admin login (Better Auth config, `requireAdmin()`, and the login Server Actions)
 - `src/proxy.ts`: redirects logged-out visitors away from `/admin`
 - `src/lib/email.ts`: sends email through Resend, or prints it locally
@@ -94,8 +101,8 @@ npm run dev                # http://localhost:3000
 ## Roadmap
 
 1. Scaffold the Next.js app, database schema, and admin login
-2. Admin: create and manage opportunities
-3. Public: browse opportunities and sign up as an individual
+2. Admin: create and manage builds and shifts
+3. Public: browse builds and sign up for shifts as an individual
 4. Waiver acceptance and confirmation emails
 5. Group signups
 6. Admin messaging (email, then SMS)
