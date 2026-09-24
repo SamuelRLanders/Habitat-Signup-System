@@ -25,7 +25,7 @@ A web app that lets Habitat for Humanity staff publish volunteer opportunities a
 | UI | [Tailwind CSS](https://tailwindcss.com) + [shadcn/ui](https://ui.shadcn.com) | Clean, accessible components that are quick to build with |
 | Database | PostgreSQL (hosted on [Neon](https://neon.tech) or [Supabase](https://supabase.com)) | Relational data (opportunities ↔ signups ↔ volunteers); free tiers available |
 | ORM | [Prisma](https://www.prisma.io) | Type-safe queries and schema migrations |
-| Admin auth | [Auth.js](https://authjs.dev) with email magic links | No admin passwords to manage |
+| Admin auth | [Better Auth](https://better-auth.com) with email magic links | No admin passwords to manage; built-in Prisma support |
 | Email | [Resend](https://resend.com) + [React Email](https://react.email) | Transactional email with templates written as React components |
 | SMS | [Twilio](https://www.twilio.com) | Standard SMS provider; handles opt-out (STOP) automatically |
 | Validation | [Zod](https://zod.dev) | Shared validation for forms and server actions |
@@ -62,10 +62,13 @@ Requires Node.js 20.9+ and a PostgreSQL database (a free [Neon](https://neon.tec
 
 ```bash
 npm install                # also generates the Prisma client
-cp .env.example .env       # then set DATABASE_URL
+cp .env.example .env       # then set DATABASE_URL and BETTER_AUTH_SECRET
 npm run db:migrate         # create the database tables
+npm run admin:add -- you@example.org "Your Name"   # add yourself as an admin
 npm run dev                # http://localhost:3000
 ```
+
+**Signing in as an admin:** go to `/admin/login` and enter your email. Until `RESEND_API_KEY` is set, the sign-in link is printed in the terminal running `npm run dev` instead of emailed.
 
 | Command | What it does |
 |---|---|
@@ -74,12 +77,17 @@ npm run dev                # http://localhost:3000
 | `npm run lint` | Run ESLint |
 | `npm run db:migrate` | Apply schema changes to the database (`prisma migrate dev`) |
 | `npm run db:studio` | Browse and edit data in Prisma Studio |
+| `npm run admin:add -- <email> "<name>"` | Add an admin who can log in |
 
 **Project layout**
 
 - `prisma/schema.prisma`: database schema
 - `src/app/`: pages and routes (Next.js App Router)
 - `src/components/ui/`: shadcn/ui components (add more with `npx shadcn@latest add <name>`)
+- `src/app/admin/`: admin dashboard; `(dashboard)/` holds the pages that require login
+- `src/lib/auth/`: admin login (Better Auth config, `requireAdmin()`, and the login Server Actions)
+- `src/proxy.ts`: redirects logged-out visitors away from `/admin`
+- `src/lib/email.ts`: sends email through Resend, or prints it locally
 - `src/lib/prisma.ts`: shared database client (`import { prisma } from "@/lib/prisma"`)
 - `src/generated/prisma/`: generated Prisma client (git-ignored)
 
