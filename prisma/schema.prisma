@@ -39,17 +39,75 @@ enum DeliveryStatus {
 
 // ─── Admins ──────────────────────────────────────────────────────────────────
 
-// Staff who can log in to the admin dashboard.
-// Auth.js session/token tables will be added when admin login is wired up.
+// Staff who can log in to the admin dashboard. Better Auth uses this as its
+// "user" model, so emailVerified and image are fields it requires.
+// Admins are invite-only: logging in never creates a new Admin row.
 model Admin {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  emailVerified Boolean  @default(false) // set true after the first magic-link login
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions      Session[]
+  accounts      Account[]
+  opportunities Opportunity[]
+  messages      Message[]
+}
+
+// ─── Auth (managed by Better Auth) ───────────────────────────────────────────
+// Field names follow Better Auth's schema, so userId refers to an Admin.
+
+// A logged-in browser. The cookie holds the token; deleting the row logs out.
+model Session {
   id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  opportunities Opportunity[]
-  messages      Message[]
+  userId String
+  user   Admin  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// A sign-in method linked to an admin. Unused by magic links, but part of
+// Better Auth's core schema (it would hold passkeys or Google sign-in).
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  userId String
+  user   Admin  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Short-lived one-time values, such as magic-link tokens.
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
 }
 
 // ─── Opportunities ───────────────────────────────────────────────────────────
