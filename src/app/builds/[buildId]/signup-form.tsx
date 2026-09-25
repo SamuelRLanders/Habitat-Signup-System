@@ -2,23 +2,19 @@
 
 import { cn } from "cn";
 import { CheckCircle2Icon } from "lucide-react";
+import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
-import { DatePicker } from "@/components/date-picker";
+import { CopyLink } from "@/components/copy-link";
+import { Field, Section } from "@/components/form-fields";
+import { ProfileFields, type ProfileDefaults } from "@/components/profile-fields";
+import { WaiverSignature } from "@/components/waiver-signature";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { NumberField } from "@/components/ui/number-field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { SignupField, SignupFormState } from "@/lib/signups/actions";
+import type { SignupFormState } from "@/lib/signups/actions";
 import { submitForm } from "@/lib/submit-form";
-import { MAX_GROUP_SIZE, SEX_OPTIONS, T_SHIRT_SIZES } from "@/lib/volunteers";
+import { MAX_GROUP_SIZE, spotsText } from "@/lib/volunteers";
 
 export type ShiftOption = {
   id: string;
@@ -32,9 +28,17 @@ type SignupFormProps = {
   action: (prev: SignupFormState, formData: FormData) => Promise<SignupFormState>;
   shifts: ShiftOption[];
   timeZoneLabel: string;
+  waiver: { id: string; title: string; body: string };
+  defaults: ProfileDefaults | null;
 };
 
-export function SignupForm({ action, shifts, timeZoneLabel }: SignupFormProps) {
+export function SignupForm({
+  action,
+  shifts,
+  timeZoneLabel,
+  waiver,
+  defaults,
+}: SignupFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
   const { errors = {}, shiftErrors = {} } = state;
   const formRef = useRef<HTMLFormElement>(null);
@@ -65,19 +69,6 @@ export function SignupForm({ action, shifts, timeZoneLabel }: SignupFormProps) {
       return next;
     });
   }
-
-  const text = (field: SignupField, label: string, props: React.ComponentProps<"input"> = {}) => (
-    <Field label={label} htmlFor={field} error={errors[field]}>
-      <Input
-        id={field}
-        name={field}
-        aria-invalid={errors[field] ? true : undefined}
-        aria-describedby={errors[field] ? `${field}-error` : undefined}
-        required
-        {...props}
-      />
-    </Field>
-  );
 
   const days = Map.groupBy(shifts, (shift) => shift.date);
 
@@ -119,6 +110,24 @@ export function SignupForm({ action, shifts, timeZoneLabel }: SignupFormProps) {
 
         {isGroup && (
           <Field
+            label="Group name"
+            htmlFor="groupName"
+            error={errors.groupName}
+            hint="For example, “First Baptist Youth Group”."
+            optional
+          >
+            <Input
+              id="groupName"
+              name="groupName"
+              autoComplete="off"
+              aria-invalid={errors.groupName ? true : undefined}
+              aria-describedby={errors.groupName ? "groupName-error" : undefined}
+            />
+          </Field>
+        )}
+
+        {isGroup && (
+          <Field
             label="How many people are in your group, including you?"
             htmlFor="groupSize"
             error={errors.groupSize}
@@ -138,59 +147,13 @@ export function SignupForm({ action, shifts, timeZoneLabel }: SignupFormProps) {
         )}
       </Section>
 
-      <Section
-        title="Your information"
+      <ProfileFields
+        errors={errors}
+        defaults={defaults}
         description={
-          isGroup
-            ? "As the group's contact, enter your own details."
-            : undefined
+          isGroup ? "As the group's contact, enter your own details." : undefined
         }
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          {text("firstName", "First name", { autoComplete: "given-name" })}
-          {text("lastName", "Last name", { autoComplete: "family-name" })}
-          {text("email", "Email", { type: "email", autoComplete: "email" })}
-          {text("phone", "Phone", { type: "tel", autoComplete: "tel", placeholder: "(765) 555-0123" })}
-          <div className="sm:col-span-2">
-            {text("address", "Home address", {
-              autoComplete: "street-address",
-              placeholder: "123 Main St, Lafayette, IN 47901",
-            })}
-          </div>
-          <Field label="Birthday" htmlFor="dateOfBirth" error={errors.dateOfBirth}>
-            <DatePicker
-              id="dateOfBirth"
-              name="dateOfBirth"
-              placeholder="Pick your birthday"
-              birthday
-              aria-invalid={errors.dateOfBirth ? true : undefined}
-              aria-describedby={errors.dateOfBirth ? "dateOfBirth-error" : undefined}
-            />
-          </Field>
-          <div className="hidden sm:block" />
-          <ChoiceField
-            field="sex"
-            label="Sex"
-            options={SEX_OPTIONS}
-            placeholder="Prefer not to say"
-            error={errors.sex}
-          />
-          <ChoiceField
-            field="tShirtSize"
-            label="T-shirt size"
-            options={T_SHIRT_SIZES}
-            placeholder="Choose a size"
-            error={errors.tShirtSize}
-          />
-        </div>
-      </Section>
-
-      <Section title="Emergency contact">
-        <div className="grid gap-4 sm:grid-cols-2">
-          {text("emergencyContactName", "Name", { autoComplete: "off" })}
-          {text("emergencyContactPhone", "Phone", { type: "tel", autoComplete: "off" })}
-        </div>
-      </Section>
+      />
 
       <Section
         title="Choose your shifts"
@@ -256,6 +219,21 @@ export function SignupForm({ action, shifts, timeZoneLabel }: SignupFormProps) {
         ))}
       </Section>
 
+      <Section
+        title="Waiver"
+        description={
+          isGroup
+            ? "This waiver is for you. After you sign up, you'll get a link to send your group so each person can sign their own."
+            : "Please read the waiver, then type your full legal name to agree to it."
+        }
+      >
+        <WaiverSignature
+          waiver={waiver}
+          field="signedName"
+          error={errors.signedName}
+        />
+      </Section>
+
       <div className="flex flex-col gap-3 border-t pt-6">
         {errors.form && (
           <p role="alert" className="text-sm text-destructive">
@@ -279,101 +257,11 @@ export function SignupForm({ action, shifts, timeZoneLabel }: SignupFormProps) {
   );
 }
 
-function spotsText(spotsLeft: number) {
-  if (spotsLeft === 0) return "Full";
-  return `${spotsLeft} ${spotsLeft === 1 ? "spot" : "spots"} left`;
-}
-
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        {description && <p className="text-sm text-muted-foreground">{description}</p>}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Field({
-  label,
-  htmlFor,
-  error,
-  hint,
-  optional,
-  children,
-}: {
-  label: string;
-  htmlFor: string;
-  error?: string;
-  hint?: string;
-  optional?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor={htmlFor}>
-        {label}
-        {optional && <span className="font-normal text-muted-foreground">(optional)</span>}
-      </Label>
-      {children}
-      {hint && <p className="text-sm text-muted-foreground">{hint}</p>}
-      {error && (
-        <p id={`${htmlFor}-error`} className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function ChoiceField({
-  field,
-  label,
-  options,
-  placeholder,
-  error,
-}: {
-  field: SignupField;
-  label: string;
-  options: { value: string; label: string }[];
-  placeholder: string;
-  error?: string;
-}) {
-  return (
-    <Field label={label} htmlFor={field} error={error} optional>
-      <Select name={field} items={options} defaultValue={null}>
-        <SelectTrigger
-          id={field}
-          aria-invalid={error ? true : undefined}
-          className="w-full"
-        >
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((option) => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </Field>
-  );
-}
-
 function Confirmation({
+  email,
   groupSize,
   shifts,
+  waiverPath,
 }: NonNullable<SignupFormState["success"]>) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -402,10 +290,25 @@ function Confirmation({
           </li>
         ))}
       </ul>
-      {/* A full page load resets the form. */}
-      <a href="" className={buttonVariants({ variant: "outline", size: "sm", className: "w-fit" })}>
-        Sign up someone else
-      </a>
+      {waiverPath && (
+        <div className="flex flex-col gap-3 rounded-lg bg-background p-4 ring-1 ring-foreground/10">
+          <div className="flex flex-col gap-1">
+            <h3 className="font-semibold">Next: send your group the waiver link</h3>
+            <p className="text-sm text-muted-foreground">
+              Everyone else in your group needs to sign the waiver before the
+              build. Send them this link. You can see who has signed on your
+              signups page.
+            </p>
+          </div>
+          <CopyLink path={waiverPath} label="Group waiver link" />
+        </div>
+      )}
+      <p className="text-sm text-muted-foreground">
+        We&apos;ve emailed a confirmation to {email}.
+      </p>
+      <Link href="/me" className={buttonVariants({ variant: "outline", size: "sm", className: "w-fit" })}>
+        View your signups
+      </Link>
     </div>
   );
 }

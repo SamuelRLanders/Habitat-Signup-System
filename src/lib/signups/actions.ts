@@ -1,65 +1,36 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import * as z from "zod";
 import { Prisma } from "@/generated/prisma/client";
+import { getUser } from "@/lib/auth/dal";
 import { firstErrors, formValues } from "@/lib/forms";
-import { normalizeUsPhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
-import { formatDate, formatTimeRange, toDateInput } from "@/lib/time";
-import { MAX_GROUP_SIZE, MINIMUM_AGE } from "@/lib/volunteers";
+import { profileSchema, required, saveProfile } from "@/lib/profile";
+import { clientIp, clientUserAgent } from "@/lib/request";
+import { formatDate, formatTimeRange } from "@/lib/time";
+import { MAX_GROUP_SIZE, oldEnoughForAll, TOO_YOUNG } from "@/lib/volunteers";
+import { sendSignupConfirmation } from "./emails";
+import { getActiveWaiver, spotsTaken } from "./queries";
 
-// The public signup form. Anyone can call this, so everything is checked
-// here, including that the build is open and each shift has room.
+// The signup form. Only signed-in volunteers can submit it, but anything
+// can be posted, so everything is checked here, including that the build is
+// open and each shift has room.
 
-const phone = (message: string) =>
-  z.string().transform((value, ctx) => {
-    const normalized = normalizeUsPhone(value);
-    if (!normalized) {
-      ctx.addIssue({ code: "custom", message });
-      return z.NEVER;
-    }
-    return normalized;
-  });
-
-const required = (message: string, max: number) =>
-  z
-    .string(message)
-    .trim()
-    .min(1, message)
-    .max(max, `Keep this under ${max} characters.`);
-
-// Empty means the volunteer skipped the question.
-const optionalChoice = <const T extends readonly [string, ...string[]]>(
-  values: T,
-) =>
-  z
-    .union([z.enum(values), z.literal("")])
-    .optional()
-    .transform((value) => value || null);
-
-const signupSchema = z.object({
+const signupSchema = profileSchema.extend({
   signupType: z.enum(["individual", "group"], "Choose who you're signing up."),
-  firstName: required("Enter your first name.", 100),
-  lastName: required("Enter your last name.", 100),
-  email: z
+  groupName: z
     .string()
     .trim()
-    .toLowerCase()
-    .pipe(z.email("Enter a valid email address.").max(254)),
-  phone: phone("Enter a 10-digit US phone number."),
-  address: required("Enter your home address.", 300),
-  emergencyContactName: required("Enter an emergency contact's name.", 200),
-  emergencyContactPhone: phone("Enter a 10-digit US phone number."),
-  dateOfBirth: z.iso
-    .date("Enter your birthday.")
-    .refine((date) => date >= "1900-01-01", "Enter a valid birthday.")
-    .refine(
-      (date) => date <= new Date().toISOString().slice(0, 10),
-      "Your birthday can't be in the future.",
-    ),
-  sex: optionalChoice(["FEMALE", "MALE"]),
-  tShirtSize: optionalChoice(["XS", "S", "M", "L", "XL", "XXL", "XXXL"]),
+    .max(100, "Keep this under 100 characters.")
+    .optional()
+    .transform((value) => value || null),
+  waiverId: z.string("Refresh the page and try again.").min(1),
+  signedName: required(
+    "Type your full legal name to agree to the waiver.",
+    200,
+  ),
 });
 
 const groupSizeSchema = z.coerce
@@ -75,7 +46,9 @@ const shiftIdsSchema = z
   .transform((ids) => [...new Set(ids)]);
 
 export type SignupField =
-  keyof z.input<typeof signupSchema> | "groupSize" | "shifts";
+  | keyof z.input<typeof signupSchema>
+  | "groupSize"
+  | "shifts";
 
 export type SignupFormState = {
   errors?: Partial<Record<SignupField | "form", string>>;
@@ -85,6 +58,8 @@ export type SignupFormState = {
     email: string;
     groupSize: number;
     shifts: { id: string; date: string; time: string }[];
+    // The link group members use to sign their waivers. Groups only.
+    waiverPath: string | null;
   };
 };
 
@@ -93,6 +68,15 @@ export async function submitSignup(
   _prev: SignupFormState,
   formData: FormData,
 ): Promise<SignupFormState> {
+  const user = await getUser();
+  if (!user) {
+    return {
+      errors: {
+        form: "You've been signed out. Refresh the page and sign in again. Your answers will need to be re-entered.",
+      },
+    };
+  }
+
   const values = formValues(formData);
 
   // ── Check the form itself.
@@ -114,23 +98,34 @@ export async function submitSignup(
     return { errors };
   }
 
-  const { signupType, ...volunteer } = parsed.data;
-  // Stored as a date column; midnight UTC keeps the same calendar day.
-  const volunteerData = {
-    ...volunteer,
-    dateOfBirth: new Date(`${volunteer.dateOfBirth}T00:00:00Z`),
-  };
+  const { signupType, groupName, waiverId, signedName, ...profile } =
+    parsed.data;
   const size =
     signupType === "group" && groupSize?.success ? groupSize.data : 1;
 
-  // ── Check the build and the chosen shifts.
+  // ── Check the build, the waiver, and the chosen shifts.
   const build = await prisma.build.findUnique({
     where: { id: buildId },
-    select: { status: true, timeZone: true },
+    select: { status: true, timeZone: true, name: true, address: true },
   });
   if (!build || build.status !== "PUBLISHED") {
     return {
       errors: { form: "This build isn't accepting signups right now." },
+    };
+  }
+
+  const waiver = await getActiveWaiver();
+  if (!waiver) {
+    return {
+      errors: { form: "Signups aren't open yet. Please check back soon." },
+    };
+  }
+  if (waiver.id !== waiverId) {
+    return {
+      errors: {
+        signedName:
+          "The waiver was updated while you were filling this in. Refresh the page to read the new version.",
+      },
     };
   }
 
@@ -152,21 +147,12 @@ export async function submitSignup(
     };
   }
 
-  // Old enough on the day of every shift. Dates are compared as YYYY-MM-DD
-  // strings, which sort the same way as the dates they represent.
-  const birthYear = Number(volunteer.dateOfBirth.slice(0, 4));
-  const adultOn = `${birthYear + MINIMUM_AGE}${volunteer.dateOfBirth.slice(4)}`;
-  if (
-    shifts.some(
-      (shift) => toDateInput(shift.startsAt, build.timeZone) < adultOn,
-    )
-  ) {
-    return {
-      errors: {
-        dateOfBirth: `Volunteers must be ${MINIMUM_AGE} or older on the day of their shift.`,
-      },
-    };
+  if (!oldEnoughForAll(profile.dateOfBirth, shifts, build.timeZone)) {
+    return { errors: { dateOfBirth: TOO_YOUNG } };
   }
+
+  const ipAddress = await clientIp();
+  const userAgent = await clientUserAgent();
 
   // ── Save, making sure every shift still has room for the whole group.
   let result;
@@ -186,8 +172,8 @@ export async function submitSignup(
             signups: {
               where: { status: "CONFIRMED" },
               select: {
-                groupSize: true,
-                volunteer: { select: { email: true } },
+                userId: true,
+                registration: { select: { size: true } },
               },
             },
           },
@@ -195,14 +181,11 @@ export async function submitSignup(
 
         const shiftErrors: Record<string, string> = {};
         for (const shift of current) {
-          if (
-            shift.signups.some((s) => s.volunteer.email === volunteer.email)
-          ) {
+          if (shift.signups.some((s) => s.userId === user.id)) {
             shiftErrors[shift.id] = "You're already signed up for this shift.";
             continue;
           }
-          const filled = shift.signups.reduce((sum, s) => sum + s.groupSize, 0);
-          const left = shift.capacity - filled;
+          const left = shift.capacity - spotsTaken(shift.signups);
           if (left < size) {
             shiftErrors[shift.id] =
               left <= 0
@@ -212,22 +195,50 @@ export async function submitSignup(
         }
         if (Object.keys(shiftErrors).length > 0) return { shiftErrors };
 
-        const { id: volunteerId } = await tx.volunteer.upsert({
-          where: { email: volunteer.email },
-          create: volunteerData,
-          update: volunteerData,
+        // Save the details as the volunteer's profile, for next time.
+        await saveProfile(tx, user.id, profile);
+
+        const registration = await tx.registration.create({
+          data: {
+            buildId,
+            leaderId: user.id,
+            size,
+            groupName: size > 1 ? groupName : null,
+            waiverToken: size > 1 ? randomBytes(18).toString("base64url") : null,
+          },
         });
 
         for (const shift of shifts) {
-          // A volunteer who cancelled before and signs up again reuses their
-          // old signup row, since there's one per volunteer and shift.
+          // A volunteer who cancelled a shift and signs up again reuses their
+          // old signup row, since there's one per volunteer and shift. It
+          // moves to the new registration.
           await tx.signup.upsert({
-            where: { shiftId_volunteerId: { shiftId: shift.id, volunteerId } },
-            create: { shiftId: shift.id, volunteerId, groupSize: size },
-            update: { status: "CONFIRMED", groupSize: size, cancelledAt: null },
+            where: { shiftId_userId: { shiftId: shift.id, userId: user.id } },
+            create: {
+              shiftId: shift.id,
+              userId: user.id,
+              registrationId: registration.id,
+            },
+            update: {
+              registrationId: registration.id,
+              status: "CONFIRMED",
+              cancelledAt: null,
+            },
           });
         }
-        return { shiftErrors: null };
+
+        await tx.waiverAcceptance.create({
+          data: {
+            signedName,
+            ipAddress,
+            userAgent,
+            waiverId: waiver.id,
+            registrationId: registration.id,
+            userId: user.id,
+          },
+        });
+
+        return { shiftErrors: null, waiverToken: registration.waiverToken };
       },
       { timeout: 20_000 },
     );
@@ -250,18 +261,37 @@ export async function submitSignup(
     };
   }
 
+  const shiftTimes = shifts.map((shift) => ({
+    id: shift.id,
+    date: formatDate(shift.startsAt, build.timeZone),
+    time: formatTimeRange(shift.startsAt, shift.endsAt, build.timeZone),
+  }));
+  const waiverPath = result.waiverToken ? `/waiver/${result.waiverToken}` : null;
+
+  // The signup is saved, so a failed email doesn't undo it: the volunteer
+  // still sees the confirmation, and their signups are on their page.
+  try {
+    await sendSignupConfirmation({
+      to: user.email,
+      firstName: profile.firstName,
+      build,
+      size,
+      shifts: shiftTimes,
+      waiverPath,
+    });
+  } catch (error) {
+    console.error("Failed to send signup confirmation", error);
+  }
+
   revalidatePath(`/builds/${buildId}`);
   revalidatePath("/admin", "layout");
 
   return {
     success: {
-      email: volunteer.email,
+      email: user.email,
       groupSize: size,
-      shifts: shifts.map((shift) => ({
-        id: shift.id,
-        date: formatDate(shift.startsAt, build.timeZone),
-        time: formatTimeRange(shift.startsAt, shift.endsAt, build.timeZone),
-      })),
+      shifts: shiftTimes,
+      waiverPath,
     },
   };
 }

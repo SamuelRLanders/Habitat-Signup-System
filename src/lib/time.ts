@@ -79,3 +79,15 @@ export function formatDateRange(start: Date, end: Date, timeZone: string) {
   });
   return format.formatRange(start, end);
 }
+
+// "Sep 24, 2026, 3:15 PM"
+export function formatDateTime(date: Date, timeZone: string) {
+  return date.toLocaleString("en-US", {
+    timeZone,
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}

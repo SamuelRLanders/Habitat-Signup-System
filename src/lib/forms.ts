@@ -2,6 +2,9 @@ import * as z from "zod";
 
 // Helpers for Server Actions that handle form submissions.
 
+// The result of an action with no form fields, such as "Cancel shift".
+export type ActionState = { error?: string };
+
 export type FormState<Field extends string> = {
   errors?: Partial<Record<Field | "form", string>>;
   success?: boolean;

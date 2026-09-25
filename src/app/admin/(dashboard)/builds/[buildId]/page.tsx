@@ -23,7 +23,7 @@ import {
   toDateInput,
   toTimeInput,
 } from "@/lib/time";
-import { ActionButton } from "../action-button";
+import { ActionButton } from "@/components/action-button";
 import { BackLink, SpotsMeter, StatusBadge } from "../build-parts";
 import { ShareDialog } from "./share-dialog";
 import { ShiftDialog } from "./shift-dialog";
