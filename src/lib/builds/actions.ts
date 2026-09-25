@@ -5,8 +5,14 @@ import { redirect } from "next/navigation";
 import * as z from "zod";
 import { BuildStatus } from "@/generated/prisma/enums";
 import { requireAdmin } from "@/lib/auth/dal";
-import { firstErrors, formValues, type FormState } from "@/lib/forms";
+import {
+  firstErrors,
+  formValues,
+  type ActionState,
+  type FormState,
+} from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
+import { spotsTaken } from "@/lib/signups/queries";
 import {
   formatDate,
   TIME_ZONES,
@@ -18,8 +24,6 @@ import {
 // Every action calls requireAdmin() first: Server Actions can be called by
 // anyone who sends a POST request, not only through our forms. IDs bound to
 // an action are also sent by the browser, so they're treated as untrusted.
-
-export type ActionState = { error?: string };
 
 // Refreshes every admin page, since build changes show up on the list page,
 // the build page, and each shift's roster page.
@@ -295,7 +299,10 @@ export async function updateShift(
     where: { id: shiftId },
     include: {
       build: true,
-      signups: { where: { status: "CONFIRMED" }, select: { groupSize: true } },
+      signups: {
+        where: { status: "CONFIRMED" },
+        select: { registration: { select: { size: true } } },
+      },
     },
   });
   if (!existing) return { errors: { form: "This shift no longer exists." } };
@@ -304,7 +311,7 @@ export async function updateShift(
   if (!parsed.ok) return { errors: parsed.errors };
   const [shift] = parsed.shifts;
 
-  const filled = existing.signups.reduce((sum, s) => sum + s.groupSize, 0);
+  const filled = spotsTaken(existing.signups);
   if (shift.capacity < filled) {
     return {
       errors: {

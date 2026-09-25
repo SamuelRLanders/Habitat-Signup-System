@@ -10,7 +10,8 @@
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "admin:add": "tsx scripts/add-admin.mts"
+    "admin:add": "tsx scripts/add-admin.mts",
+    "waiver:seed": "tsx scripts/seed-waiver.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

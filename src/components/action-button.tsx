@@ -12,7 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import type { ActionState } from "@/lib/builds/actions";
+import type { ActionState } from "@/lib/forms";
 
 type Action = (prev: ActionState) => Promise<ActionState>;
 type Variant = "default" | "outline" | "secondary" | "ghost" | "destructive";
