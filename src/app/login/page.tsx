@@ -11,7 +11,7 @@ import { getUser } from "@/lib/auth/dal";
 import { homePath, safeNextPath } from "@/lib/auth/redirects";
 import { LoginForm } from "./login-form";
 
-export const metadata: Metadata = { title: "Sign in" };
+export const metadata: Metadata = { title: "Habitat for Humanity Sign Up Portal" };
 
 // Sign-in for volunteers and admins. ?next= is where to go afterwards, such
 // as the build page the volunteer came from.
@@ -26,7 +26,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>
-            <h1>Sign in</h1>
+            <h1>Habitat for Humanity Sign In Portal</h1>
           </CardTitle>
           <CardDescription>
             Enter your email and we&apos;ll send you a 6-digit code. New
