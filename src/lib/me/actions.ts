@@ -38,10 +38,15 @@ export async function cancelSignup(signupId: string): Promise<ActionState> {
     where: { id: signupId, userId: user.id },
     select: {
       status: true,
-      shift: { select: { startsAt: true, buildId: true } },
+      shift: {
+        select: { startsAt: true, buildId: true, build: { select: { status: true } } },
+      },
     },
   });
   if (!signup) return { error: "We couldn't find that signup." };
+  if (signup.shift.build.status === "CANCELLED") {
+    return { error: "Habitat cancelled this build, so there's nothing to cancel." };
+  }
   if (signup.status === "CANCELLED") {
     return { error: "This signup is already cancelled." };
   }
@@ -54,6 +59,29 @@ export async function cancelSignup(signupId: string): Promise<ActionState> {
     data: { status: "CANCELLED", cancelledAt: new Date() },
   });
   refresh(signup.shift.buildId);
+  return {};
+}
+
+// Hides a registration's card from the volunteer's page after Habitat
+// cancelled its build. Only whole cancelled builds can be dismissed; a single
+// cancelled shift stays on the card.
+export async function dismissCancelledBuild(
+  registrationId: string,
+): Promise<ActionState> {
+  const user = await getUser();
+  if (!user) return { error: SIGNED_OUT };
+
+  const { count } = await prisma.registration.updateMany({
+    where: {
+      id: registrationId,
+      leaderId: user.id,
+      build: { status: "CANCELLED" },
+    },
+    data: { dismissedAt: new Date() },
+  });
+  if (count === 0) return { error: "This build hasn't been cancelled." };
+
+  revalidatePath("/me");
   return {};
 }
 
@@ -85,10 +113,13 @@ export async function changeGroupSize(
     where: { id: registrationId, leaderId: user.id, size: { gt: 1 } },
     select: {
       buildId: true,
-      build: { select: { timeZone: true } },
+      build: { select: { timeZone: true, status: true } },
     },
   });
   if (!registration) return { errors: { form: "We couldn't find that group." } };
+  if (registration.build.status === "CANCELLED") {
+    return { errors: { form: "Habitat cancelled this build, so the group can't be changed." } };
+  }
 
   let error: string | null;
   try {

@@ -7,18 +7,23 @@ import { Prisma } from "@/generated/prisma/client";
 import { getUser } from "@/lib/auth/dal";
 import { firstErrors, formValues } from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
-import { profileSchema, required, saveProfile } from "@/lib/profile";
+import {
+  profileSchema,
+  required,
+  saveProfile,
+  type ProfileField,
+} from "@/lib/profile";
 import { clientIp, clientUserAgent } from "@/lib/request";
 import { formatDate, formatTimeRange } from "@/lib/time";
 import { MAX_GROUP_SIZE, oldEnoughForAll, TOO_YOUNG } from "@/lib/volunteers";
 import { sendSignupConfirmation } from "./emails";
-import { getActiveWaiver, spotsTaken } from "./queries";
+import { getActiveWaiver, getProfileDefaults, spotsTaken } from "./queries";
 
 // The signup form. Only signed-in volunteers can submit it, but anything
 // can be posted, so everything is checked here, including that the build is
 // open and each shift has room.
 
-const signupSchema = profileSchema.extend({
+const signupSchema = z.object({
   signupType: z.enum(["individual", "group"], "Choose who you're signing up."),
   groupName: z
     .string()
@@ -47,6 +52,7 @@ const shiftIdsSchema = z
 
 export type SignupField =
   | keyof z.input<typeof signupSchema>
+  | ProfileField
   | "groupSize"
   | "shifts";
 
@@ -79,18 +85,28 @@ export async function submitSignup(
 
   const values = formValues(formData);
 
-  // ── Check the form itself.
+  // ── Check the form itself. The volunteer's details come from the form if
+  // it shows them (a first signup, or "Change"), otherwise from their saved
+  // profile.
   const parsed = signupSchema.safeParse(values);
+  const editingProfile = values.editProfile === "on";
+  const newProfile = editingProfile ? profileSchema.safeParse(values) : null;
   const isGroup = values.signupType === "group";
   const groupSize = isGroup
     ? groupSizeSchema.safeParse(values.groupSize)
     : null;
   const shiftIds = shiftIdsSchema.safeParse(formData.getAll("shiftId"));
 
-  if (!parsed.success || groupSize?.success === false || !shiftIds.success) {
-    const errors: SignupFormState["errors"] = parsed.success
-      ? {}
-      : firstErrors(parsed.error);
+  if (
+    !parsed.success ||
+    newProfile?.success === false ||
+    groupSize?.success === false ||
+    !shiftIds.success
+  ) {
+    const errors: SignupFormState["errors"] = {
+      ...(parsed.success ? {} : firstErrors(parsed.error)),
+      ...(newProfile?.success === false ? firstErrors(newProfile.error) : {}),
+    };
     if (groupSize?.success === false) {
       errors.groupSize = groupSize.error.issues[0].message;
     }
@@ -98,8 +114,15 @@ export async function submitSignup(
     return { errors };
   }
 
-  const { signupType, groupName, waiverId, signedName, ...profile } =
-    parsed.data;
+  const { signupType, groupName, waiverId, signedName } = parsed.data;
+  const profile = newProfile?.success ? newProfile.data : await savedProfile(user.id);
+  if (!profile) {
+    return {
+      errors: {
+        form: "We couldn't find your saved details. Refresh the page and fill them in.",
+      },
+    };
+  }
   const size =
     signupType === "group" && groupSize?.success ? groupSize.data : 1;
 
@@ -148,7 +171,8 @@ export async function submitSignup(
   }
 
   if (!oldEnoughForAll(profile.dateOfBirth, shifts, build.timeZone)) {
-    return { errors: { dateOfBirth: TOO_YOUNG } };
+    // Without the fields on screen, the message goes at the bottom instead.
+    return { errors: editingProfile ? { dateOfBirth: TOO_YOUNG } : { form: TOO_YOUNG } };
   }
 
   const ipAddress = await clientIp();
@@ -195,8 +219,8 @@ export async function submitSignup(
         }
         if (Object.keys(shiftErrors).length > 0) return { shiftErrors };
 
-        // Save the details as the volunteer's profile, for next time.
-        await saveProfile(tx, user.id, profile);
+        // Save new details as the volunteer's profile, for next time.
+        if (newProfile?.success) await saveProfile(tx, user.id, newProfile.data);
 
         const registration = await tx.registration.create({
           data: {
@@ -294,4 +318,10 @@ export async function submitSignup(
       waiverPath,
     },
   };
+}
+
+// The volunteer's saved details, in the shape the rest of the signup uses.
+async function savedProfile(userId: string) {
+  const profile = await getProfileDefaults(userId);
+  return profile && { firstName: profile.firstName, dateOfBirth: profile.dateOfBirth };
 }

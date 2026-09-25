@@ -46,6 +46,8 @@ export function SignupForm({
   const [isGroup, setIsGroup] = useState(false);
   const [groupSize, setGroupSize] = useState(2);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // With saved details, show a summary instead of the fields.
+  const [editingProfile, setEditingProfile] = useState(defaults === null);
 
   // After a failed submission, move to the first field with a problem.
   useEffect(() => {
@@ -147,13 +149,22 @@ export function SignupForm({
         )}
       </Section>
 
-      <ProfileFields
-        errors={errors}
-        defaults={defaults}
-        description={
-          isGroup ? "As the group's contact, enter your own details." : undefined
-        }
-      />
+      {editingProfile ? (
+        <>
+          <input type="hidden" name="editProfile" value="on" />
+          <ProfileFields
+            errors={errors}
+            defaults={defaults}
+            description={
+              isGroup ? "As the group's contact, enter your own details." : undefined
+            }
+          />
+        </>
+      ) : (
+        defaults && (
+          <SavedDetails defaults={defaults} onChange={() => setEditingProfile(true)} />
+        )
+      )}
 
       <Section
         title="Choose your shifts"
@@ -254,6 +265,38 @@ export function SignupForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+// The volunteer's saved details, with a button to change them for this
+// signup (which also updates what's saved).
+function SavedDetails({
+  defaults,
+  onChange,
+}: {
+  defaults: ProfileDefaults;
+  onChange: () => void;
+}) {
+  return (
+    <Section title="Your details">
+      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl p-4 text-sm ring-1 ring-foreground/10">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+          <dt className="text-muted-foreground">Name</dt>
+          <dd>
+            {defaults.firstName} {defaults.lastName}
+          </dd>
+          <dt className="text-muted-foreground">Phone</dt>
+          <dd>{defaults.phone}</dd>
+          <dt className="text-muted-foreground">Emergency contact</dt>
+          <dd>
+            {defaults.emergencyContactName}, {defaults.emergencyContactPhone}
+          </dd>
+        </dl>
+        <Button type="button" variant="outline" size="sm" onClick={onChange}>
+          Change
+        </Button>
+      </div>
+    </Section>
   );
 }
 

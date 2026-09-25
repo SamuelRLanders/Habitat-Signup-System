@@ -35,7 +35,9 @@ export default async function GroupWaiverPage({
   const zone = build.timeZone;
 
   const closedMessage = !group.open
-    ? "This waiver link has closed because the group has no upcoming shifts."
+    ? build.status === "CANCELLED"
+      ? "This waiver link has closed because Habitat cancelled this build."
+      : "This waiver link has closed because the group has no upcoming shifts."
     : !waiver
       ? "The waiver isn't available right now. Please try again later."
       : null;

@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { signOut } from "@/lib/auth/actions";
+import { buttonVariants } from "@/components/ui/button";
 import { getUser } from "@/lib/auth/dal";
 import { loginPath } from "@/lib/auth/redirects";
 import { formatPhone } from "@/lib/phone";
@@ -71,19 +70,6 @@ export default async function BuildSignupPage({
   } else {
     const profile = await getProfileDefaults(user.id);
     body = (
-      <div className="flex flex-col gap-10">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-muted/50 px-4 py-3 text-sm ring-1 ring-foreground/10">
-          <span>
-            Signed in as <strong>{user.email}</strong>
-          </span>
-          <form action={signOut} className="flex items-center gap-2">
-            <input type="hidden" name="next" value={path} />
-            <span className="text-muted-foreground">Not you?</span>
-            <Button type="submit" variant="outline" size="sm">
-              Sign out
-            </Button>
-          </form>
-        </div>
         <SignupForm
           action={submitSignup.bind(null, build.id)}
           timeZoneLabel={timeZoneLabel(zone)}
@@ -97,7 +83,6 @@ export default async function BuildSignupPage({
             }
           }
         />
-      </div>
     );
   }
 

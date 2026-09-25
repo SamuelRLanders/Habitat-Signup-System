@@ -80,7 +80,9 @@ export default async function GroupPage({
           </>
         ) : (
           <p className="rounded-xl bg-muted p-4 text-sm">
-            The waiver link has closed because your group has no upcoming shifts.
+            {build.status === "CANCELLED"
+              ? "The waiver link has closed because Habitat cancelled this build."
+              : "The waiver link has closed because your group has no upcoming shifts."}
           </p>
         )}
       </section>

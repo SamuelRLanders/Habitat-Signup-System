@@ -15,8 +15,9 @@ export async function getMySignups(userId: string) {
       size: true,
       groupName: true,
       waiverToken: true,
+      dismissedAt: true,
       build: {
-        select: { id: true, name: true, address: true, timeZone: true },
+        select: { id: true, name: true, address: true, timeZone: true, status: true },
       },
       signups: {
         // Shifts the volunteer cancelled aren't shown.
@@ -45,24 +46,30 @@ export async function getMySignups(userId: string) {
   const isOn = (s: { shift: { cancelledAt: Date | null } }) => !s.shift.cancelledAt;
 
   const upcoming = registrations
-    .map(({ signups, _count, ...registration }) => {
+    .map(({ signups, _count, dismissedAt, ...registration }) => {
       const shifts = signups.filter(isUpcoming);
+      const buildCancelled = registration.build.status === "CANCELLED";
       return {
         ...registration,
         shifts,
+        buildCancelled,
+        // Dismissing only hides the card while the build stays cancelled.
+        hidden: buildCancelled && dismissedAt !== null,
         // The leader signed when they signed up; members sign through the link.
         waiversSigned: 1 + _count.groupMembers,
         // Whether there's anything left to change or cancel.
-        active: shifts.some(isOn),
+        active: !buildCancelled && shifts.some(isOn),
       };
     })
-    .filter((registration) => registration.shifts.length > 0)
+    .filter((registration) => registration.shifts.length > 0 && !registration.hidden)
     .sort(
       (a, b) =>
         a.shifts[0].shift.startsAt.getTime() - b.shifts[0].shift.startsAt.getTime(),
     );
 
+  // Shifts of cancelled builds never happened, so they aren't past shifts.
   const past = registrations
+    .filter(({ build }) => build.status !== "CANCELLED")
     .flatMap(({ build, size, groupName, signups }) =>
       signups
         .filter((s) => !isUpcoming(s) && isOn(s))

@@ -26,7 +26,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>
-            <h1>Habitat for Humanity Sign In Portal</h1>
+            <h1>Habitat for Humanity Sign Up Portal</h1>
           </CardTitle>
           <CardDescription>
             Enter your email and we&apos;ll send you a 6-digit code. New

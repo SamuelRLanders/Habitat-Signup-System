@@ -89,6 +89,7 @@ npm run dev                # http://localhost:3000
 | `npm run db:studio` | Browse and edit data in Prisma Studio |
 | `npm run admin:add -- <email> "<name>"` | Make someone an admin (creates their account, or upgrades a volunteer's) |
 | `npm run waiver:seed -- <file> "<title>"` | Add a new waiver version from a text file and make it the active one |
+| `npm run seed:test` | Replace the test builds, shifts, volunteers, and signups (`-- --clean` only removes them). Test users have `@example.org` emails. |
 
 **Project layout**
 

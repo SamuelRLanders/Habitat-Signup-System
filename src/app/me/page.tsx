@@ -4,7 +4,11 @@ import { ActionButton } from "@/components/action-button";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/dal";
-import { cancelSignup, changeGroupSize } from "@/lib/me/actions";
+import {
+  cancelSignup,
+  changeGroupSize,
+  dismissCancelledBuild,
+} from "@/lib/me/actions";
 import { getMySignups, getOpenBuilds, hasProfile } from "@/lib/me/queries";
 import { formatDate, formatDateRange, formatTimeRange } from "@/lib/time";
 import { GroupSizeDialog, WaiverLinkDialog } from "./group-dialogs";
@@ -113,7 +117,7 @@ export default async function MePage() {
 }
 
 function RegistrationCard({ registration }: { registration: Upcoming }) {
-  const { build, size, groupName, waiverToken, waiversSigned, active } =
+  const { build, size, groupName, waiverToken, waiversSigned, active, buildCancelled } =
     registration;
   const zone = build.timeZone;
   const isGroup = size > 1;
@@ -122,9 +126,14 @@ function RegistrationCard({ registration }: { registration: Upcoming }) {
     <article className="flex flex-col gap-4 rounded-xl p-4 ring-1 ring-foreground/10">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <Link href={`/builds/${build.id}`} className="font-semibold hover:underline">
-            {build.name}
-          </Link>
+          {/* A cancelled build's page no longer exists. */}
+          {buildCancelled ? (
+            <span className="font-semibold">{build.name}</span>
+          ) : (
+            <Link href={`/builds/${build.id}`} className="font-semibold hover:underline">
+              {build.name}
+            </Link>
+          )}
           <span className="text-sm text-muted-foreground">{build.address}</span>
           {isGroup && (
             <span className="text-sm">
@@ -133,7 +142,13 @@ function RegistrationCard({ registration }: { registration: Upcoming }) {
             </span>
           )}
         </div>
-        {isGroup && (
+        {buildCancelled && (
+          <ActionButton
+            action={dismissCancelledBuild.bind(null, registration.id)}
+            label="Dismiss"
+          />
+        )}
+        {isGroup && !buildCancelled && (
           <div className="flex flex-wrap gap-2">
             <Link
               href={`/me/groups/${registration.id}`}
@@ -155,10 +170,17 @@ function RegistrationCard({ registration }: { registration: Upcoming }) {
         )}
       </div>
 
+      {buildCancelled && (
+        <p role="status" className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Habitat cancelled this build, so these shifts won&apos;t happen.
+          {isGroup && " Please let your group know."}
+        </p>
+      )}
+
       <ul className="flex flex-col gap-2">
         {registration.shifts.map((signup) => {
           const { shift } = signup;
-          const cancelledByHabitat = shift.cancelledAt !== null;
+          const cancelledByHabitat = buildCancelled || shift.cancelledAt !== null;
           return (
             <li
               key={signup.id}
@@ -183,7 +205,7 @@ function RegistrationCard({ registration }: { registration: Upcoming }) {
                   </span>
                 )}
               </div>
-              {cancelledByHabitat ? (
+              {buildCancelled ? null : cancelledByHabitat ? (
                 <Badge variant="destructive">Cancelled by Habitat</Badge>
               ) : (
                 <ActionButton

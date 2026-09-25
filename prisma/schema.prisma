@@ -224,16 +224,20 @@ model Shift {
 // or leading a group (size > 1, including the leader) for one or more shifts
 // of a build. The leader signs the waiver as part of the form.
 model Registration {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   groupName   String? // e.g. "First Baptist Youth Group"; null for individuals
   // Spots this registration takes on each of its confirmed shifts. The
   // leader can change it later if every shift still has room.
-  size        Int      @default(1)
+  size        Int       @default(1)
   // Secret token for the waiver link the leader shares with group members.
   // Null for individuals. The link stops working once the last shift starts.
-  waiverToken String?  @unique
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  waiverToken String?   @unique
+  // When the volunteer dismissed this registration's card after Habitat
+  // cancelled the build. The card only stays hidden while the build is
+  // cancelled, so it comes back if the build is restored.
+  dismissedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Builds with signups can't be deleted, so this never cascades.
   buildId String
