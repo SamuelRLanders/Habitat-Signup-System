@@ -37,11 +37,14 @@ export function DatePicker({
   placeholder = "Pick a date",
   disablePast,
   birthday,
+  clearable,
   ...aria
 }: DatePickerProps & {
   // Month and year dropdowns instead of arrows, no future days, and opens
   // about 30 years back, so a birthday is a few clicks away.
   birthday?: boolean;
+  // Adds a Clear button, for optional dates.
+  clearable?: boolean;
 }) {
   const [date, setDate] = useState(() => parseDay(defaultValue));
   const [open, setOpen] = useState(false);
@@ -79,6 +82,22 @@ export function DatePicker({
           })}
           className={calendarClass}
         />
+        {clearable && (
+          <div className="flex justify-start border-t p-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={!date}
+              onClick={() => {
+                setDate(undefined);
+                setOpen(false);
+              }}
+            >
+              Clear
+            </Button>
+          </div>
+        )}
       </PopoverContent>
       <input type="hidden" name={name} value={date ? toValue(date) : ""} />
     </Popover>

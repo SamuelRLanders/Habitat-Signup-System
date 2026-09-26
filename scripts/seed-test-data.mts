@@ -3,13 +3,15 @@
 // builds are named "[Test] …" and users have @example.org emails. Running it
 // again replaces the old test data. Real data is never touched.
 //
-// Usage: npm run seed:test            (replace the test data)
-//        npm run seed:test -- --clean (only remove it)
+// Usage: npm run seed:test                 (replace the test data)
+//        npm run seed:test -- --people 350 (also add 350 made-up people,
+//                                           for trying the People search)
+//        npm run seed:test -- --clean      (only remove it)
 //
 // Until RESEND_API_KEY is set, sign-in codes print in the dev server's
 // terminal, so you can sign in as any of these test users.
 import "dotenv/config";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
 import type { Sex, TShirtSize } from "../src/generated/prisma/enums";
@@ -309,9 +311,68 @@ Builds (admin: ${SITE}/admin/builds):
 Remove it all with: npm run seed:test -- --clean`);
 }
 
+// Lots of made-up people with a spread of details and join dates, and about
+// one in ten with no saved details. Their emails are person0001@example.org
+// and so on, so clean() removes them too.
+async function seedPeople(count: number) {
+  const female = ["Olivia", "Emma", "Ava", "Sophia", "Mia", "Harper", "Amelia", "Grace", "Zoe", "Lucia", "Nora", "Maya", "Aisha", "Hannah", "Chloe"];
+  const male = ["Liam", "Noah", "James", "Lucas", "Mateo", "Ethan", "Henry", "Owen", "Samuel", "Jamal", "Wei", "Diego", "Caleb", "Isaac", "Leo"];
+  const lastNames = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin", "Lee", "Thompson", "White", "Harris", "Clark", "Lewis", "Robinson", "Walker", "Young", "Allen", "King", "O'Brien", "Müller"];
+  const sizes: TShirtSize[] = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"];
+  const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
+  const now = Date.now();
+  const twoYears = 2 * 365 * 24 * 60 * 60 * 1000;
+
+  const users = [];
+  const profiles = [];
+  for (let i = 1; i <= count; i++) {
+    const id = randomUUID();
+    const isFemale = Math.random() < 0.5;
+    const first = pick(isFemale ? female : male);
+    const last = pick(lastNames);
+    const hasProfile = Math.random() > 0.1;
+    const createdAt = new Date(now - Math.random() * twoYears);
+    users.push({
+      id,
+      email: `person${String(i).padStart(4, "0")}${TEST_DOMAIN}`,
+      name: hasProfile ? `${first} ${last}` : "",
+      emailVerified: true,
+      createdAt,
+    });
+    if (!hasProfile) continue;
+    const sms = Math.random() < 0.5;
+    const birthYear = 1950 + Math.floor(Math.random() * 58);
+    const birthday = new Date(Date.UTC(birthYear, Math.floor(Math.random() * 12), 1 + Math.floor(Math.random() * 28)));
+    profiles.push({
+      userId: id,
+      firstName: first,
+      lastName: last,
+      phone: `+1765${String(2000000 + Math.floor(Math.random() * 7999999))}`,
+      address: `${100 + Math.floor(Math.random() * 9000)} ${pick(["Main", "Oak", "Elm", "Salem", "Union", "Ferry"])} St, Lafayette, IN 4790${Math.floor(Math.random() * 10)}`,
+      emergencyContactName: `${pick([...female, ...male])} ${last}`,
+      emergencyContactPhone: "+17655550100",
+      dateOfBirth: birthday,
+      // Some leave the optional choices blank.
+      sex: Math.random() < 0.15 ? null : isFemale ? ("FEMALE" as Sex) : ("MALE" as Sex),
+      tShirtSize: Math.random() < 0.15 ? null : pick(sizes),
+      smsOptIn: sms,
+      smsOptInAt: sms ? createdAt : null,
+      createdAt,
+    });
+  }
+  await prisma.user.createMany({ data: users });
+  await prisma.volunteerProfile.createMany({ data: profiles });
+  console.log(`
+Added ${count} made-up people (person0001${TEST_DOMAIN} and on) for the People search.`);
+}
+
 try {
   await clean();
-  if (!process.argv.includes("--clean")) await seed();
+  if (!process.argv.includes("--clean")) {
+    await seed();
+    const peopleArg = process.argv.indexOf("--people");
+    if (peopleArg !== -1) await seedPeople(Number(process.argv[peopleArg + 1]) || 350);
+  }
 } finally {
   await prisma.$disconnect();
 }

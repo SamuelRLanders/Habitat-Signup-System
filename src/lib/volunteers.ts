@@ -22,6 +22,17 @@ export function oldEnoughForAll(
   return shifts.every((shift) => toDateInput(shift.startsAt, timeZone) >= adultOn);
 }
 
+// Age in whole years on a day ("2026-09-25"). dateOfBirth is a date-only
+// value, so its UTC parts are the birthday.
+export function ageOn(dateOfBirth: Date, day: string) {
+  const [year, month, date] = day.split("-").map(Number);
+  const age = year - dateOfBirth.getUTCFullYear();
+  const hadBirthday =
+    month > dateOfBirth.getUTCMonth() + 1 ||
+    (month === dateOfBirth.getUTCMonth() + 1 && date >= dateOfBirth.getUTCDate());
+  return hadBirthday ? age : age - 1;
+}
+
 // Largest group one person can sign up. The group also has to fit in the
 // open spots of every shift it picks.
 export const MAX_GROUP_SIZE = 50;

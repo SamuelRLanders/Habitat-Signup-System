@@ -7,7 +7,7 @@ import { cn } from "cn";
 
 const tabs = [
   { href: "/admin/builds", label: "Builds", icon: HammerIcon },
-  { href: "/admin/volunteers", label: "Volunteers", icon: UsersIcon },
+  { href: "/admin/people", label: "People", icon: UsersIcon },
 ];
 
 // The admin sections. A tab stays highlighted on the pages beneath it, so
