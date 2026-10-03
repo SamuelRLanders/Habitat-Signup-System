@@ -30,3 +30,7 @@ export function formValues(formData: FormData) {
   }
   return values;
 }
+
+// An email address as typed, trimmed and lowercased so the same address
+// always matches.
+export const emailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254));

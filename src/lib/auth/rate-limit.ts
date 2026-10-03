@@ -1,8 +1,9 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 
-// Limits on sending sign-in codes, so the form can't be used to flood
-// someone's inbox or run up our email bill. Better Auth has its own rate
+// Limits on sending emailed codes, for admin sign-in and for volunteers
+// confirming their email (one shared count per address), so the forms can't
+// be used to flood someone's inbox or run up our email bill. Better Auth has its own rate
 // limiter, but it only covers its HTTP endpoints, which we don't expose.
 
 const MINUTE = 60 * 1000;

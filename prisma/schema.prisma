@@ -277,6 +277,38 @@ model FormSection {
   @@index([formId, position])
 }
 
+// ─── Volunteer email verification ────────────────────────────────────────────
+// Volunteers don't have accounts or sign in. Before filling out a signup
+// form they confirm their email address with an emailed code, which lets
+// them see and change their own signups. This is separate from the admins'
+// Better Auth sign-in.
+
+// A 6-digit code emailed to a volunteer. Only its hash is stored. Asking for
+// a new code replaces the old one.
+model VolunteerCode {
+  id        String   @id @default(cuid())
+  email     String // lowercased
+  codeHash  String
+  attempts  Int      @default(0) // wrong guesses so far
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([email])
+}
+
+// A browser that has verified an email address, for a couple of hours. The
+// cookie holds a random token; only its hash is stored. Deleting the row
+// forgets the email on that browser.
+model VolunteerSession {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  email     String // lowercased
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 // ─── Registrations & signups ─────────────────────────────────────────────────
 
 // One submission of the signup form: a volunteer signing up alone (size 1),

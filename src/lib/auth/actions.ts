@@ -3,33 +3,23 @@
 import { APIError } from "better-auth/api";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import * as z from "zod";
+import {
+  parseCode,
+  recentCodeState,
+  type SendCodeState,
+  type VerifyCodeState,
+} from "@/lib/email-code";
+import { emailSchema } from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
 import { clientIp } from "@/lib/request";
 import { auth } from ".";
 import { takeLoginCodeRequest, RESEND_AFTER_SECONDS } from "./rate-limit";
 import { ADMIN_HOME, safeNextPath } from "./redirects";
 
-export type SendLoginCodeState =
-  | { status: "idle" }
-  | {
-      status: "sent";
-      email: string;
-      // When this response was made; each new send gets a fresh code step.
-      sentAt: number;
-      // Seconds before another code can be requested.
-      resendAfter: number;
-      // Set when no new code was sent because of the rate limit.
-      notice?: string;
-    }
-  | { status: "error"; message: string };
-
-const emailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254));
-
 export async function sendLoginCode(
-  _prev: SendLoginCodeState,
+  _prev: SendCodeState,
   formData: FormData,
-): Promise<SendLoginCodeState> {
+): Promise<SendCodeState> {
   const parsed = emailSchema.safeParse(formData.get("email"));
   if (!parsed.success) {
     return { status: "error", message: "Enter a valid email address." };
@@ -51,17 +41,7 @@ export async function sendLoginCode(
   }
 
   const limit = await takeLoginCodeRequest(email, await clientIp());
-  if (!limit.allowed) {
-    // Still show the code step: a code sent moments ago is probably in
-    // their inbox already.
-    return {
-      status: "sent",
-      email,
-      sentAt: Date.now(),
-      resendAfter: limit.retryAfter,
-      notice: `We sent a code recently, so we didn't send another yet. Use the most recent code in your inbox, or request a new one in ${formatWait(limit.retryAfter)}.`,
-    };
-  }
+  if (!limit.allowed) return recentCodeState(email, limit.retryAfter);
 
   try {
     await auth.api.sendVerificationOTP({ body: { email, type: "sign-in" } });
@@ -81,17 +61,14 @@ export async function sendLoginCode(
   };
 }
 
-export type VerifyLoginCodeState = { error?: string };
-
 export async function verifyLoginCode(
-  _prev: VerifyLoginCodeState,
+  _prev: VerifyCodeState,
   formData: FormData,
-): Promise<VerifyLoginCodeState> {
+): Promise<VerifyCodeState> {
   const email = emailSchema.safeParse(formData.get("email"));
-  // Allow spaces or dashes, in case the code is pasted as "123 456".
-  const code = String(formData.get("code") ?? "").replace(/[\s-]/g, "");
+  const code = parseCode(formData.get("code"));
   if (!email.success) return { error: "Start again with your email address." };
-  if (!/^\d{6}$/.test(code)) return { error: "Enter the 6-digit code." };
+  if (!code) return { error: "Enter the 6-digit code." };
 
   let role: string;
   try {
@@ -137,10 +114,4 @@ function codeErrorMessage(error: unknown) {
       console.error("Failed to verify sign-in code", error);
       return "Something went wrong signing you in. Please try again.";
   }
-}
-
-function formatWait(seconds: number) {
-  if (seconds < 60) return `${seconds} seconds`;
-  const minutes = Math.ceil(seconds / 60);
-  return minutes === 1 ? "1 minute" : `${minutes} minutes`;
 }
