@@ -24,6 +24,13 @@ enum BuildStatus {
   CANCELLED
 }
 
+// Whether volunteers can see a signup form. When they can fill it out is set
+// by its open and close times.
+enum FormStatus {
+  DRAFT // admins only
+  PUBLISHED // listed on the home page until it closes
+}
+
 enum SignupStatus {
   CONFIRMED
   WAITLISTED
@@ -84,6 +91,7 @@ model User {
 
   // Admin activity.
   buildsCreated Build[]
+  formsCreated  SignupForm[]
   messagesSent  Message[]
 }
 
@@ -200,23 +208,8 @@ model Build {
 
   shifts        Shift[]
   registrations Registration[]
-  sections      BuildSection[]
 
   @@index([status])
-}
-
-// A heading and text an admin adds to a build's signup form, such as
-// instructions for filling out a waiver. Shown in position order.
-model BuildSection {
-  id       String @id @default(cuid())
-  title    String
-  body     String @db.Text
-  position Int
-
-  buildId String
-  build   Build  @relation(fields: [buildId], references: [id], onDelete: Cascade)
-
-  @@index([buildId, position])
 }
 
 // A block of time volunteers can sign up for at a build.
@@ -238,6 +231,50 @@ model Shift {
   messages Message[]
 
   @@index([buildId, startsAt])
+}
+
+// ─── Signup forms ────────────────────────────────────────────────────────────
+
+// The signup form for one build day, shared with every group going out that
+// day. Its shifts aren't stored: they're every shift on its date, across all
+// builds, that isn't cancelled and whose build isn't cancelled. So there's at
+// most one form per date, and each shift is on at most one form.
+model SignupForm {
+  id          String     @id @default(cuid())
+  // The build day, in the Indiana time zone. Each shift's day is in its
+  // build's time zone.
+  date        DateTime   @unique @db.Date
+  description String?    @db.Text
+  status      FormStatus @default(DRAFT)
+  // Volunteers can fill it out from opensAt until closesAt. A published form
+  // is visible before it opens.
+  opensAt     DateTime
+  closesAt    DateTime
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // The admin who created the form, with their name copied as on Build.
+  createdByName String
+  createdById   String?
+  createdBy     User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  sections FormSection[]
+
+  @@index([status, date])
+}
+
+// A heading and text an admin adds to a signup form, such as instructions
+// for filling out a waiver. Shown in position order.
+model FormSection {
+  id       String @id @default(cuid())
+  title    String
+  body     String @db.Text
+  position Int
+
+  formId String
+  form   SignupForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId, position])
 }
 
 // ─── Registrations & signups ─────────────────────────────────────────────────

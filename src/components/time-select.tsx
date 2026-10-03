@@ -33,6 +33,8 @@ type TimeSelectProps = {
   name: string;
   // "08:00" (24-hour). The form receives the same format.
   defaultValue?: string;
+  // For a time with no <Label> of its own, such as one beside a date.
+  "aria-label"?: string;
   "aria-invalid"?: boolean;
   "aria-describedby"?: string;
 };

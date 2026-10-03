@@ -91,3 +91,36 @@ export function formatDateTime(date: Date, timeZone: string) {
     minute: "2-digit",
   });
 }
+
+// ─── Days ────────────────────────────────────────────────────────────────────
+// A build day is a calendar date with no time or zone, such as a signup
+// form's date. In the database it's a date-only column, which Prisma reads
+// as midnight UTC.
+
+// A date-only value → "2026-10-10".
+export function toDay(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+// "2026-10-10" → the value to store in a date-only column.
+export function fromDay(day: string) {
+  return new Date(`${day}T00:00:00Z`);
+}
+
+// "2026-10-10", 1 → "2026-10-11"
+export function addDays(day: string, days: number) {
+  const date = fromDay(day);
+  date.setUTCDate(date.getUTCDate() + days);
+  return toDay(date);
+}
+
+// "2026-10-10" → "Saturday, October 10, 2026", or "Sat, Oct 10, 2026".
+export function formatDay(day: string, style: "long" | "short" = "long") {
+  return fromDay(day).toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    weekday: style,
+    month: style,
+    day: "numeric",
+    year: "numeric",
+  });
+}

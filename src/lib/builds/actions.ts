@@ -50,60 +50,14 @@ const buildSchema = z.object({
 });
 
 export type BuildField = keyof z.input<typeof buildSchema>;
-export type SectionErrors = Partial<Record<"title" | "body", string>>;
-export type BuildFormState = FormState<BuildField> & {
-  // Problems with the signup form sections, by their position in the form.
-  sectionErrors?: Record<number, SectionErrors>;
-};
+export type BuildFormState = FormState<BuildField>;
 
-// Headings and text shown on the build's signup form, such as instructions
-// for each waiver. The form sends one "sectionTitle" and one "sectionBody"
-// per section, in order.
-const MAX_SECTIONS = 20;
-
-const sectionSchema = z.object({
-  title: z.string().trim().min(1, "Enter a heading.").max(120, "Keep the heading under 120 characters."),
-  body: z.string().trim().min(1, "Enter some text.").max(10000, "Keep the text under 10,000 characters."),
-});
-
-function parseSections(formData: FormData) {
-  const titles = formData.getAll("sectionTitle");
-  const bodies = formData.getAll("sectionBody");
-  if (titles.length > MAX_SECTIONS) {
-    return { ok: false as const, form: `A build can have at most ${MAX_SECTIONS} sections.` };
-  }
-
-  const sections: z.output<typeof sectionSchema>[] = [];
-  const errors: Record<number, SectionErrors> = {};
-  titles.forEach((title, index) => {
-    const parsed = sectionSchema.safeParse({ title, body: bodies[index] ?? "" });
-    if (parsed.success) sections.push(parsed.data);
-    else errors[index] = firstErrors(parsed.error);
-  });
-
-  if (Object.keys(errors).length > 0) return { ok: false as const, errors };
-  return {
-    ok: true as const,
-    sections: sections.map((section, position) => ({ ...section, position })),
-  };
-}
-
-// Validates the build fields and sections together, so every problem shows
-// at once.
 function parseBuild(formData: FormData) {
   const build = buildSchema.safeParse(formValues(formData));
-  const sections = parseSections(formData);
-  if (!build.success || !sections.ok) {
-    const state: BuildFormState = {
-      errors: build.success ? {} : firstErrors(build.error),
-    };
-    if (!sections.ok) {
-      if (sections.form) state.errors!.form = sections.form;
-      if (sections.errors) state.sectionErrors = sections.errors;
-    }
-    return { ok: false as const, state };
+  if (!build.success) {
+    return { ok: false as const, state: { errors: firstErrors(build.error) } };
   }
-  return { ok: true as const, build: build.data, sections: sections.sections };
+  return { ok: true as const, build: build.data };
 }
 
 export async function createBuild(
@@ -121,7 +75,6 @@ export async function createBuild(
       // A copy of the name, kept even if the admin's account changes.
       createdByName: admin.name || admin.email,
       createdById: admin.id,
-      sections: { create: parsed.sections },
     },
   });
 
@@ -147,15 +100,7 @@ export async function updateBuild(
 
   const { timeZone } = parsed.build;
   await prisma.$transaction([
-    // Sections aren't referenced by anything else, so they're replaced
-    // wholesale with what the form sent.
-    prisma.build.update({
-      where: { id: buildId },
-      data: {
-        ...parsed.build,
-        sections: { deleteMany: {}, create: parsed.sections },
-      },
-    }),
+    prisma.build.update({ where: { id: buildId }, data: parsed.build }),
     // Changing the time zone fixes a mistake in how times were entered, so
     // shifts keep their clock times (8:00 AM stays 8:00 AM) in the new zone.
     ...(timeZone === build.timeZone

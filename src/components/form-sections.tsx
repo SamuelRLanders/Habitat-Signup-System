@@ -1,9 +1,9 @@
 import { Section } from "@/components/form-fields";
 import { LinkedText } from "@/components/linked-text";
 
-// The headings and text an admin added to a build, such as which waivers to
-// sign and how. Shown on the signup form and the group join page.
-export function BuildSections({
+// The headings and text an admin added to a signup form, such as which
+// waivers to sign and how.
+export function FormSections({
   sections,
 }: {
   sections: { id: string; title: string; body: string }[];

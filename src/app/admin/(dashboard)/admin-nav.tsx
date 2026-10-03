@@ -1,11 +1,12 @@
 "use client";
 
-import { HammerIcon, UsersIcon } from "lucide-react";
+import { ClipboardListIcon, HammerIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
 
 const tabs = [
+  { href: "/admin/forms", label: "Forms", icon: ClipboardListIcon },
   { href: "/admin/builds", label: "Builds", icon: HammerIcon },
   { href: "/admin/people", label: "People", icon: UsersIcon },
 ];

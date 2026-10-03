@@ -6,12 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { SectionErrors } from "@/lib/builds/actions";
-import { FieldError } from "./build-form";
+import type { SectionErrors } from "@/lib/sections";
+import { FieldError } from "../builds/build-form";
 
 export type SectionDefaults = { title: string; body: string };
 
-// The headings and text shown on the build's signup form, such as
+// The headings and text shown on a signup form, such as
 // instructions for each waiver. Sends one "sectionTitle" and one
 // "sectionBody" per section, in order. The inputs are uncontrolled and keyed,
 // so moving a section moves what's been typed with it.

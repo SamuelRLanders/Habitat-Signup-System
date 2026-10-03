@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { BuildStatus } from "@/generated/prisma/enums";
+import type { BuildStatus, FormStatus } from "@/generated/prisma/enums";
 import { requireAdmin } from "@/lib/auth/dal";
 import {
   createShifts,
@@ -16,6 +16,7 @@ import {
 } from "@/lib/builds/actions";
 import { getBuild } from "@/lib/builds/queries";
 import { prisma } from "@/lib/prisma";
+import { formsOnDays, today } from "@/lib/signup-forms/queries";
 import {
   formatDate,
   formatTimeRange,
@@ -57,6 +58,9 @@ export default async function BuildPage({
   const days = Map.groupBy(build.shifts, (shift) =>
     toDateInput(shift.startsAt, zone),
   );
+  // Each day's signup form, which offers that day's shifts.
+  const forms = await formsOnDays([...days.keys()]);
+  const todayDay = today();
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-8">
@@ -138,9 +142,14 @@ export default async function BuildPage({
         ) : (
           [...days].map(([day, shifts]) => (
             <div key={day} className="flex flex-col gap-2">
-              <h3 className="text-sm font-medium text-muted-foreground">
-                {formatDate(shifts[0].startsAt, zone)}
-              </h3>
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+                <h3 className="text-sm font-medium text-muted-foreground">
+                  {formatDate(shifts[0].startsAt, zone)}
+                </h3>
+                {!cancelled && (
+                  <DayFormLink day={day} form={forms.get(day)} past={day < todayDay} />
+                )}
+              </div>
               <ul className="flex flex-col divide-y hover-gold rounded-xl ring-1 ring-foreground/10">
                 {shifts.map((shift) => {
                   const isPast = shift.endsAt < now;
@@ -262,6 +271,34 @@ function StatusActions({
         }}
       />
     </>
+  );
+}
+
+// The day's signup form, or a link to make one for a day still to come.
+function DayFormLink({
+  day,
+  form,
+  past,
+}: {
+  day: string;
+  form?: { id: string; status: FormStatus };
+  past: boolean;
+}) {
+  if (!form) {
+    if (past) return null;
+    return (
+      <Link
+        href={`/admin/forms/new?date=${day}`}
+        className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+      >
+        No signup form yet · Create one
+      </Link>
+    );
+  }
+  return (
+    <Link href={`/admin/forms/${form.id}`} className="text-sm hover:underline">
+      {form.status === "DRAFT" ? "Signup form (draft)" : "Signup form"}
+    </Link>
   );
 }
 

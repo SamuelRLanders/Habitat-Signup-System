@@ -1,6 +1,7 @@
 // Fills the database with test builds, shifts, volunteers, and signups, for
 // trying the app by hand. Everything it makes is marked so it can be removed:
-// builds are named "[Test] …" and users have @example.org emails. Running it
+// builds are named "[Test] …", signup forms' descriptions start with
+// "[Test] ", and users have @example.org emails. Running it
 // again replaces the old test data. Real data is never touched.
 //
 // Usage: npm run seed:test                 (replace the test data)
@@ -54,9 +55,12 @@ async function clean() {
   await prisma.signup.deleteMany({ where: { registration: registrations } });
   await prisma.registration.deleteMany({ where: registrations });
   await prisma.build.deleteMany({ where: { id: { in: buildIds } } });
+  const forms = await prisma.signupForm.deleteMany({
+    where: { description: { startsWith: TEST_PREFIX } },
+  });
   await prisma.loginCodeRequest.deleteMany({ where: { email: { endsWith: TEST_DOMAIN } } });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
-  console.log(`Removed ${builds.length} test builds and ${users.length} test users.`);
+  console.log(`Removed ${builds.length} test builds, ${forms.count} test forms and ${users.length} test users.`);
 }
 
 type Person = {
@@ -117,7 +121,6 @@ async function seed() {
     address: string;
     description?: string;
     shifts: ReturnType<typeof shift>[];
-    sections?: { title: string; body: string; position: number }[];
   }) =>
     prisma.build.create({
       data: {
@@ -126,7 +129,6 @@ async function seed() {
         description: data.description,
         createdByName: admin.name,
         createdById: admin.id,
-        sections: { create: data.sections ?? [] },
         shifts: { create: data.shifts },
       },
       include: { shifts: { orderBy: { startsAt: "asc" } } },
@@ -136,10 +138,6 @@ async function seed() {
     name: "Maple Street Home",
     address: "412 Maple St, Lafayette, IN 47904",
     description: "A three-bedroom home for the Rivera family. We're framing walls and raising the roof trusses this month.\n\nWear closed-toe shoes. Lunch is provided on Saturdays.",
-    sections: [
-      { position: 0, title: "Purdue waiver", body: "Sign the Purdue volunteer waiver before your first shift: https://example.org/purdue-waiver\n\nUnder “Organization”, choose Habitat for Humanity." },
-      { position: 1, title: "Chapter waiver", body: "Also sign the chapter's waiver at https://example.org/chapter-waiver. Use your full legal name." },
-    ],
     shifts: [
       shift("2026-10-10", 8, 12, 12, "Framing. No experience needed."),
       shift("2026-10-10", 13, 17, 12),
@@ -176,6 +174,80 @@ async function seed() {
     name: "Summer Blitz Build",
     address: "300 Harrison St, Lafayette, IN 47901",
     shifts: [shift("2026-08-15", 8, 12, 20), shift("2026-08-22", 8, 12, 20)],
+  });
+  // Shares build days with Maple, so those days' forms span two builds.
+  await createBuild({
+    name: "Cedar Lane Home",
+    address: "2210 Cedar Ln, West Lafayette, IN 47906",
+    description: "Exterior siding on a new home.",
+    shifts: [
+      shift("2026-10-10", 9, 15, 8, "Siding. We'll teach you to use the tools."),
+      shift("2026-10-17", 9, 15, 8),
+    ],
+  });
+
+  // ── Signup forms, one per build day. Days left without one show a
+  // "Create one" link on their build's page.
+  const waivers = [
+    { position: 0, title: "Purdue waiver", body: "Sign the Purdue volunteer waiver before your shift: https://example.org/purdue-waiver\n\nUnder “Organization”, choose Habitat for Humanity." },
+    { position: 1, title: "Chapter waiver", body: "Also sign the chapter's waiver at https://example.org/chapter-waiver. Use your full legal name." },
+  ];
+  const createForm = async (data: {
+    date: string;
+    status: "DRAFT" | "PUBLISHED";
+    opens: [string, number];
+    closes: [string, number];
+    description: string;
+    sections?: typeof waivers;
+  }) => {
+    // Forms are one per day, so leave a day alone if it has a real form.
+    const date = new Date(`${data.date}T00:00:00Z`);
+    if (await prisma.signupForm.findUnique({ where: { date } })) {
+      console.log(`Skipped the ${data.date} test form: that day already has a form.`);
+      return;
+    }
+    await prisma.signupForm.create({
+      data: {
+        date,
+        status: data.status,
+        opensAt: at(...data.opens),
+        closesAt: at(...data.closes),
+        description: TEST_PREFIX + data.description,
+        createdByName: admin.name,
+        createdById: admin.id,
+        sections: { create: data.sections ?? [] },
+      },
+    });
+  };
+  await createForm({
+    date: "2026-10-10",
+    status: "PUBLISHED",
+    opens: ["2026-09-28", 9],
+    closes: ["2026-10-08", 22],
+    description: "Two builds this Saturday. Meet at your build's address 15 minutes before your shift starts.",
+    sections: waivers,
+  });
+  await createForm({
+    date: "2026-10-17",
+    status: "PUBLISHED",
+    opens: ["2026-10-11", 9],
+    closes: ["2026-10-15", 22],
+    description: "Opens the Sunday before.",
+    sections: waivers,
+  });
+  await createForm({
+    date: "2026-11-07",
+    status: "DRAFT",
+    opens: ["2026-10-20", 9],
+    closes: ["2026-11-05", 22],
+    description: "Still being planned.",
+  });
+  await createForm({
+    date: "2026-08-15",
+    status: "PUBLISHED",
+    opens: ["2026-08-01", 9],
+    closes: ["2026-08-13", 22],
+    description: "Summer blitz kickoff.",
   });
 
   // ── Users. Dana has no saved details, to try the first-time flow.
@@ -264,14 +336,22 @@ async function seed() {
   await register({ user: carmen, build: elm, shifts: [elm.shifts[0]], size: 8, groupName: "Diaz Landscaping Crew" });
 
   console.log(`
-Test data created. See it at ${SITE}/admin/builds and ${SITE}/admin/people.
+Test data created. See it at ${SITE}/admin/forms, ${SITE}/admin/builds
+and ${SITE}/admin/people.
+
+Signup forms:
+  Sat, Oct 10   published and open; Maple and Cedar Lane shifts; waivers
+  Sat, Oct 17   published, opens Oct 11
+  Sat, Nov 7    draft
+  Sat, Aug 15   past
 
 Builds:
-  Maple Street Home      signups on several shifts, two signup form sections
+  Maple Street Home      signups on several shifts
   Riverside Duplex       signups, including groups
   Oak Avenue Repair      no signups
   Elm Court Landscaping  one full shift
   Summer Blitz Build     past shifts only
+  Cedar Lane Home        shifts on the same days as Maple, no signups
 
 Volunteers (records only; volunteers can't sign in):
   alice, ben, carmen, dana and eli @example.org

@@ -17,10 +17,7 @@ export default async function EditBuildPage({
 
   const build = await prisma.build.findUnique({
     where: { id: buildId },
-    include: {
-      sections: { orderBy: { position: "asc" }, select: { title: true, body: true } },
-      _count: { select: { shifts: true } },
-    },
+    include: { _count: { select: { shifts: true } } },
   });
   if (!build) notFound();
 
@@ -46,7 +43,6 @@ export default async function EditBuildPage({
           description: build.description ?? "",
           timeZone: build.timeZone,
         }}
-        sections={build.sections}
         submitLabel="Save changes"
         cancelHref={buildHref}
         hasShifts={build._count.shifts > 0}
