@@ -32,7 +32,7 @@ import { PeopleSearchBar } from "./people-search";
 export const metadata: Metadata = { title: "People" };
 
 // Everyone with an account, searched and filtered through the URL, 100 at
-// a time. Group members who only signed a waiver through a group link don't
+// a time. Group members who only joined through a group link don't
 // have accounts, so they appear on shift rosters instead.
 export default async function PeoplePage({ searchParams }: PageProps<"/admin/people">) {
   await requireAdmin();
@@ -53,8 +53,8 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold">People</h1>
           <p className="text-sm text-muted-foreground">
-            Everyone who has signed in. Group members who signed a waiver through
-            a group link are listed on each shift&apos;s volunteer list.
+            Everyone who has signed in. Group members who joined through a
+            group link are listed on each shift&apos;s volunteer list.
           </p>
         </div>
         {total > 0 ? (

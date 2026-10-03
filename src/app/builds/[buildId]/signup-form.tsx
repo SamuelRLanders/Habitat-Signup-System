@@ -5,9 +5,9 @@ import { CheckCircle2Icon } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { CopyLink } from "@/components/copy-link";
+import { BuildSections } from "@/components/build-sections";
 import { Field, Section } from "@/components/form-fields";
 import { ProfileFields, type ProfileDefaults } from "@/components/profile-fields";
-import { WaiverSignature } from "@/components/waiver-signature";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -28,7 +28,9 @@ type SignupFormProps = {
   action: (prev: SignupFormState, formData: FormData) => Promise<SignupFormState>;
   shifts: ShiftOption[];
   timeZoneLabel: string;
-  waiver: { id: string; title: string; body: string };
+  // Headings and text the admin added to this build's form, such as
+  // instructions for each waiver.
+  sections: { id: string; title: string; body: string }[];
   defaults: ProfileDefaults | null;
 };
 
@@ -36,7 +38,7 @@ export function SignupForm({
   action,
   shifts,
   timeZoneLabel,
-  waiver,
+  sections,
   defaults,
 }: SignupFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
@@ -230,20 +232,7 @@ export function SignupForm({
         ))}
       </Section>
 
-      <Section
-        title="Waiver"
-        description={
-          isGroup
-            ? "This waiver is for you. After you sign up, you'll get a link to send your group so each person can sign their own."
-            : "Please read the waiver, then type your full legal name to agree to it."
-        }
-      >
-        <WaiverSignature
-          waiver={waiver}
-          field="signedName"
-          error={errors.signedName}
-        />
-      </Section>
+      <BuildSections sections={sections} />
 
       <div className="flex flex-col gap-3 border-t pt-6">
         {errors.form && (
@@ -304,7 +293,7 @@ function Confirmation({
   email,
   groupSize,
   shifts,
-  waiverPath,
+  joinPath,
 }: NonNullable<SignupFormState["success"]>) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -333,17 +322,17 @@ function Confirmation({
           </li>
         ))}
       </ul>
-      {waiverPath && (
+      {joinPath && (
         <div className="flex flex-col gap-3 rounded-lg bg-background p-4 ring-1 ring-foreground/10">
           <div className="flex flex-col gap-1">
-            <h3 className="font-semibold">Next: send your group the waiver link</h3>
+            <h3 className="font-semibold">Next: send your group the join link</h3>
             <p className="text-sm text-muted-foreground">
-              Everyone else in your group needs to sign the waiver before the
-              build. Send them this link. You can see who has signed on your
-              signups page.
+              Everyone else in your group needs to join through this link
+              before the build. You can see who has joined on your signups
+              page.
             </p>
           </div>
-          <CopyLink path={waiverPath} label="Group waiver link" />
+          <CopyLink path={joinPath} label="Group join link" />
         </div>
       )}
       <p className="text-sm text-muted-foreground">

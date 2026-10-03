@@ -19,23 +19,23 @@ import type { GroupSizeFormState } from "@/lib/me/actions";
 import { submitForm } from "@/lib/submit-form";
 import { MAX_GROUP_SIZE } from "@/lib/volunteers";
 
-// The "Waiver link" pill on a group's card: the link to send group members.
-export function WaiverLinkDialog({ path }: { path: string }) {
+// The "Join link" pill on a group's card: the link to send group members.
+export function JoinLinkDialog({ path }: { path: string }) {
   return (
     <Dialog>
       <DialogTrigger render={<Button variant="outline" size="sm" />}>
-        Waiver link
+        Join link
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Group waiver link</DialogTitle>
+          <DialogTitle>Group join link</DialogTitle>
           <DialogDescription>
             Send this link to everyone in your group. Each person opens it and
-            signs the waiver with their full legal name.
+            adds their name, birthday, and phone number.
           </DialogDescription>
         </DialogHeader>
         {/* Only rendered while open, so CopyLink can read window. */}
-        <CopyLink path={path} label="Group waiver link" />
+        <CopyLink path={path} label="Group join link" />
       </DialogContent>
     </Dialog>
   );
@@ -50,12 +50,12 @@ type GroupSizeAction = (
 export function GroupSizeDialog({
   action,
   size,
-  signed,
+  joined,
 }: {
   action: GroupSizeAction;
   size: number;
-  // People who have signed the waiver, shown as a hint.
-  signed: number;
+  // People who have joined through the link, shown as a hint.
+  joined: number;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -69,7 +69,7 @@ export function GroupSizeDialog({
         <GroupSizeForm
           action={action}
           size={size}
-          signed={signed}
+          joined={joined}
           onSaved={() => setOpen(false)}
         />
       </DialogContent>
@@ -80,12 +80,12 @@ export function GroupSizeDialog({
 function GroupSizeForm({
   action,
   size,
-  signed,
+  joined,
   onSaved,
 }: {
   action: GroupSizeAction;
   size: number;
-  signed: number;
+  joined: number;
   onSaved: () => void;
 }) {
   const [state, formAction, pending] = useActionState(
@@ -111,7 +111,7 @@ function GroupSizeForm({
         label="People in your group, including you"
         htmlFor="groupSize"
         error={errors.groupSize}
-        hint={`${signed} ${signed === 1 ? "person has" : "people have"} signed the waiver so far.`}
+        hint={`${joined} ${joined === 1 ? "person has" : "people have"} joined so far.`}
       >
         <NumberField
           id="groupSize"

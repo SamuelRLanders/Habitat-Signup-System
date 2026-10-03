@@ -13,20 +13,42 @@ const upcomingSignups = () => ({
   select: { shift: { select: { startsAt: true, endsAt: true } } },
 });
 
-// The group waiver page for a waiver link, or null if the link is wrong.
-export const getGroupWaiver = cache(async (token: string) => {
+const leaderName = {
+  select: {
+    name: true,
+    profile: { select: { firstName: true, lastName: true } },
+  },
+};
+
+// The leader's name from their profile, or their account name if they
+// somehow have no profile.
+export function fullName(leader: {
+  name: string;
+  profile: { firstName: string; lastName: string } | null;
+}) {
+  return leader.profile
+    ? `${leader.profile.firstName} ${leader.profile.lastName}`
+    : leader.name;
+}
+
+// The join page for a group's link, or null if the link is wrong.
+export const getGroupInvite = cache(async (token: string) => {
   const registration = await prisma.registration.findUnique({
-    where: { waiverToken: token },
+    where: { joinToken: token },
     select: {
       groupName: true,
-      leader: {
+      leader: leaderName,
+      build: {
         select: {
           name: true,
-          profile: { select: { firstName: true, lastName: true } },
+          address: true,
+          timeZone: true,
+          status: true,
+          sections: {
+            orderBy: { position: "asc" },
+            select: { id: true, title: true, body: true },
+          },
         },
-      },
-      build: {
-        select: { name: true, address: true, timeZone: true, status: true },
       },
       signups: upcomingSignups(),
     },
@@ -36,17 +58,15 @@ export const getGroupWaiver = cache(async (token: string) => {
   const { leader, signups, ...rest } = registration;
   return {
     ...rest,
-    leaderName: leader.profile
-      ? `${leader.profile.firstName} ${leader.profile.lastName}`
-      : leader.name,
+    leaderName: fullName(leader),
     shifts: signups.map((s) => s.shift),
     // The link closes once the group has no shifts left to come.
     open: rest.build.status !== "CANCELLED" && signups.length > 0,
   };
 });
 
-// A group registration and who has signed its waiver, for its leader.
-// Null if it isn't theirs or isn't a group.
+// A group registration and who has joined it, for its leader. Null if it
+// isn't theirs or isn't a group.
 export async function getGroupDetail(userId: string, registrationId: string) {
   const registration = await prisma.registration.findFirst({
     where: { id: registrationId, leaderId: userId, size: { gt: 1 } },
@@ -54,15 +74,13 @@ export async function getGroupDetail(userId: string, registrationId: string) {
       id: true,
       size: true,
       groupName: true,
-      waiverToken: true,
+      joinToken: true,
+      createdAt: true,
+      leader: leaderName,
       build: {
         select: { id: true, name: true, address: true, timeZone: true, status: true },
       },
       signups: upcomingSignups(),
-      waiverAcceptances: {
-        where: { userId },
-        select: { signedName: true, signedAt: true },
-      },
       groupMembers: {
         orderBy: { createdAt: "asc" },
         select: { id: true, legalName: true, createdAt: true },
@@ -71,11 +89,11 @@ export async function getGroupDetail(userId: string, registrationId: string) {
   });
   if (!registration) return null;
 
-  const { signups, waiverAcceptances, ...rest } = registration;
+  const { signups, leader, ...rest } = registration;
   return {
     ...rest,
+    leaderName: fullName(leader),
     shifts: signups.map((s) => s.shift),
-    leaderSignature: waiverAcceptances[0] ?? null,
     open: rest.build.status !== "CANCELLED" && signups.length > 0,
   };
 }

@@ -6,11 +6,7 @@ import { getUser } from "@/lib/auth/dal";
 import { loginPath } from "@/lib/auth/redirects";
 import { formatPhone } from "@/lib/phone";
 import { submitSignup } from "@/lib/signups/actions";
-import {
-  getActiveWaiver,
-  getProfileDefaults,
-  getSignupBuild,
-} from "@/lib/signups/queries";
+import { getProfileDefaults, getSignupBuild } from "@/lib/signups/queries";
 import { formatDate, formatTimeRange, timeZoneLabel } from "@/lib/time";
 import { spotsText } from "@/lib/volunteers";
 import { SignupForm, type ShiftOption } from "./signup-form";
@@ -30,11 +26,7 @@ export default async function BuildSignupPage({
   params,
 }: PageProps<"/builds/[buildId]">) {
   const { buildId } = await params;
-  const [build, user, waiver] = await Promise.all([
-    getSignupBuild(buildId),
-    getUser(),
-    getActiveWaiver(),
-  ]);
+  const [build, user] = await Promise.all([getSignupBuild(buildId), getUser()]);
   if (!build) notFound();
 
   const zone = build.timeZone;
@@ -52,12 +44,10 @@ export default async function BuildSignupPage({
       ? "Signups for this build are closed."
       : shifts.length === 0
         ? "There are no upcoming shifts to sign up for right now. Check back soon."
-        : !waiver
-          ? "Signups for this build aren't open yet. Check back soon."
-          : null;
+        : null;
 
   let body: React.ReactNode;
-  if (closedMessage || !waiver) {
+  if (closedMessage) {
     body = <p className="rounded-xl bg-muted p-4 text-sm">{closedMessage}</p>;
   } else if (!user) {
     body = (
@@ -74,7 +64,7 @@ export default async function BuildSignupPage({
           action={submitSignup.bind(null, build.id)}
           timeZoneLabel={timeZoneLabel(zone)}
           shifts={shifts}
-          waiver={waiver}
+          sections={build.sections}
           defaults={
             profile && {
               ...profile,

@@ -101,8 +101,8 @@ export async function getBuild(buildId: string) {
 }
 
 // A shift's volunteers: each signup's leader (or individual) with their
-// contact details, and for groups, the members who have signed the waiver
-// through the group's link.
+// contact details, and for groups, the members who have joined through the
+// group's link.
 export async function getShiftRoster(buildId: string, shiftId: string) {
   const shift = await prisma.shift.findUnique({
     where: { id: shiftId, buildId },

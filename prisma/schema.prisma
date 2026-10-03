@@ -188,13 +188,32 @@ model Build {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  createdById String
-  createdBy   User   @relation(fields: [createdById], references: [id])
+  // The admin who created the build. Their name is copied here when the
+  // build is created, so it stays the same if they're later renamed, lose
+  // admin access, or their account is deleted.
+  createdByName String
+  createdById   String?
+  createdBy     User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   shifts        Shift[]
   registrations Registration[]
+  sections      BuildSection[]
 
   @@index([status])
+}
+
+// A heading and text an admin adds to a build's signup form, such as
+// instructions for filling out a waiver. Shown in position order.
+model BuildSection {
+  id       String @id @default(cuid())
+  title    String
+  body     String @db.Text
+  position Int
+
+  buildId String
+  build   Build  @relation(fields: [buildId], references: [id], onDelete: Cascade)
+
+  @@index([buildId, position])
 }
 
 // A block of time volunteers can sign up for at a build.
@@ -222,16 +241,17 @@ model Shift {
 
 // One submission of the signup form: a volunteer signing up alone (size 1),
 // or leading a group (size > 1, including the leader) for one or more shifts
-// of a build. The leader signs the waiver as part of the form.
+// of a build. Waivers are handled outside this app; the build's sections
+// tell volunteers where to sign them.
 model Registration {
   id          String    @id @default(cuid())
   groupName   String? // e.g. "First Baptist Youth Group"; null for individuals
   // Spots this registration takes on each of its confirmed shifts. The
   // leader can change it later if every shift still has room.
   size        Int       @default(1)
-  // Secret token for the waiver link the leader shares with group members.
+  // Secret token for the join link the leader shares with group members.
   // Null for individuals. The link stops working once the last shift starts.
-  waiverToken String?   @unique
+  joinToken   String?   @unique
   // When the volunteer dismissed this registration's card after Habitat
   // cancelled the build. The card only stays hidden while the build is
   // cancelled, so it comes back if the build is restored.
@@ -280,7 +300,7 @@ model Signup {
   @@index([userId])
 }
 
-// A group member who signed the waiver through the leader's link. Group
+// A group member who joined through the leader's link. Group
 // members don't have user accounts; this row is how they're identified, and
 // their phone number is used to text them on build days.
 model GroupMember {
@@ -301,10 +321,13 @@ model GroupMember {
   @@index([registrationId])
 }
 
-// ─── Waivers ─────────────────────────────────────────────────────────────────
+// ─── Waivers (no longer used) ────────────────────────────────────────────────
 
-// Waiver text is versioned and never edited in place. To change the text,
-// create a new version and make it the active one.
+// Volunteers used to sign a built-in waiver as part of signing up. Waivers
+// are now signed outside the app, linked from each build's sections. These
+// tables only hold signatures made before that change.
+
+// Waiver text is versioned and never edited in place.
 model Waiver {
   id        String   @id @default(cuid())
   version   Int      @unique

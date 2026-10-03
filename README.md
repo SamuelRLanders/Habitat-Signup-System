@@ -8,18 +8,18 @@ A web app that lets Habitat for Humanity staff schedule volunteer shifts for hom
 - Browse upcoming builds and their shifts, with date, time, address, and open spots
 - Sign up as an individual or as a group (one signup that takes several spots). Details are saved and filled in next time.
 - Volunteers must be 18 or older for now
-- Sign the waiver online by scrolling through it and typing their full legal name
+- See each build's sections on the signup form, such as which waivers to sign and links to them
 - Get a confirmation email with the shift details
 - See upcoming and past shifts, cancel a shift, and change a group's size on their own page (`/me`)
-- Group leaders get a waiver link to send their group. Members sign without an account, and the leader sees who has signed and when.
+- Group leaders get a join link to send their group. Members add their details without an account, and the leader sees who has joined and when.
 
 **For admins (sign in with an emailed code, admin role required)**
 - Create builds (name, address, time zone) and add volunteer shifts to them (date, time, spots, notes)
+- Add sections to a build's signup form: a heading and text each, such as a waiver link and how to fill it out
 - Publish, close, or cancel a build's signups
-- View each shift's volunteers, including group members who signed through a group link, with phone numbers and text consent
+- View each shift's volunteers, including group members who joined through a group link, with phone numbers and text consent
 - View everyone who has signed in
 - Send email or SMS messages to everyone signed up for a shift
-- Manage waiver text and versions
 - Manage admin accounts
 
 ## Tech Stack
@@ -41,13 +41,13 @@ A web app that lets Habitat for Humanity staff schedule volunteer shifts for hom
 - **User**: anyone who has signed in, with a role (volunteer or admin). Admins are made with `npm run admin:add`.
 - **VolunteerProfile**: a user's saved details: name, phone, home address, emergency contact, birthday, text consent, and optionally sex and T-shirt size
 - **LoginCodeRequest**: recent sign-in code requests, used to limit how often codes are sent
-- **Build**: a home being built: name, address, description, time zone, and status (draft, published, closed, cancelled)
+- **Build**: a home being built: name, address, description, time zone, status (draft, published, closed, cancelled), and the name of the admin who created it
+- **BuildSection**: a heading and text shown on a build's signup form, in order
 - **Shift**: a block of time at a build: start/end time, number of spots, notes. Shifts with signups are cancelled rather than deleted.
-- **Registration**: one submission of the signup form: the leader (or individual), the group name and size (spots taken on each shift), and for groups, the secret token behind the waiver link
+- **Registration**: one submission of the signup form: the leader (or individual), the group name and size (spots taken on each shift), and for groups, the secret token behind the join link
 - **Signup**: a registration's spot on one shift, with its status. Each shift can be cancelled on its own.
-- **GroupMember**: someone who signed the waiver through a group's link: legal name, birthday, phone, and text consent. Group members don't have accounts.
-- **Waiver**: versioned waiver text; one version is active at a time
-- **WaiverAcceptance**: an immutable record of a user or group member signing a waiver version for a registration, with the typed name, time, IP address, and browser
+- **GroupMember**: someone who joined through a group's link: name, birthday, phone, and text consent. Group members don't have accounts.
+- **Waiver**, **WaiverAcceptance**: no longer used. They hold signatures from the built-in waiver the app used to have.
 - **Message**: record of emails and texts sent by admins
 
 ## Design Principles
@@ -58,8 +58,8 @@ A web app that lets Habitat for Humanity staff schedule volunteer shifts for hom
 
 ## Key Considerations
 
-- **Waivers**: store an immutable record for every acceptance (waiver version, timestamp, typed name, IP address). The waiver loaded now is a sample, not a legal document: replace it with Habitat's real waiver, and have Habitat's legal contact approve the waiver flow. Minors (not allowed yet) would need a parent or guardian to accept.
-- **Group signups**: the leader signs for themselves, and each member signs their own through the group's link. Group membership changes often, so the leader sees who has signed rather than a "complete" status.
+- **Waivers**: signed outside the app. Admins add a section to each build linking each waiver, with instructions for filling it out. The app doesn't track who has signed them.
+- **Group signups**: the leader signs up the group, and each member adds their own details through the group's join link. Group membership changes often, so the leader sees who has joined rather than a "complete" status.
 - **Past headcounts**: a group's size is stored once per registration, so changing it also changes its past shifts' headcounts. Freezing each shift's headcount when it ends is planned along with attendance records.
 - **SMS compliance**: text only volunteers who opted in, and honor STOP. US business texting requires A2P 10DLC registration through Twilio. **Approval can take weeks, so start it early.**
 - **Privacy**: volunteer data is personal information. Keep it in the admin area only, use HTTPS everywhere, and don't collect more than you need.
@@ -74,11 +74,10 @@ npm install                # also generates the Prisma client
 cp .env.example .env       # then set DATABASE_URL and BETTER_AUTH_SECRET
 npm run db:migrate         # create the database tables
 npm run admin:add -- you@example.org "Your Name"   # add yourself as an admin
-npm run waiver:seed -- scripts/sample-waiver.txt "Sample Volunteer Waiver (Not a Legal Document)"
 npm run dev                # http://localhost:3000
 ```
 
-**Signing in:** go to `/login` and enter your email. Until `RESEND_API_KEY` is set, the 6-digit code is printed in the terminal running `npm run dev` instead of emailed. Admins land on `/admin`, volunteers on `/me`. Signups stay closed until a waiver has been added.
+**Signing in:** go to `/login` and enter your email. Until `RESEND_API_KEY` is set, the 6-digit code is printed in the terminal running `npm run dev` instead of emailed. Admins land on `/admin`, volunteers on `/me`.
 
 | Command | What it does |
 |---|---|
@@ -88,7 +87,6 @@ npm run dev                # http://localhost:3000
 | `npm run db:migrate` | Apply schema changes to the database (`prisma migrate dev`) |
 | `npm run db:studio` | Browse and edit data in Prisma Studio |
 | `npm run admin:add -- <email> "<name>"` | Make someone an admin (creates their account, or upgrades a volunteer's) |
-| `npm run waiver:seed -- <file> "<title>"` | Add a new waiver version from a text file and make it the active one |
 | `npm run seed:test` | Replace the test builds, shifts, volunteers, and signups (`-- --clean` only removes them). Test users have `@example.org` emails. |
 
 **Project layout**
@@ -99,11 +97,11 @@ npm run dev                # http://localhost:3000
 - `src/app/login/`: the sign-in page for everyone (email, then code)
 - `src/app/admin/`: admin dashboard; `(dashboard)/` holds the pages that require the admin role
 - `src/app/builds/[buildId]/`: signup page for a build (the link behind the admin "Share" button)
-- `src/app/me/`: a volunteer's own pages: signups, their details, and their groups' waivers
-- `src/app/waiver/[token]/`: the group waiver page members open from their leader's link
+- `src/app/me/`: a volunteer's own pages: signups, their details, and who has joined their groups
+- `src/app/join/[token]/`: the group join page members open from their leader's link
 - `src/lib/builds/`: build and shift queries and Server Actions
 - `src/lib/signups/`: the signup form's queries, Server Action (validation, age check, and shift capacity check), and confirmation email
-- `src/lib/me/`, `src/lib/waivers/`: queries and Server Actions for volunteers' pages and group waivers
+- `src/lib/me/`, `src/lib/groups/`: queries and Server Actions for volunteers' pages and group join links
 - `src/lib/profile.ts`: the rules for a volunteer's details, shared by the signup form and the details page
 - `src/lib/time.ts`: time zone conversion and date formatting (shift times are stored in UTC)
 - `src/lib/auth/`: sign-in (Better Auth config, `requireUser()` and `requireAdmin()`, the sign-in Server Actions, and code rate limits)
@@ -116,6 +114,6 @@ npm run dev                # http://localhost:3000
 
 1. Scaffold the Next.js app, database schema, and admin login
 2. Admin: create and manage builds and shifts
-3. Volunteer accounts, signups, waivers, confirmation emails, and group signups
+3. Volunteer accounts, signups, confirmation emails, and group signups
 4. Admin messaging (email, then SMS)
 5. Reminders, roster export, attendance, and reporting

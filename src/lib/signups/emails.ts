@@ -10,28 +10,28 @@ export async function sendSignupConfirmation({
   build,
   size,
   shifts,
-  waiverPath,
+  joinPath,
 }: {
   to: string;
   firstName: string;
   build: { name: string; address: string };
   size: number;
   shifts: { date: string; time: string }[];
-  waiverPath: string | null;
+  joinPath: string | null;
 }) {
   const dashboardUrl = absoluteUrl("/me");
-  const waiverUrl = waiverPath ? absoluteUrl(waiverPath) : null;
+  const joinUrl = joinPath ? absoluteUrl(joinPath) : null;
   const intro =
     size > 1
       ? `Thanks for bringing a group of ${size} to ${build.name}. Your group is signed up for:`
       : `Thanks for volunteering at ${build.name}. You're signed up for:`;
   const shiftLines = shifts.map((shift) => `${shift.date}, ${shift.time}`);
 
-  const groupText = waiverUrl
-    ? `\n\nEveryone else in your group needs to sign the waiver before the build. Send them this link:\n\n${waiverUrl}\n\nYou can see who has signed on your signups page.`
+  const groupText = joinUrl
+    ? `\n\nEveryone else in your group needs to join through this link before the build:\n\n${joinUrl}\n\nYou can see who has joined on your signups page.`
     : "";
-  const groupHtml = waiverUrl
-    ? `<p><strong>Everyone else in your group needs to sign the waiver before the build.</strong> Send them this link:</p><p><a href="${waiverUrl}">${waiverUrl}</a></p><p>You can see who has signed on your signups page.</p>`
+  const groupHtml = joinUrl
+    ? `<p><strong>Everyone else in your group needs to join through this link before the build:</strong></p><p><a href="${joinUrl}">${joinUrl}</a></p><p>You can see who has joined on your signups page.</p>`
     : "";
 
   await sendEmail({

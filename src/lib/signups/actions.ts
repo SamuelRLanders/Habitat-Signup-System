@@ -9,15 +9,13 @@ import { firstErrors, formValues } from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
 import {
   profileSchema,
-  required,
   saveProfile,
   type ProfileField,
 } from "@/lib/profile";
-import { clientIp, clientUserAgent } from "@/lib/request";
 import { formatDate, formatTimeRange } from "@/lib/time";
 import { MAX_GROUP_SIZE, oldEnoughForAll, TOO_YOUNG } from "@/lib/volunteers";
 import { sendSignupConfirmation } from "./emails";
-import { getActiveWaiver, getProfileDefaults, spotsTaken } from "./queries";
+import { getProfileDefaults, spotsTaken } from "./queries";
 
 // The signup form. Only signed-in volunteers can submit it, but anything
 // can be posted, so everything is checked here, including that the build is
@@ -31,11 +29,6 @@ const signupSchema = z.object({
     .max(100, "Keep this under 100 characters.")
     .optional()
     .transform((value) => value || null),
-  waiverId: z.string("Refresh the page and try again.").min(1),
-  signedName: required(
-    "Type your full legal name to agree to the waiver.",
-    200,
-  ),
 });
 
 const groupSizeSchema = z.coerce
@@ -64,8 +57,8 @@ export type SignupFormState = {
     email: string;
     groupSize: number;
     shifts: { id: string; date: string; time: string }[];
-    // The link group members use to sign their waivers. Groups only.
-    waiverPath: string | null;
+    // The link group members use to join the group. Groups only.
+    joinPath: string | null;
   };
 };
 
@@ -114,7 +107,7 @@ export async function submitSignup(
     return { errors };
   }
 
-  const { signupType, groupName, waiverId, signedName } = parsed.data;
+  const { signupType, groupName } = parsed.data;
   const profile = newProfile?.success ? newProfile.data : await savedProfile(user.id);
   if (!profile) {
     return {
@@ -126,7 +119,7 @@ export async function submitSignup(
   const size =
     signupType === "group" && groupSize?.success ? groupSize.data : 1;
 
-  // ── Check the build, the waiver, and the chosen shifts.
+  // ── Check the build and the chosen shifts.
   const build = await prisma.build.findUnique({
     where: { id: buildId },
     select: { status: true, timeZone: true, name: true, address: true },
@@ -134,21 +127,6 @@ export async function submitSignup(
   if (!build || build.status !== "PUBLISHED") {
     return {
       errors: { form: "This build isn't accepting signups right now." },
-    };
-  }
-
-  const waiver = await getActiveWaiver();
-  if (!waiver) {
-    return {
-      errors: { form: "Signups aren't open yet. Please check back soon." },
-    };
-  }
-  if (waiver.id !== waiverId) {
-    return {
-      errors: {
-        signedName:
-          "The waiver was updated while you were filling this in. Refresh the page to read the new version.",
-      },
     };
   }
 
@@ -174,9 +152,6 @@ export async function submitSignup(
     // Without the fields on screen, the message goes at the bottom instead.
     return { errors: editingProfile ? { dateOfBirth: TOO_YOUNG } : { form: TOO_YOUNG } };
   }
-
-  const ipAddress = await clientIp();
-  const userAgent = await clientUserAgent();
 
   // ── Save, making sure every shift still has room for the whole group.
   let result;
@@ -228,7 +203,7 @@ export async function submitSignup(
             leaderId: user.id,
             size,
             groupName: size > 1 ? groupName : null,
-            waiverToken: size > 1 ? randomBytes(18).toString("base64url") : null,
+            joinToken: size > 1 ? randomBytes(18).toString("base64url") : null,
           },
         });
 
@@ -251,18 +226,7 @@ export async function submitSignup(
           });
         }
 
-        await tx.waiverAcceptance.create({
-          data: {
-            signedName,
-            ipAddress,
-            userAgent,
-            waiverId: waiver.id,
-            registrationId: registration.id,
-            userId: user.id,
-          },
-        });
-
-        return { shiftErrors: null, waiverToken: registration.waiverToken };
+        return { shiftErrors: null, joinToken: registration.joinToken };
       },
       { timeout: 20_000 },
     );
@@ -290,7 +254,7 @@ export async function submitSignup(
     date: formatDate(shift.startsAt, build.timeZone),
     time: formatTimeRange(shift.startsAt, shift.endsAt, build.timeZone),
   }));
-  const waiverPath = result.waiverToken ? `/waiver/${result.waiverToken}` : null;
+  const joinPath = result.joinToken ? `/join/${result.joinToken}` : null;
 
   // The signup is saved, so a failed email doesn't undo it: the volunteer
   // still sees the confirmation, and their signups are on their page.
@@ -301,7 +265,7 @@ export async function submitSignup(
       build,
       size,
       shifts: shiftTimes,
-      waiverPath,
+      joinPath,
     });
   } catch (error) {
     console.error("Failed to send signup confirmation", error);
@@ -315,7 +279,7 @@ export async function submitSignup(
       email: user.email,
       groupSize: size,
       shifts: shiftTimes,
-      waiverPath,
+      joinPath,
     },
   };
 }

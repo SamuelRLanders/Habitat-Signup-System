@@ -11,7 +11,7 @@ import {
 } from "@/lib/me/actions";
 import { getMySignups, getOpenBuilds, hasProfile } from "@/lib/me/queries";
 import { formatDate, formatDateRange, formatTimeRange } from "@/lib/time";
-import { GroupSizeDialog, WaiverLinkDialog } from "./group-dialogs";
+import { GroupSizeDialog, JoinLinkDialog } from "./group-dialogs";
 
 export const metadata: Metadata = { title: "Your signups" };
 
@@ -117,7 +117,7 @@ export default async function MePage() {
 }
 
 function RegistrationCard({ registration }: { registration: Upcoming }) {
-  const { build, size, groupName, waiverToken, waiversSigned, active, buildCancelled } =
+  const { build, size, groupName, joinToken, joined, active, buildCancelled } =
     registration;
   const zone = build.timeZone;
   const isGroup = size > 1;
@@ -138,7 +138,7 @@ function RegistrationCard({ registration }: { registration: Upcoming }) {
           {isGroup && (
             <span className="text-sm">
               {groupName ? `${groupName} · ` : ""}Group of {size} ·{" "}
-              {waiversSigned} {waiversSigned === 1 ? "waiver" : "waivers"} signed
+              {joined} joined
             </span>
           )}
         </div>
@@ -154,16 +154,14 @@ function RegistrationCard({ registration }: { registration: Upcoming }) {
               href={`/me/groups/${registration.id}`}
               className={buttonVariants({ variant: "outline", size: "sm" })}
             >
-              View waivers
+              View group
             </Link>
-            {active && waiverToken && (
-              <WaiverLinkDialog path={`/waiver/${waiverToken}`} />
-            )}
+            {active && joinToken && <JoinLinkDialog path={`/join/${joinToken}`} />}
             {active && (
               <GroupSizeDialog
                 action={changeGroupSize.bind(null, registration.id)}
                 size={size}
-                signed={waiversSigned}
+                joined={joined}
               />
             )}
           </div>

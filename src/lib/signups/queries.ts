@@ -16,6 +16,10 @@ export const getSignupBuild = cache(async (buildId: string) => {
       description: true,
       timeZone: true,
       status: true,
+      sections: {
+        orderBy: { position: "asc" },
+        select: { id: true, title: true, body: true },
+      },
       shifts: {
         // Shifts volunteers can still sign up for.
         where: { cancelledAt: null, startsAt: { gt: new Date() } },
@@ -49,15 +53,6 @@ export const getSignupBuild = cache(async (buildId: string) => {
 export function spotsTaken(signups: { registration: { size: number } }[]) {
   return signups.reduce((sum, s) => sum + s.registration.size, 0);
 }
-
-// The waiver volunteers sign now, or null if an admin hasn't added one.
-export const getActiveWaiver = cache(() =>
-  prisma.waiver.findFirst({
-    where: { isActive: true },
-    orderBy: { version: "desc" },
-    select: { id: true, title: true, body: true },
-  }),
-);
 
 // The signed-in volunteer's saved details, formatted for the signup form's
 // fields, or null if they haven't signed up before.

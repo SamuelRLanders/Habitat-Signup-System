@@ -89,7 +89,7 @@ export type GroupSizeFormState = FormState<"groupSize">;
 
 // Changes how many spots a group takes on each of its upcoming shifts. It
 // has to fit on every one of them. It can drop below the number of people
-// who have signed the waiver, since someone may sign and then drop out.
+// who have joined, since someone may join and then drop out.
 export async function changeGroupSize(
   registrationId: string,
   _prev: GroupSizeFormState,

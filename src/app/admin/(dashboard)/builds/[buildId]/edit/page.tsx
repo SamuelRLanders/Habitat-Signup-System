@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/dal";
 import { updateBuild } from "@/lib/builds/actions";
 import { prisma } from "@/lib/prisma";
+import { formatDate } from "@/lib/time";
 import { BuildForm } from "../../build-form";
 import { BackLink } from "../../build-parts";
 
@@ -16,7 +17,10 @@ export default async function EditBuildPage({
 
   const build = await prisma.build.findUnique({
     where: { id: buildId },
-    include: { _count: { select: { shifts: true } } },
+    include: {
+      sections: { orderBy: { position: "asc" }, select: { title: true, body: true } },
+      _count: { select: { shifts: true } },
+    },
   });
   if (!build) notFound();
 
@@ -26,7 +30,13 @@ export default async function EditBuildPage({
     <div className="mx-auto flex max-w-xl flex-col gap-6">
       <div className="flex flex-col gap-3">
         <BackLink href={buildHref}>Back to build</BackLink>
-        <h1 className="text-2xl font-semibold">Edit build</h1>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-2xl font-semibold">Edit build</h1>
+          <p className="text-sm text-muted-foreground">
+            Created by {build.createdByName || "an admin"} on{" "}
+            {formatDate(build.createdAt, build.timeZone)}
+          </p>
+        </div>
       </div>
       <BuildForm
         action={updateBuild.bind(null, build.id)}
@@ -36,6 +46,7 @@ export default async function EditBuildPage({
           description: build.description ?? "",
           timeZone: build.timeZone,
         }}
+        sections={build.sections}
         submitLabel="Save changes"
         cancelHref={buildHref}
         hasShifts={build._count.shifts > 0}

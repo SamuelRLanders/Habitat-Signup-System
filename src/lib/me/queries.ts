@@ -14,7 +14,7 @@ export async function getMySignups(userId: string) {
       id: true,
       size: true,
       groupName: true,
-      waiverToken: true,
+      joinToken: true,
       dismissedAt: true,
       build: {
         select: { id: true, name: true, address: true, timeZone: true, status: true },
@@ -55,8 +55,8 @@ export async function getMySignups(userId: string) {
         buildCancelled,
         // Dismissing only hides the card while the build stays cancelled.
         hidden: buildCancelled && dismissedAt !== null,
-        // The leader signed when they signed up; members sign through the link.
-        waiversSigned: 1 + _count.groupMembers,
+        // The leader, plus members who joined through the link.
+        joined: 1 + _count.groupMembers,
         // Whether there's anything left to change or cancel.
         active: !buildCancelled && shifts.some(isOn),
       };

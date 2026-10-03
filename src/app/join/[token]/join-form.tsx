@@ -4,22 +4,19 @@ import { CheckCircle2Icon } from "lucide-react";
 import { useActionState, useEffect, useRef, useState } from "react";
 import { DatePicker } from "@/components/date-picker";
 import { Field, Section } from "@/components/form-fields";
-import { WaiverSignature } from "@/components/waiver-signature";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import type { MemberWaiverState } from "@/lib/waivers/actions";
+import type { JoinGroupState } from "@/lib/groups/actions";
 import { submitForm } from "@/lib/submit-form";
 
-type Action = (prev: MemberWaiverState, formData: FormData) => Promise<MemberWaiverState>;
+type Action = (prev: JoinGroupState, formData: FormData) => Promise<JoinGroupState>;
 
-export function MemberWaiverForm({
+export function JoinForm({
   action,
-  waiver,
   buildName,
 }: {
   action: Action;
-  waiver: { id: string; title: string; body: string };
   buildName: string;
 }) {
   const [state, formAction, pending] = useActionState(action, {});
@@ -40,8 +37,8 @@ export function MemberWaiverForm({
         <CheckCircle2Icon className="size-8 text-primary" aria-hidden="true" />
         <h2 className="text-2xl font-semibold">You&apos;re all set!</h2>
         <p className="text-muted-foreground">
-          Thanks, {state.signedName}. You&apos;ve signed the waiver for{" "}
-          {buildName}. See you at the build.
+          Thanks, {state.name}. You&apos;ve joined your group for {buildName}.
+          See you at the build.
         </p>
       </div>
     );
@@ -56,6 +53,18 @@ export function MemberWaiverForm({
     >
       <Section title="Your details">
         <div className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <Field label="Full name" htmlFor="legalName" error={errors.legalName}>
+              <Input
+                id="legalName"
+                name="legalName"
+                autoComplete="name"
+                required
+                aria-invalid={errors.legalName ? true : undefined}
+                aria-describedby={errors.legalName ? "legalName-error" : undefined}
+              />
+            </Field>
+          </div>
           <Field label="Birthday" htmlFor="dateOfBirth" error={errors.dateOfBirth}>
             <DatePicker
               id="dateOfBirth"
@@ -91,10 +100,6 @@ export function MemberWaiverForm({
         </div>
       </Section>
 
-      <Section title="Waiver" description="Please read the waiver, then type your full legal name to agree to it.">
-        <WaiverSignature waiver={waiver} field="legalName" error={errors.legalName} />
-      </Section>
-
       <div className="flex flex-col gap-3 border-t pt-6">
         {errors.form && (
           <p role="alert" className="text-sm text-destructive">
@@ -107,7 +112,7 @@ export function MemberWaiverForm({
           </p>
         )}
         <Button type="submit" size="lg" disabled={pending} className="w-full sm:w-fit">
-          {pending ? "Signing…" : "Sign waiver"}
+          {pending ? "Joining…" : "Join group"}
         </Button>
       </div>
     </form>

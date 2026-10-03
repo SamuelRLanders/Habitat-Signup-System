@@ -145,7 +145,7 @@ function SignupTable({
                   <TableRow className="hover:bg-transparent">
                     <TableCell colSpan={columns} className="bg-muted/30 py-2 pl-8 text-xs text-muted-foreground">
                       {members.length} group {members.length === 1 ? "member has" : "members have"}{" "}
-                      signed the waiver through the group link
+                      joined through the group link
                       {members.length > 0 && ":"}
                     </TableCell>
                   </TableRow>

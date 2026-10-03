@@ -43,8 +43,8 @@ async function clean() {
   });
   const userIds = users.map((u) => u.id);
   const buildIds = builds.map((b) => b.id);
-  // Registrations for test builds or by test users. Waiver records block
-  // deletes on purpose, so they go first.
+  // Registrations for test builds or by test users. Old built-in waiver
+  // records block deletes on purpose, so they go first.
   const registrations = {
     OR: [{ buildId: { in: buildIds } }, { leaderId: { in: userIds } }],
   };
@@ -95,16 +95,6 @@ async function makeUser(email: string, person: Person | null) {
 }
 
 async function seed() {
-  const waiver = await prisma.waiver.findFirst({
-    where: { isActive: true },
-    orderBy: { version: "desc" },
-  });
-  if (!waiver) {
-    console.error(
-      'No active waiver. Add one first: npm run waiver:seed -- scripts/sample-waiver.txt "Sample Volunteer Waiver (Not a Legal Document)"',
-    );
-    process.exit(1);
-  }
   const admin = await prisma.user.findFirst({
     where: { role: "ADMIN" },
     orderBy: { createdAt: "asc" },
@@ -127,6 +117,7 @@ async function seed() {
     description?: string;
     status: "DRAFT" | "PUBLISHED" | "CLOSED";
     shifts: ReturnType<typeof shift>[];
+    sections?: { title: string; body: string; position: number }[];
   }) =>
     prisma.build.create({
       data: {
@@ -134,7 +125,9 @@ async function seed() {
         address: data.address,
         description: data.description,
         status: data.status,
+        createdByName: admin.name,
         createdById: admin.id,
+        sections: { create: data.sections ?? [] },
         shifts: { create: data.shifts },
       },
       include: { shifts: { orderBy: { startsAt: "asc" } } },
@@ -145,6 +138,10 @@ async function seed() {
     address: "412 Maple St, Lafayette, IN 47904",
     description: "A three-bedroom home for the Rivera family. We're framing walls and raising the roof trusses this month.\n\nWear closed-toe shoes. Lunch is provided on Saturdays.",
     status: "PUBLISHED",
+    sections: [
+      { position: 0, title: "Purdue waiver", body: "Sign the Purdue volunteer waiver before your first shift: https://example.org/purdue-waiver\n\nUnder “Organization”, choose Habitat for Humanity." },
+      { position: 1, title: "Chapter waiver", body: "Also sign the chapter's waiver at https://example.org/chapter-waiver. Use your full legal name." },
+    ],
     shifts: [
       shift("2026-10-10", 8, 12, 12, "Framing. No experience needed."),
       shift("2026-10-10", 13, 17, 12),
@@ -197,14 +194,12 @@ async function seed() {
   // ── Signups
   const register = async ({
     user,
-    signedName,
     build,
     shifts,
     size = 1,
     groupName,
   }: {
     user: { id: string };
-    signedName: string;
     build: { id: string };
     shifts: { id: string }[];
     size?: number;
@@ -216,17 +211,14 @@ async function seed() {
         leaderId: user.id,
         size,
         groupName: size > 1 ? groupName : null,
-        waiverToken: size > 1 ? randomBytes(18).toString("base64url") : null,
+        joinToken: size > 1 ? randomBytes(18).toString("base64url") : null,
         signups: { create: shifts.map((s) => ({ shiftId: s.id, userId: user.id })) },
       },
     });
-    await prisma.waiverAcceptance.create({
-      data: { signedName, waiverId: waiver.id, registrationId: registration.id, userId: user.id },
-    });
     return registration;
   };
-  const memberSigns = async (registrationId: string, legalName: string, birthday: string, sms: boolean) => {
-    const member = await prisma.groupMember.create({
+  const memberJoins = async (registrationId: string, legalName: string, birthday: string, sms: boolean) => {
+    await prisma.groupMember.create({
       data: {
         registrationId,
         legalName,
@@ -236,30 +228,25 @@ async function seed() {
         smsOptInAt: sms ? new Date() : null,
       },
     });
-    await prisma.waiverAcceptance.create({
-      data: { signedName: legalName, waiverId: waiver.id, registrationId, groupMemberId: member.id },
-    });
   };
 
   // Alice: on her own, two Maple shifts, and a past one.
-  await register({ user: alice, signedName: "Alice M. Nguyen", build: maple, shifts: [maple.shifts[0], maple.shifts[2]] });
-  await register({ user: alice, signedName: "Alice M. Nguyen", build: summer, shifts: [summer.shifts[0]] });
+  await register({ user: alice, build: maple, shifts: [maple.shifts[0], maple.shifts[2]] });
+  await register({ user: alice, build: summer, shifts: [summer.shifts[0]] });
 
-  // Ben: leads a youth group of 6 at Maple and Riverside. Three have signed.
+  // Ben: leads a youth group of 6 at Maple and Riverside. Three have joined.
   const youth = await register({
     user: ben,
-    signedName: "Benjamin Okafor",
     build: maple,
     shifts: [maple.shifts[0], maple.shifts[4]],
     size: 6,
     groupName: "Lafayette Youth Group",
   });
-  await memberSigns(youth.id, "Grace Kim", "1999-02-14", true);
-  await memberSigns(youth.id, "Marcus Hall", "2001-11-03", false);
-  await memberSigns(youth.id, "Priya Shah", "1998-07-19", true);
+  await memberJoins(youth.id, "Grace Kim", "1999-02-14", true);
+  await memberJoins(youth.id, "Marcus Hall", "2001-11-03", false);
+  await memberJoins(youth.id, "Priya Shah", "1998-07-19", true);
   await register({
     user: ben,
-    signedName: "Benjamin Okafor",
     build: riverside,
     shifts: [riverside.shifts[2]],
     size: 4,
@@ -267,13 +254,12 @@ async function seed() {
   });
 
   // Carmen: one Riverside shift, which nearly fills it, and a past shift.
-  await register({ user: carmen, signedName: "Carmen R. Diaz", build: riverside, shifts: [riverside.shifts[3]] });
-  await register({ user: carmen, signedName: "Carmen R. Diaz", build: summer, shifts: [summer.shifts[1]] });
+  await register({ user: carmen, build: riverside, shifts: [riverside.shifts[3]] });
+  await register({ user: carmen, build: summer, shifts: [summer.shifts[1]] });
 
-  // Eli: leads a group of 3 nobody else has signed for yet.
+  // Eli: leads a group of 3 nobody else has joined yet.
   const eliGroup = await register({
     user: eli,
-    signedName: "Elijah Brooks",
     build: riverside,
     shifts: [riverside.shifts[0], riverside.shifts[1]],
     size: 3,
@@ -281,23 +267,23 @@ async function seed() {
   });
 
   // Fill up the closed build.
-  await register({ user: carmen, signedName: "Carmen R. Diaz", build: elm, shifts: [elm.shifts[0]], size: 8, groupName: "Diaz Landscaping Crew" });
+  await register({ user: carmen, build: elm, shifts: [elm.shifts[0]], size: 8, groupName: "Diaz Landscaping Crew" });
 
-  const youthLink = `${SITE}/waiver/${youth.waiverToken}`;
-  const eliLink = `${SITE}/waiver/${eliGroup.waiverToken}`;
+  const youthLink = `${SITE}/join/${youth.joinToken}`;
+  const eliLink = `${SITE}/join/${eliGroup.joinToken}`;
   console.log(`
 Test data created. Sign in at ${SITE}/login with any of these emails;
 the 6-digit code prints in the dev server's terminal.
 
   alice@example.org   Individual: 2 upcoming Maple shifts, 1 past shift
-  ben@example.org     Group leader: youth group of 6 (3 members signed) at
+  ben@example.org     Group leader: youth group of 6 (3 members joined) at
                       Maple, and a group of 4 at Riverside
   carmen@example.org  Individual at Riverside, a past shift, and a full
                       8-person crew on the closed Elm Court build
   dana@example.org    New account with no saved details, no signups
-  eli@example.org     Group leader: group of 3 at Riverside, nobody signed yet
+  eli@example.org     Group leader: group of 3 at Riverside, nobody joined yet
 
-Group waiver links (open signed out, or in a private window):
+Group join links (open signed out, or in a private window):
   Ben's youth group:  ${youthLink}
   Eli's family:       ${eliLink}
 

@@ -1,58 +1,53 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getActiveWaiver } from "@/lib/signups/queries";
-import { signGroupWaiver } from "@/lib/waivers/actions";
-import { getGroupWaiver } from "@/lib/waivers/queries";
+import { BuildSections } from "@/components/build-sections";
+import { joinGroup } from "@/lib/groups/actions";
+import { getGroupInvite } from "@/lib/groups/queries";
 import { formatDate, formatTimeRange } from "@/lib/time";
-import { MemberWaiverForm } from "./member-waiver-form";
+import { JoinForm } from "./join-form";
 
-// The link a group leader sends their group. Each member opens it and signs
-// the waiver; they don't need an account.
+// The link a group leader sends their group. Each member opens it and adds
+// their details; they don't need an account.
 
 export async function generateMetadata({
   params,
-}: PageProps<"/waiver/[token]">): Promise<Metadata> {
+}: PageProps<"/join/[token]">): Promise<Metadata> {
   const { token } = await params;
-  const group = await getGroupWaiver(token);
+  const group = await getGroupInvite(token);
   return {
-    title: group ? `Waiver for ${group.build.name}` : "Waiver link not found",
+    title: group ? `Join your group at ${group.build.name}` : "Join link not found",
     // The link is private to the group.
     robots: { index: false, follow: false },
   };
 }
 
-export default async function GroupWaiverPage({
+export default async function JoinGroupPage({
   params,
-}: PageProps<"/waiver/[token]">) {
+}: PageProps<"/join/[token]">) {
   const { token } = await params;
-  const [group, waiver] = await Promise.all([
-    getGroupWaiver(token),
-    getActiveWaiver(),
-  ]);
+  const group = await getGroupInvite(token);
   if (!group) notFound();
 
   const { build, leaderName } = group;
   const zone = build.timeZone;
 
-  const closedMessage = !group.open
-    ? build.status === "CANCELLED"
-      ? "This waiver link has closed because Habitat cancelled this build."
-      : "This waiver link has closed because the group has no upcoming shifts."
-    : !waiver
-      ? "The waiver isn't available right now. Please try again later."
-      : null;
+  const closedMessage = group.open
+    ? null
+    : build.status === "CANCELLED"
+      ? "This join link has closed because Habitat cancelled this build."
+      : "This join link has closed because the group has no upcoming shifts.";
 
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-10 px-4 py-12 sm:py-16">
       <header className="flex flex-col gap-2">
         <p className="text-sm font-medium text-muted-foreground">
-          Habitat for Humanity volunteer waiver
+          Habitat for Humanity volunteer group
         </p>
         <h1 className="text-3xl font-semibold">{build.name}</h1>
         <p className="text-muted-foreground">{build.address}</p>
       </header>
 
-      {closedMessage || !waiver ? (
+      {closedMessage ? (
         <p className="rounded-xl bg-muted p-4 text-sm">{closedMessage}</p>
       ) : (
         <>
@@ -60,7 +55,7 @@ export default async function GroupWaiverPage({
             <p>
               <strong>{leaderName}</strong> reserved a spot for you
               {group.groupName ? ` with ${group.groupName}` : ""}. Before you
-              come, please fill in your details and sign the waiver below.
+              come, please fill in your details below.
             </p>
             <ul className="flex flex-col gap-2">
               {group.shifts.map((shift) => (
@@ -76,11 +71,9 @@ export default async function GroupWaiverPage({
               ))}
             </ul>
           </section>
-          <MemberWaiverForm
-            action={signGroupWaiver.bind(null, token)}
-            waiver={waiver}
-            buildName={build.name}
-          />
+          {/* The build's own instructions, such as which waivers to sign. */}
+          <BuildSections sections={build.sections} />
+          <JoinForm action={joinGroup.bind(null, token)} buildName={build.name} />
         </>
       )}
     </main>

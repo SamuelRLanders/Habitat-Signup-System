@@ -16,10 +16,12 @@ import { Textarea } from "@/components/ui/textarea";
 import type { BuildField, BuildFormState } from "@/lib/builds/actions";
 import { submitForm } from "@/lib/submit-form";
 import { DEFAULT_TIME_ZONE, TIME_ZONES } from "@/lib/time";
+import { SectionFields, type SectionDefaults } from "./section-fields";
 
 type BuildFormProps = {
   action: (prev: BuildFormState, formData: FormData) => Promise<BuildFormState>;
   defaults?: Record<BuildField, string>;
+  sections?: SectionDefaults[];
   submitLabel: string;
   cancelHref: string;
   // Shown under the time zone field when editing a build that has shifts.
@@ -29,12 +31,13 @@ type BuildFormProps = {
 export function BuildForm({
   action,
   defaults,
+  sections = [],
   submitLabel,
   cancelHref,
   hasShifts,
 }: BuildFormProps) {
   const [state, formAction, pending] = useActionState(action, {});
-  const { errors = {} } = state;
+  const { errors = {}, sectionErrors = {} } = state;
 
   const value = (field: BuildField) => defaults?.[field] ?? "";
 
@@ -113,6 +116,14 @@ export function BuildForm({
         </p>
         <FieldError field="timeZone" error={errors.timeZone} />
       </div>
+
+      <SectionFields defaults={sections} errors={sectionErrors} />
+
+      {state.sectionErrors && !errors.form && (
+        <p role="alert" className="text-sm text-destructive">
+          Some sections need another look. They&apos;re marked in red above.
+        </p>
+      )}
 
       {errors.form && (
         <p role="alert" className="text-sm text-destructive">

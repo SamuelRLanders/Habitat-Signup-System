@@ -6,11 +6,11 @@ import { buttonVariants } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/dal";
 import { absoluteUrl } from "@/lib/request";
 import { formatDate, formatDateTime, formatTimeRange } from "@/lib/time";
-import { getGroupDetail } from "@/lib/waivers/queries";
+import { getGroupDetail } from "@/lib/groups/queries";
 
 export const metadata: Metadata = { title: "Your group" };
 
-// A group leader's view of who in their group has signed the waiver.
+// A group leader's view of who has joined their group.
 export default async function GroupPage({
   params,
 }: PageProps<"/me/groups/[registrationId]">) {
@@ -19,9 +19,9 @@ export default async function GroupPage({
   const group = await getGroupDetail(user.id, registrationId);
   if (!group) notFound();
 
-  const { build, size, groupMembers, leaderSignature } = group;
+  const { build, size, groupMembers } = group;
   const zone = build.timeZone;
-  const signed = 1 + groupMembers.length;
+  const joined = 1 + groupMembers.length;
 
   return (
     <>
@@ -41,26 +41,21 @@ export default async function GroupPage({
 
       <section className="flex flex-col gap-3">
         <div className="flex flex-col gap-1">
-          <h2 className="text-lg font-semibold">Waivers</h2>
+          <h2 className="text-lg font-semibold">Who&apos;s joined</h2>
           <p className="text-sm text-muted-foreground">
-            {signed} {signed === 1 ? "waiver has" : "waivers have"} been signed
-            for this group. Check the names against who&apos;s coming, since
-            people may have joined or dropped out since signing.
+            {joined} {joined === 1 ? "person has" : "people have"} joined this
+            group. Check the names against who&apos;s coming, since people may
+            have dropped out since joining.
           </p>
         </div>
 
         <ul className="flex flex-col divide-y rounded-xl ring-1 ring-foreground/10">
-          <SignerRow
-            name={leaderSignature?.signedName ?? user.name}
-            signedAt={leaderSignature?.signedAt ?? null}
-            zone={zone}
-            you
-          />
+          <MemberRow name={group.leaderName} joinedAt={group.createdAt} zone={zone} you />
           {groupMembers.map((member) => (
-            <SignerRow
+            <MemberRow
               key={member.id}
               name={member.legalName}
-              signedAt={member.createdAt}
+              joinedAt={member.createdAt}
               zone={zone}
             />
           ))}
@@ -68,21 +63,21 @@ export default async function GroupPage({
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">Waiver link</h2>
-        {group.open && group.waiverToken ? (
+        <h2 className="text-lg font-semibold">Join link</h2>
+        {group.open && group.joinToken ? (
           <>
             <p className="text-sm text-muted-foreground">
               Send this link to everyone in your group. Each person opens it and
-              signs with their full legal name. It works until your group&apos;s
-              last shift starts.
+              adds their name, birthday, and phone number. It works until your
+              group&apos;s last shift starts.
             </p>
-            <CopyLink url={absoluteUrl(`/waiver/${group.waiverToken}`)} label="Group waiver link" />
+            <CopyLink url={absoluteUrl(`/join/${group.joinToken}`)} label="Group join link" />
           </>
         ) : (
           <p className="rounded-xl bg-muted p-4 text-sm">
             {build.status === "CANCELLED"
-              ? "The waiver link has closed because Habitat cancelled this build."
-              : "The waiver link has closed because your group has no upcoming shifts."}
+              ? "The join link has closed because Habitat cancelled this build."
+              : "The join link has closed because your group has no upcoming shifts."}
           </p>
         )}
       </section>
@@ -109,14 +104,14 @@ export default async function GroupPage({
   );
 }
 
-function SignerRow({
+function MemberRow({
   name,
-  signedAt,
+  joinedAt,
   zone,
   you,
 }: {
   name: string;
-  signedAt: Date | null;
+  joinedAt: Date;
   zone: string;
   you?: boolean;
 }) {
@@ -126,11 +121,9 @@ function SignerRow({
         {name}
         {you && <span className="font-normal text-muted-foreground"> (you)</span>}
       </span>
-      {signedAt && (
-        <span className="text-sm text-muted-foreground">
-          Signed {formatDateTime(signedAt, zone)}
-        </span>
-      )}
+      <span className="text-sm text-muted-foreground">
+        Joined {formatDateTime(joinedAt, zone)}
+      </span>
     </li>
   );
 }
