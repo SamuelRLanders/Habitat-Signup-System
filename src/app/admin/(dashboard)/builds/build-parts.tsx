@@ -16,16 +16,10 @@ export function BackLink({ href, children }: { href: string; children: React.Rea
   );
 }
 
-const statusBadges = {
-  DRAFT: { label: "Draft", variant: "secondary" },
-  PUBLISHED: { label: "Published", variant: "default" },
-  CLOSED: { label: "Signups closed", variant: "outline" },
-  CANCELLED: { label: "Cancelled", variant: "destructive" },
-} as const;
-
+// Only cancelled builds get a badge; active is the usual case.
 export function StatusBadge({ status }: { status: BuildStatus }) {
-  const { label, variant } = statusBadges[status];
-  return <Badge variant={variant}>{label}</Badge>;
+  if (status !== "CANCELLED") return null;
+  return <Badge variant="destructive">Cancelled</Badge>;
 }
 
 // "6 / 10 spots filled" with a bar underneath.

@@ -12,8 +12,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-// The "Share" pill on a published build. Shows the public signup link with a
-// button to copy it.
+// A "Share" pill that shows a public signup link with a button to copy it.
+// Unused until signup forms are added; it will move to their pages then.
 export function ShareDialog({ path }: { path: string }) {
   return (
     <Dialog>

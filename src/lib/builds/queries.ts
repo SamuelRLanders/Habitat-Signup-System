@@ -6,7 +6,7 @@ import { spotsTaken } from "@/lib/signups/queries";
 // Read queries for the admin build pages. Callers must run requireAdmin()
 // first; these functions don't check who is asking.
 
-export const BUILD_LIST_TABS = ["upcoming", "drafts", "past"] as const;
+export const BUILD_LIST_TABS = ["upcoming", "past"] as const;
 export type BuildListTab = (typeof BUILD_LIST_TABS)[number];
 
 // Only confirmed signups take up spots. Each takes its registration's size.
@@ -17,21 +17,18 @@ const confirmedSpots = {
 
 export async function listBuilds(tab: BuildListTab) {
   const now = new Date();
-  const hasUpcomingShift: Prisma.BuildWhereInput = {
-    shifts: { some: { cancelledAt: null, endsAt: { gte: now } } },
-  };
 
-  // The tabs split builds with no overlap: drafts; live builds with a shift
-  // still to come; everything else (finished or cancelled).
-  const where: Prisma.BuildWhereInput =
-    tab === "drafts"
-      ? { status: "DRAFT" }
-      : tab === "upcoming"
-        ? { status: { in: ["PUBLISHED", "CLOSED"] }, ...hasUpcomingShift }
-        : {
-            status: { not: "DRAFT" },
-            OR: [{ status: "CANCELLED" }, { NOT: hasUpcomingShift }],
-          };
+  // The tabs split builds with no overlap. Upcoming: active builds with a
+  // shift still to come, or no shifts yet. Past: everything else (finished
+  // or cancelled).
+  const upcoming: Prisma.BuildWhereInput = {
+    status: "ACTIVE",
+    OR: [
+      { shifts: { some: { cancelledAt: null, endsAt: { gte: now } } } },
+      { shifts: { none: { cancelledAt: null } } },
+    ],
+  };
+  const where = tab === "upcoming" ? upcoming : { NOT: upcoming };
 
   const builds = await prisma.build.findMany({
     where,
@@ -59,11 +56,11 @@ export async function listBuilds(tab: BuildListTab) {
     filled: shifts.reduce((total, s) => total + spotsTaken(s.signups), 0),
   }));
 
-  // Soonest first for upcoming builds, most recent first for past ones.
-  // Drafts keep the newest-created-first order.
+  // Soonest first for upcoming builds, with new builds that have no shifts
+  // yet at the top. Most recent first for past ones.
   if (tab === "upcoming") {
     summaries.sort((a, b) => time(a.firstShiftAt) - time(b.firstShiftAt));
-  } else if (tab === "past") {
+  } else {
     summaries.sort((a, b) => time(b.lastShiftAt) - time(a.lastShiftAt));
   }
   return summaries;

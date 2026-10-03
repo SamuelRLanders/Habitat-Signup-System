@@ -8,8 +8,9 @@
 //                                           for trying the People search)
 //        npm run seed:test -- --clean      (only remove it)
 //
-// Until RESEND_API_KEY is set, sign-in codes print in the dev server's
-// terminal, so you can sign in as any of these test users.
+// Only admins sign in now. The test volunteers and their signups are made
+// the old way (accounts and registrations) so the admin rosters and People
+// page have something to show until signup forms replace them.
 import "dotenv/config";
 import { randomBytes, randomUUID } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -115,7 +116,6 @@ async function seed() {
     name: string;
     address: string;
     description?: string;
-    status: "DRAFT" | "PUBLISHED" | "CLOSED";
     shifts: ReturnType<typeof shift>[];
     sections?: { title: string; body: string; position: number }[];
   }) =>
@@ -124,7 +124,6 @@ async function seed() {
         name: TEST_PREFIX + data.name,
         address: data.address,
         description: data.description,
-        status: data.status,
         createdByName: admin.name,
         createdById: admin.id,
         sections: { create: data.sections ?? [] },
@@ -137,7 +136,6 @@ async function seed() {
     name: "Maple Street Home",
     address: "412 Maple St, Lafayette, IN 47904",
     description: "A three-bedroom home for the Rivera family. We're framing walls and raising the roof trusses this month.\n\nWear closed-toe shoes. Lunch is provided on Saturdays.",
-    status: "PUBLISHED",
     sections: [
       { position: 0, title: "Purdue waiver", body: "Sign the Purdue volunteer waiver before your first shift: https://example.org/purdue-waiver\n\nUnder “Organization”, choose Habitat for Humanity." },
       { position: 1, title: "Chapter waiver", body: "Also sign the chapter's waiver at https://example.org/chapter-waiver. Use your full legal name." },
@@ -154,7 +152,6 @@ async function seed() {
     name: "Riverside Duplex",
     address: "88 Riverside Dr, West Lafayette, IN 47906",
     description: "Interior finishing on a duplex: drywall, painting, and trim.",
-    status: "PUBLISHED",
     shifts: [
       shift("2026-11-07", 9, 13, 6),
       shift("2026-11-07", 13, 17, 6),
@@ -166,21 +163,18 @@ async function seed() {
     name: "Oak Avenue Repair",
     address: "1520 Oak Ave, Lafayette, IN 47905",
     description: "Porch and ramp repair for a veteran's home. Still being planned.",
-    status: "DRAFT",
     shifts: [shift("2026-12-05", 9, 13, 5), shift("2026-12-12", 9, 13, 5)],
   });
   const elm = await createBuild({
     name: "Elm Court Landscaping",
     address: "7 Elm Ct, Lafayette, IN 47909",
     description: "Final landscaping before the family moves in. Signups are full.",
-    status: "CLOSED",
     shifts: [shift("2026-10-31", 9, 12, 8)],
   });
   // Already happened, so it shows under past shifts.
   const summer = await createBuild({
     name: "Summer Blitz Build",
     address: "300 Harrison St, Lafayette, IN 47901",
-    status: "PUBLISHED",
     shifts: [shift("2026-08-15", 8, 12, 20), shift("2026-08-22", 8, 12, 20)],
   });
 
@@ -258,7 +252,7 @@ async function seed() {
   await register({ user: carmen, build: summer, shifts: [summer.shifts[1]] });
 
   // Eli: leads a group of 3 nobody else has joined yet.
-  const eliGroup = await register({
+  await register({
     user: eli,
     build: riverside,
     shifts: [riverside.shifts[0], riverside.shifts[1]],
@@ -266,33 +260,21 @@ async function seed() {
     groupName: "Brooks Family",
   });
 
-  // Fill up the closed build.
+  // Fill up Elm Court.
   await register({ user: carmen, build: elm, shifts: [elm.shifts[0]], size: 8, groupName: "Diaz Landscaping Crew" });
 
-  const youthLink = `${SITE}/join/${youth.joinToken}`;
-  const eliLink = `${SITE}/join/${eliGroup.joinToken}`;
   console.log(`
-Test data created. Sign in at ${SITE}/login with any of these emails;
-the 6-digit code prints in the dev server's terminal.
+Test data created. See it at ${SITE}/admin/builds and ${SITE}/admin/people.
 
-  alice@example.org   Individual: 2 upcoming Maple shifts, 1 past shift
-  ben@example.org     Group leader: youth group of 6 (3 members joined) at
-                      Maple, and a group of 4 at Riverside
-  carmen@example.org  Individual at Riverside, a past shift, and a full
-                      8-person crew on the closed Elm Court build
-  dana@example.org    New account with no saved details, no signups
-  eli@example.org     Group leader: group of 3 at Riverside, nobody joined yet
-
-Group join links (open signed out, or in a private window):
-  Ben's youth group:  ${youthLink}
-  Eli's family:       ${eliLink}
-
-Builds (admin: ${SITE}/admin/builds):
-  Maple Street Home      ${SITE}/builds/${maple.id}
-  Riverside Duplex       ${SITE}/builds/${riverside.id}
-  Oak Avenue Repair      draft, admins only
-  Elm Court Landscaping  closed to signups
+Builds:
+  Maple Street Home      signups on several shifts, two signup form sections
+  Riverside Duplex       signups, including groups
+  Oak Avenue Repair      no signups
+  Elm Court Landscaping  one full shift
   Summer Blitz Build     past shifts only
+
+Volunteers (records only; volunteers can't sign in):
+  alice, ben, carmen, dana and eli @example.org
 
 Remove it all with: npm run seed:test -- --clean`);
 }

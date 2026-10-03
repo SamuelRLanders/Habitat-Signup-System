@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { parsePeopleSearch } from "@/lib/admin/people-search";
 import { exportPeople } from "@/lib/admin/queries";
-import { getUser } from "@/lib/auth/dal";
+import { getAdmin } from "@/lib/auth/dal";
 import { toCsv } from "@/lib/csv";
 import { DEFAULT_TIME_ZONE, toDateInput } from "@/lib/time";
 
@@ -35,9 +35,9 @@ const HEADER = [
 export async function GET(request: NextRequest) {
   // Answer with a status rather than requireAdmin()'s redirect, since this
   // is a file download, not a page.
-  const user = await getUser();
-  if (!user) return new Response("Sign in to download this file.", { status: 401 });
-  if (user.role !== "ADMIN") return new Response("Admins only.", { status: 403 });
+  if (!(await getAdmin())) {
+    return new Response("Sign in as an admin to download this file.", { status: 401 });
+  }
 
   const people = await exportPeople(parsePeopleSearch(request.nextUrl.searchParams));
   const rows = people.map(({ profile, ...user }) => [

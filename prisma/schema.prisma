@@ -13,14 +13,14 @@ datasource db {
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 enum Role {
-  VOLUNTEER
-  ADMIN // can also use the admin dashboard
+  VOLUNTEER // no longer used: only admins sign in
+  ADMIN
 }
 
+// Builds are only ever seen by admins. Volunteers see shifts through each
+// date's signup form, which leaves out a cancelled build's shifts.
 enum BuildStatus {
-  DRAFT // visible to admins only
-  PUBLISHED // open for signups
-  CLOSED // visible, but no longer accepting signups
+  ACTIVE
   CANCELLED
 }
 
@@ -59,10 +59,10 @@ enum DeliveryStatus {
 
 // ─── Users ───────────────────────────────────────────────────────────────────
 
-// Everyone who signs in with an emailed code: volunteers and admins. Better
-// Auth uses this as its "user" model, so name, emailVerified and image are
-// fields it requires. Signing in creates a VOLUNTEER; the ADMIN role is only
-// ever set by the admin:add script, never from a form.
+// Everyone who signs in with an emailed code. Only admins can sign in, and
+// they're added by the admin:add script, never from a form. VOLUNTEER users
+// are left from when volunteers signed in too. Better Auth uses this as its
+// "user" model, so name, emailVerified and image are fields it requires.
 model User {
   id            String   @id @default(cuid())
   email         String   @unique
@@ -179,7 +179,7 @@ model LoginCodeRequest {
 
 // ─── Builds & shifts ─────────────────────────────────────────────────────────
 
-// A home Habitat is building. Volunteers sign up for its shifts.
+// A home Habitat is building, and the shifts volunteers can work there.
 model Build {
   id          String      @id @default(cuid())
   name        String
@@ -187,7 +187,7 @@ model Build {
   description String?     @db.Text
   // IANA time zone the build's shift times are entered and shown in.
   timeZone    String      @default("America/Indiana/Indianapolis")
-  status      BuildStatus @default(DRAFT)
+  status      BuildStatus @default(ACTIVE)
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 

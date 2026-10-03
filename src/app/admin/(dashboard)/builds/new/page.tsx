@@ -15,8 +15,7 @@ export default async function NewBuildPage() {
         <BackLink href="/admin/builds">Back to builds</BackLink>
         <h1 className="text-2xl font-semibold">New build</h1>
         <p className="text-muted-foreground">
-          New builds start as drafts that only admins can see. You&apos;ll add
-          shifts next, then publish the build to open signups.
+          Only admins see builds. You&apos;ll add shifts next.
         </p>
       </div>
       <BuildForm action={createBuild} submitLabel="Create build" cancelHref="/admin/builds" />

@@ -181,8 +181,8 @@ function moveToZone(date: Date, from: string, to: string) {
 
 const statusSchema = z.enum(BuildStatus);
 
-// Publishing needs a shift to sign up for, and a build volunteers have
-// signed up for can't be hidden again as a draft.
+// Cancels or restores a build. A cancelled build's shifts aren't offered to
+// volunteers; its signups are kept on record.
 export async function setBuildStatus(
   buildId: string,
   status: BuildStatus,
@@ -192,40 +192,12 @@ export async function setBuildStatus(
   const next = statusSchema.safeParse(status);
   if (!next.success) return { error: "Unknown status." };
 
-  const build = await prisma.build.findUnique({
-    where: { id: buildId },
-    include: {
-      shifts: {
-        where: { cancelledAt: null },
-        select: {
-          endsAt: true,
-          _count: { select: { signups: { where: { status: "CONFIRMED" } } } },
-        },
-      },
-    },
-  });
-  if (!build) return { error: "This build no longer exists." };
-
-  if (next.data === "PUBLISHED") {
-    const now = new Date();
-    if (!build.shifts.some((shift) => shift.endsAt >= now)) {
-      return { error: "Add at least one upcoming shift before publishing." };
-    }
-  }
-  if (next.data === "DRAFT") {
-    const hasSignups = build.shifts.some((shift) => shift._count.signups > 0);
-    if (hasSignups) {
-      return {
-        error:
-          "Volunteers have already signed up, so this build can't go back to a draft. Close signups instead.",
-      };
-    }
-  }
-
-  await prisma.build.update({
+  const { count } = await prisma.build.updateMany({
     where: { id: buildId },
     data: { status: next.data },
   });
+  if (count === 0) return { error: "This build no longer exists." };
+
   revalidateAdmin();
   return {};
 }

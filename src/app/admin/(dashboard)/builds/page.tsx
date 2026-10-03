@@ -15,11 +15,7 @@ import { SpotsMeter, StatusBadge } from "./build-parts";
 export const metadata: Metadata = { title: "Builds" };
 
 const tabs: Record<BuildListTab, { label: string; empty: string }> = {
-  upcoming: {
-    label: "Upcoming",
-    empty: "No published builds have upcoming shifts.",
-  },
-  drafts: { label: "Drafts", empty: "No drafts." },
+  upcoming: { label: "Upcoming", empty: "No builds have upcoming shifts." },
   past: { label: "Past", empty: "No past or cancelled builds." },
 };
 
@@ -68,7 +64,7 @@ export default async function BuildsPage({
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-8 text-center text-muted-foreground">
             <p>{tabs[tab].empty}</p>
-            {tab !== "past" && (
+            {tab === "upcoming" && (
               <Link href="/admin/builds/new" className={buttonVariants({ variant: "outline" })}>
                 Create a build
               </Link>

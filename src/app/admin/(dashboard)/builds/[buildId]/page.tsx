@@ -25,7 +25,6 @@ import {
 } from "@/lib/time";
 import { ActionButton } from "@/components/action-button";
 import { BackLink, SpotsMeter, StatusBadge } from "../build-parts";
-import { ShareDialog } from "./share-dialog";
 import { ShiftDialog } from "./shift-dialog";
 
 export async function generateMetadata({
@@ -38,13 +37,6 @@ export async function generateMetadata({
   });
   return { title: build?.name ?? "Build" };
 }
-
-const statusNotes: Record<BuildStatus, string> = {
-  DRAFT: "Only admins can see this build. Publish it to open signups.",
-  PUBLISHED: "Volunteers can see this build and sign up for its shifts.",
-  CLOSED: "Volunteers can see this build but can't sign up.",
-  CANCELLED: "This build was cancelled. Volunteers can't sign up.",
-};
 
 export default async function BuildPage({
   params,
@@ -59,6 +51,7 @@ export default async function BuildPage({
   const zone = build.timeZone;
   const zoneLabel = timeZoneLabel(zone);
   const cancelled = build.status === "CANCELLED";
+  const hasSignups = build.shifts.some((shift) => shift.signupCount > 0);
 
   // Group shifts under a heading for each day.
   const days = Map.groupBy(build.shifts, (shift) =>
@@ -87,20 +80,26 @@ export default async function BuildPage({
           </div>
 
           <div className="flex flex-wrap items-start gap-2">
-            {build.status === "PUBLISHED" && (
-              <ShareDialog path={`/builds/${build.id}`} />
-            )}
             <Link
               href={`/admin/builds/${build.id}/edit`}
               className={buttonVariants({ variant: "outline", size: "sm" })}
             >
               Edit details
             </Link>
-            <StatusActions buildId={build.id} status={build.status} />
+            <StatusActions
+              buildId={build.id}
+              status={build.status}
+              hasSignups={hasSignups}
+            />
           </div>
         </div>
 
-        <p className="text-sm text-muted-foreground">{statusNotes[build.status]}</p>
+        {cancelled && (
+          <p className="text-sm text-muted-foreground">
+            This build was cancelled. Its shifts aren&apos;t offered to
+            volunteers.
+          </p>
+        )}
 
         {build.description && (
           <p className="whitespace-pre-line">{build.description}</p>
@@ -221,59 +220,49 @@ export default async function BuildPage({
   );
 }
 
-function StatusActions({ buildId, status }: { buildId: string; status: BuildStatus }) {
+// Builds nobody has signed up for can be deleted. Others are cancelled,
+// which keeps the record of who signed up.
+function StatusActions({
+  buildId,
+  status,
+  hasSignups,
+}: {
+  buildId: string;
+  status: BuildStatus;
+  hasSignups: boolean;
+}) {
   const setStatus = (next: BuildStatus) => setBuildStatus.bind(null, buildId, next);
-  const cancelBuild = (
-    <ActionButton
-      action={setStatus("CANCELLED")}
-      label="Cancel build"
-      variant="destructive"
-      confirm={{
-        title: "Cancel this build?",
-        description:
-          "Volunteers won't be able to sign up. Existing signups are kept on record, but volunteers aren't notified automatically yet.",
-        confirmLabel: "Cancel build",
-      }}
-    />
-  );
 
-  switch (status) {
-    case "DRAFT":
-      return (
-        <>
-          <ActionButton
-            action={deleteBuild.bind(null, buildId)}
-            label="Delete"
-            variant="ghost"
-            confirm={{
-              title: "Delete this build?",
-              description: "The build and its shifts will be permanently deleted.",
-              confirmLabel: "Delete build",
-            }}
-          />
-          <ActionButton action={setStatus("PUBLISHED")} label="Publish" variant="default" />
-        </>
-      );
-    case "PUBLISHED":
-      return (
-        <>
-          <ActionButton action={setStatus("DRAFT")} label="Unpublish" />
-          <ActionButton action={setStatus("CLOSED")} label="Close signups" />
-          {cancelBuild}
-        </>
-      );
-    case "CLOSED":
-      return (
-        <>
-          <ActionButton action={setStatus("PUBLISHED")} label="Reopen signups" variant="default" />
-          {cancelBuild}
-        </>
-      );
-    case "CANCELLED":
-      // Restored builds come back with signups closed, so the admin can
-      // check everything before reopening.
-      return <ActionButton action={setStatus("CLOSED")} label="Restore build" />;
+  if (status === "CANCELLED") {
+    return <ActionButton action={setStatus("ACTIVE")} label="Restore build" />;
   }
+  return (
+    <>
+      {!hasSignups && (
+        <ActionButton
+          action={deleteBuild.bind(null, buildId)}
+          label="Delete"
+          variant="ghost"
+          confirm={{
+            title: "Delete this build?",
+            description: "The build and its shifts will be permanently deleted.",
+            confirmLabel: "Delete build",
+          }}
+        />
+      )}
+      <ActionButton
+        action={setStatus("CANCELLED")}
+        label="Cancel build"
+        variant="destructive"
+        confirm={{
+          title: "Cancel this build?",
+          description:
+            "Its shifts won't be offered to volunteers. Existing signups are kept on record, but volunteers aren't notified automatically yet.",
+          confirmLabel: "Cancel build",
+        }}
+      />
+    </>
+  );
 }
 
 function RemoveShiftButton({

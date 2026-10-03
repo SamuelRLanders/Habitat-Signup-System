@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { SiteBrand } from "@/components/site-brand";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { signOut } from "@/lib/auth/actions";
 import { requireAdmin } from "@/lib/auth/dal";
 import { AdminNav } from "./admin-nav";
@@ -22,10 +21,6 @@ export default async function DashboardLayout({
         </div>
         <div className="flex items-center gap-3 text-sm">
           <span className="hidden text-muted-foreground md:inline">{admin.email}</span>
-          {/* Admins can volunteer too. */}
-          <Link href="/me" className={buttonVariants({ variant: "outline", size: "sm" })}>
-            My signups
-          </Link>
           <form action={signOut}>
             <Button type="submit" variant="outline" size="sm">
               Sign out

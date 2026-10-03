@@ -10,8 +10,8 @@ export const CODE_MINUTES = 10;
 // Wrong guesses allowed per code before a new one has to be requested.
 export const CODE_ATTEMPTS = 5;
 
-// Sign-in configuration for volunteers and admins. Everyone signs in the same
-// way: enter an email, then the 6-digit code sent to it. There is no
+// Sign-in configuration. Only admins sign in: enter an email, then the
+// 6-digit code sent to it. Volunteers never sign in. There is no
 // /api/auth route: every auth step runs through our own Server Actions
 // (src/lib/auth/actions.ts), so none of Better Auth's HTTP endpoints are
 // exposed.
@@ -20,7 +20,8 @@ export const auth = betterAuth({
   user: {
     additionalFields: {
       // input: false means sign-in can never set it. Admins are made with
-      // the admin:add script.
+      // the admin:add script. VOLUNTEER is left from when volunteers
+      // signed in too.
       role: {
         type: ["VOLUNTEER", "ADMIN"],
         input: false,
@@ -39,15 +40,16 @@ export const auth = betterAuth({
       expiresIn: CODE_MINUTES * 60,
       allowedAttempts: CODE_ATTEMPTS,
       storeOTP: "hashed", // a leaked database row can't be used to sign in
-      // Signing in with a new email creates a volunteer account.
-      disableSignUp: false,
+      // Signing in never creates an account. sendLoginCode also checks the
+      // email belongs to an admin before asking for a code.
+      disableSignUp: true,
       sendVerificationOTP: async ({ email, otp, type }) => {
         if (type !== "sign-in") return;
         await sendEmail({
           to: email,
-          subject: `${otp} is your Purdue Habitat sign-in code`,
-          text: `Your Purdue Habitat volunteer sign-in code is:\n\n${otp}\n\nThe code expires in ${CODE_MINUTES} minutes. If you didn't ask to sign in, you can ignore this email.`,
-          html: `<p>Your Purdue Habitat volunteer sign-in code is:</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px">${otp}</p><p>The code expires in ${CODE_MINUTES} minutes. If you didn't ask to sign in, you can ignore this email.</p>`,
+          subject: `${otp} is your Purdue Habitat admin sign-in code`,
+          text: `Your Purdue Habitat admin sign-in code is:\n\n${otp}\n\nThe code expires in ${CODE_MINUTES} minutes. If you didn't ask to sign in, you can ignore this email.`,
+          html: `<p>Your Purdue Habitat admin sign-in code is:</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px">${otp}</p><p>The code expires in ${CODE_MINUTES} minutes. If you didn't ask to sign in, you can ignore this email.</p>`,
         });
       },
     }),

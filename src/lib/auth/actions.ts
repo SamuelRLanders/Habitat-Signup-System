@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { clientIp } from "@/lib/request";
 import { auth } from ".";
 import { takeLoginCodeRequest, RESEND_AFTER_SECONDS } from "./rate-limit";
-import { homePath, safeNextPath } from "./redirects";
+import { ADMIN_HOME, safeNextPath } from "./redirects";
 
 export type SendLoginCodeState =
   | { status: "idle" }
@@ -35,6 +35,20 @@ export async function sendLoginCode(
     return { status: "error", message: "Enter a valid email address." };
   }
   const email = parsed.data;
+
+  // Only admins sign in. Saying so plainly helps a volunteer who found this
+  // page, at the cost of showing whether an email belongs to an admin.
+  const admin = await prisma.user.findUnique({
+    where: { email },
+    select: { role: true },
+  });
+  if (admin?.role !== "ADMIN") {
+    return {
+      status: "error",
+      message:
+        "That email isn't an admin account. Volunteers don't need to sign in: find the signup form on the home page.",
+    };
+  }
 
   const limit = await takeLoginCodeRequest(email, await clientIp());
   if (!limit.allowed) {
@@ -81,8 +95,8 @@ export async function verifyLoginCode(
 
   let role: string;
   try {
-    // Uses up the code, creates the account if it's new, and sets the
-    // session cookie.
+    // Uses up the code and sets the session cookie. It never creates an
+    // account, since sign-up is turned off.
     const result = await auth.api.signInEmailOTP({
       body: { email: email.data, otp: code },
       headers: await headers(),
@@ -97,15 +111,17 @@ export async function verifyLoginCode(
     return { error: codeErrorMessage(error) };
   }
 
+  // Codes are only sent to admins, but someone could have lost admin access
+  // since theirs was sent. getAdmin() ignores their new session.
+  if (role !== "ADMIN") return { error: "That email isn't an admin account." };
+
   // redirect() works by throwing, so it must be outside the try/catch.
-  redirect(safeNextPath(formData.get("next")) ?? homePath(role));
+  redirect(safeNextPath(formData.get("next")) ?? ADMIN_HOME);
 }
 
-// A "next" form field sends the person there afterwards, such as back to the
-// build page they signed out from.
-export async function signOut(formData?: FormData) {
+export async function signOut() {
   await auth.api.signOut({ headers: await headers() });
-  redirect(safeNextPath(formData?.get("next")) ?? "/login");
+  redirect("/login");
 }
 
 function codeErrorMessage(error: unknown) {
