@@ -25,9 +25,9 @@ export function AdminNav() {
             href={href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors [&_svg]:size-4",
+              "flex items-center gap-1.5 hover-gold rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors [&_svg]:size-4",
               active
-                ? "bg-muted text-foreground"
+                ? "bg-gold text-black"
                 : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
             )}
           >

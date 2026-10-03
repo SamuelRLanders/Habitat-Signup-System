@@ -44,6 +44,7 @@ export const ROLE_FILTERS: { value: Role; label: string }[] = [
 export const YES_NO_FILTERS = {
   details: { label: "Saved details", yes: "Has details", no: "Signed in only" },
   texts: { label: "Texts", yes: "Opted in", no: "Not opted in" },
+  license: { label: "Driver's license", yes: "Has license", no: "No license" },
   shifts: { label: "Upcoming shifts", yes: "Has shifts", no: "No shifts" },
 } as const;
 
@@ -61,6 +62,7 @@ export type PeopleSearch = {
   role: Role | null;
   details: YesNo | null;
   texts: YesNo | null;
+  license: YesNo | null;
   shifts: YesNo | null;
   // "2026-09-25", in the admin time zone.
   joinedFrom: string | null;
@@ -78,6 +80,7 @@ export const EMPTY_SEARCH: PeopleSearch = {
   role: null,
   details: null,
   texts: null,
+  license: null,
   shifts: null,
   joinedFrom: null,
   joinedTo: null,
@@ -127,6 +130,7 @@ export function parsePeopleSearch(params: Params): PeopleSearch {
     role: pick("role", ROLE_FILTERS.map((f) => f.value)),
     details: yesNo("details"),
     texts: yesNo("texts"),
+    license: yesNo("license"),
     shifts: yesNo("shifts"),
     joinedFrom,
     joinedTo,
@@ -147,6 +151,7 @@ export function toQueryString(search: PeopleSearch) {
   if (search.role) params.set("role", search.role);
   if (search.details) params.set("details", search.details);
   if (search.texts) params.set("texts", search.texts);
+  if (search.license) params.set("license", search.license);
   if (search.shifts) params.set("shifts", search.shifts);
   if (search.joinedFrom) params.set("joinedFrom", search.joinedFrom);
   if (search.joinedTo) params.set("joinedTo", search.joinedTo);

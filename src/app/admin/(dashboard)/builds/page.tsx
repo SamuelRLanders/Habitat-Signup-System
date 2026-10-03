@@ -53,7 +53,7 @@ export default async function BuildsPage({
             href={t === "upcoming" ? "/admin/builds" : `/admin/builds?tab=${t}`}
             aria-current={t === tab ? "page" : undefined}
             className={cn(
-              "rounded-full px-3.5 py-1 text-sm font-medium transition-colors",
+              "hover-gold rounded-full px-3.5 py-1 text-sm font-medium transition-colors",
               t === tab
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
@@ -81,7 +81,7 @@ export default async function BuildsPage({
             <li key={build.id}>
               <Link
                 href={`/admin/builds/${build.id}`}
-                className="flex flex-wrap items-center justify-between gap-4 rounded-xl p-4 ring-1 ring-foreground/10 transition-colors hover:bg-muted/50"
+                className="flex flex-wrap items-center justify-between gap-4 hover-gold rounded-xl p-4 ring-1 ring-foreground/10 transition-colors hover:bg-muted/50"
               >
                 <div className="flex min-w-0 flex-col gap-1">
                   <div className="flex flex-wrap items-center gap-2">

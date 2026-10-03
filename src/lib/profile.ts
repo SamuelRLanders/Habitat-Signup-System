@@ -57,6 +57,9 @@ export const profileSchema = z.object({
   dateOfBirth: birthday,
   sex: optionalChoice(["FEMALE", "MALE"]),
   tShirtSize: optionalChoice(["XS", "S", "M", "L", "XL", "XXL", "XXXL"]),
+  hasDriversLicense: z
+    .enum(["yes", "no"], "Tell us whether you have a driver's license.")
+    .transform((value) => value === "yes"),
 });
 
 export type ProfileField = keyof z.input<typeof profileSchema>;

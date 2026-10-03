@@ -178,7 +178,7 @@ export function MultiDatePicker({
                 type="button"
                 aria-label={`Remove ${format(date, "MMMM d")}`}
                 onClick={() => update(dates.filter((d) => d !== date))}
-                className="flex size-5 items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                className="flex size-5 items-center justify-center hover-gold rounded-full text-muted-foreground hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 <XIcon className="size-3" />
               </button>

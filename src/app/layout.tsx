@@ -13,8 +13,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Habitat Volunteer Signup",
-  description: "Sign up to volunteer with Habitat for Humanity.",
+  title: {
+    default: "Purdue Habitat Volunteering",
+    template: "%s · Purdue Habitat",
+  },
+  description: "Sign up to volunteer with Purdue Habitat for Humanity.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

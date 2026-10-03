@@ -4,8 +4,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Gold outline on hover, for buttons, pills and boxes. */
+@utility hover-gold {
+  @apply hover:ring-2 hover:ring-gold;
+}
+
 @theme inline {
   --color-background: var(--background);
+  --color-gold: var(--gold);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -73,6 +79,9 @@
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
+  /* Purdue gold. Too light for text on white, so use it for fills, borders
+     and bars, with dark text on top. */
+  --gold: #cfb991;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);

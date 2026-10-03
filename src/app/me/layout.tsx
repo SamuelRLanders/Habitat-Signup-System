@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SiteBrand } from "@/components/site-brand";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { signOut } from "@/lib/auth/actions";
 import { requireUser } from "@/lib/auth/dal";
@@ -12,10 +13,8 @@ export default async function MeLayout({ children }: LayoutProps<"/me">) {
   return (
     <div className="flex flex-1 flex-col">
       {/* On phones the tabs wrap onto their own row under the title. */}
-      <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b px-4 py-3">
-        <Link href="/me" className="font-semibold">
-          Habitat Volunteer
-        </Link>
+      <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b-4 border-gold px-4 py-3">
+        <SiteBrand href="/me" label="Purdue Habitat Volunteering" />
         <div className="order-last w-full sm:order-none sm:w-auto sm:flex-1">
           <MeNav />
         </div>

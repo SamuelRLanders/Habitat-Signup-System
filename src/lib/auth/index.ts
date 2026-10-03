@@ -45,9 +45,9 @@ export const auth = betterAuth({
         if (type !== "sign-in") return;
         await sendEmail({
           to: email,
-          subject: `${otp} is your Habitat sign-in code`,
-          text: `Your Habitat volunteer sign-in code is:\n\n${otp}\n\nThe code expires in ${CODE_MINUTES} minutes. If you didn't ask to sign in, you can ignore this email.`,
-          html: `<p>Your Habitat volunteer sign-in code is:</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px">${otp}</p><p>The code expires in ${CODE_MINUTES} minutes. If you didn't ask to sign in, you can ignore this email.</p>`,
+          subject: `${otp} is your Purdue Habitat sign-in code`,
+          text: `Your Purdue Habitat volunteer sign-in code is:\n\n${otp}\n\nThe code expires in ${CODE_MINUTES} minutes. If you didn't ask to sign in, you can ignore this email.`,
+          html: `<p>Your Purdue Habitat volunteer sign-in code is:</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px">${otp}</p><p>The code expires in ${CODE_MINUTES} minutes. If you didn't ask to sign in, you can ignore this email.</p>`,
         });
       },
     }),

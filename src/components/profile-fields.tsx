@@ -21,6 +21,7 @@ export type ProfileDefaults = {
   dateOfBirth: string; // "1990-05-17"
   sex: Sex | null;
   tShirtSize: TShirtSize | null;
+  hasDriversLicense: boolean | null; // null if they haven't been asked yet
 };
 
 // The "Your information" and "Emergency contact" sections, used by the
@@ -38,7 +39,7 @@ export function ProfileFields({
   const [smsOptIn, setSmsOptIn] = useState(defaults?.smsOptIn ?? false);
 
   const text = (
-    field: Exclude<ProfileField, "smsOptIn" | "dateOfBirth" | "sex" | "tShirtSize">,
+    field: Exclude<ProfileField, "smsOptIn" | "dateOfBirth" | "sex" | "tShirtSize" | "hasDriversLicense">,
     label: string,
     props: React.ComponentProps<"input"> = {},
   ) => (
@@ -111,6 +112,15 @@ export function ProfileFields({
             defaultValue={defaults?.tShirtSize ?? null}
             error={errors.tShirtSize}
           />
+          <div className="sm:col-span-2">
+            <YesNoField
+              field="hasDriversLicense"
+              label="Do you have a valid driver's license?"
+              hint="We sometimes need volunteers who can drive others to the build site."
+              defaultValue={defaults?.hasDriversLicense ?? null}
+              error={errors.hasDriversLicense}
+            />
+          </div>
         </div>
       </Section>
 
@@ -121,5 +131,76 @@ export function ProfileFields({
         </div>
       </Section>
     </>
+  );
+}
+
+// A required yes or no, as a pair of pills. Sends "yes" or "no".
+function YesNoField({
+  field,
+  label,
+  hint,
+  defaultValue,
+  error,
+}: {
+  field: string;
+  label: string;
+  hint?: string;
+  defaultValue: boolean | null;
+  error?: string;
+}) {
+  const [value, setValue] = useState(
+    defaultValue === null ? null : defaultValue ? "yes" : "no",
+  );
+  const describedBy = [hint && `${field}-hint`, error && `${field}-error`]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div
+      role="radiogroup"
+      aria-labelledby={`${field}-label`}
+      aria-describedby={describedBy || undefined}
+      aria-invalid={error ? true : undefined}
+      // Lets the form move focus here after a failed submission.
+      tabIndex={-1}
+      className="flex flex-col gap-2 outline-none"
+    >
+      <span id={`${field}-label`} className="text-sm font-medium">
+        {label}
+      </span>
+      {hint && (
+        <p id={`${field}-hint`} className="text-sm text-muted-foreground">
+          {hint}
+        </p>
+      )}
+      <div className="flex w-fit gap-1 rounded-full bg-muted p-1">
+        {(
+          [
+            ["yes", "Yes"],
+            ["no", "No"],
+          ] as const
+        ).map(([option, optionLabel]) => (
+          <label
+            key={option}
+            className="cursor-pointer hover-gold rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors has-checked:bg-background has-checked:text-foreground has-checked:shadow-sm has-focus-visible:ring-3 has-focus-visible:ring-ring/50"
+          >
+            <input
+              type="radio"
+              name={field}
+              value={option}
+              checked={value === option}
+              onChange={() => setValue(option)}
+              className="sr-only"
+            />
+            {optionLabel}
+          </label>
+        ))}
+      </div>
+      {error && (
+        <p id={`${field}-error`} className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }

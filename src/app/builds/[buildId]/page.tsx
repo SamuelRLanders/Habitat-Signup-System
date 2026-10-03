@@ -79,8 +79,8 @@ export default async function BuildSignupPage({
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-10 px-4 py-12 sm:py-16">
       <header className="flex flex-col gap-2">
-        <p className="text-sm font-medium text-muted-foreground">
-          Habitat for Humanity volunteer signup
+        <p className="w-fit rounded-full bg-gold px-3 py-0.5 text-xs font-semibold text-black">
+          Purdue Habitat volunteer signup
         </p>
         <h1 className="text-3xl font-semibold">{build.name}</h1>
         <p className="text-muted-foreground">{build.address}</p>
@@ -107,7 +107,7 @@ function SignedOut({
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-col gap-4 rounded-xl bg-muted/50 p-5 ring-1 ring-foreground/10">
+      <div className="flex flex-col gap-4 rounded-xl border-l-4 border-gold bg-gold/15 p-5">
         <div className="flex flex-col gap-1">
           <h2 className="text-lg font-semibold">Sign in to sign up</h2>
           <p className="text-sm text-muted-foreground">
@@ -136,7 +136,7 @@ function SignedOut({
             {dayShifts.map((shift) => (
               <div
                 key={shift.id}
-                className="flex flex-col gap-1 rounded-xl p-4 ring-1 ring-foreground/10"
+                className="flex flex-col gap-1 hover-gold rounded-xl p-4 ring-1 ring-foreground/10"
               >
                 <span className="flex flex-wrap items-baseline justify-between gap-x-4">
                   <span className="font-medium">{shift.time}</span>

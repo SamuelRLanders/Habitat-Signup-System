@@ -142,7 +142,7 @@ export default async function BuildPage({
               <h3 className="text-sm font-medium text-muted-foreground">
                 {formatDate(shifts[0].startsAt, zone)}
               </h3>
-              <ul className="flex flex-col divide-y rounded-xl ring-1 ring-foreground/10">
+              <ul className="flex flex-col divide-y hover-gold rounded-xl ring-1 ring-foreground/10">
                 {shifts.map((shift) => {
                   const isPast = shift.endsAt < now;
                   const isCancelled = shift.cancelledAt !== null;

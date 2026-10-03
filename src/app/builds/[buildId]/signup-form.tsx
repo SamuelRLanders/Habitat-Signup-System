@@ -48,8 +48,11 @@ export function SignupForm({
   const [isGroup, setIsGroup] = useState(false);
   const [groupSize, setGroupSize] = useState(2);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  // With saved details, show a summary instead of the fields.
-  const [editingProfile, setEditingProfile] = useState(defaults === null);
+  // With saved details, show a summary instead of the fields, unless they
+  // were saved before a question was added.
+  const [editingProfile, setEditingProfile] = useState(
+    defaults === null || defaults.hasDriversLicense === null,
+  );
 
   // After a failed submission, move to the first field with a problem.
   useEffect(() => {
@@ -97,7 +100,7 @@ export function SignupForm({
           ).map(([value, label]) => (
             <label
               key={value}
-              className="cursor-pointer rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors has-checked:bg-background has-checked:text-foreground has-checked:shadow-sm has-focus-visible:ring-3 has-focus-visible:ring-ring/50"
+              className="cursor-pointer hover-gold rounded-full px-4 py-1.5 text-sm font-medium text-muted-foreground transition-colors has-checked:bg-background has-checked:text-foreground has-checked:shadow-sm has-focus-visible:ring-3 has-focus-visible:ring-ring/50"
             >
               <input
                 type="radio"
@@ -192,7 +195,7 @@ export function SignupForm({
                     key={shift.id}
                     className={cn(
                       "flex items-start gap-3 rounded-xl p-4 ring-1 ring-foreground/10 transition-colors",
-                      available ? "cursor-pointer hover:bg-muted/50" : "cursor-not-allowed opacity-60",
+                      available ? "hover-gold cursor-pointer hover:bg-muted/50" : "cursor-not-allowed opacity-60",
                       checked && "bg-muted/50 ring-2 ring-primary",
                       problem && "ring-2 ring-destructive",
                     )}
@@ -268,7 +271,7 @@ function SavedDetails({
 }) {
   return (
     <Section title="Your details">
-      <div className="flex flex-wrap items-start justify-between gap-3 rounded-xl p-4 text-sm ring-1 ring-foreground/10">
+      <div className="flex flex-wrap items-start justify-between gap-3 hover-gold rounded-xl p-4 text-sm ring-1 ring-foreground/10">
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
           <dt className="text-muted-foreground">Name</dt>
           <dd>
@@ -304,7 +307,7 @@ function Confirmation({
   }, []);
 
   return (
-    <div ref={ref} role="status" className="flex flex-col gap-6 rounded-xl bg-muted/50 p-6 ring-1 ring-foreground/10">
+    <div ref={ref} role="status" className="flex flex-col gap-6 hover-gold rounded-xl bg-muted/50 p-6 ring-1 ring-foreground/10">
       <div className="flex flex-col gap-2">
         <CheckCircle2Icon className="size-8 text-primary" aria-hidden="true" />
         <h2 className="text-2xl font-semibold">You&apos;re signed up!</h2>
@@ -316,14 +319,14 @@ function Confirmation({
       </div>
       <ul className="flex flex-col gap-2">
         {shifts.map((shift) => (
-          <li key={shift.id} className="rounded-lg bg-background p-3 ring-1 ring-foreground/10">
+          <li key={shift.id} className="hover-gold rounded-lg bg-background p-3 ring-1 ring-foreground/10">
             <span className="font-medium">{shift.date}</span>
             <span className="block text-sm text-muted-foreground">{shift.time}</span>
           </li>
         ))}
       </ul>
       {joinPath && (
-        <div className="flex flex-col gap-3 rounded-lg bg-background p-4 ring-1 ring-foreground/10">
+        <div className="flex flex-col gap-3 hover-gold rounded-lg bg-background p-4 ring-1 ring-foreground/10">
           <div className="flex flex-col gap-1">
             <h3 className="font-semibold">Next: send your group the join link</h3>
             <p className="text-sm text-muted-foreground">

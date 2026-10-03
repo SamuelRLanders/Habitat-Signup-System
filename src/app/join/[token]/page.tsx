@@ -40,8 +40,8 @@ export default async function JoinGroupPage({
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-10 px-4 py-12 sm:py-16">
       <header className="flex flex-col gap-2">
-        <p className="text-sm font-medium text-muted-foreground">
-          Habitat for Humanity volunteer group
+        <p className="w-fit rounded-full bg-gold px-3 py-0.5 text-xs font-semibold text-black">
+          Purdue Habitat volunteer group
         </p>
         <h1 className="text-3xl font-semibold">{build.name}</h1>
         <p className="text-muted-foreground">{build.address}</p>
@@ -51,7 +51,7 @@ export default async function JoinGroupPage({
         <p className="rounded-xl bg-muted p-4 text-sm">{closedMessage}</p>
       ) : (
         <>
-          <section className="flex flex-col gap-3 rounded-xl bg-muted/50 p-5 ring-1 ring-foreground/10">
+          <section className="flex flex-col gap-3 hover-gold rounded-xl bg-muted/50 p-5 ring-1 ring-foreground/10">
             <p>
               <strong>{leaderName}</strong> reserved a spot for you
               {group.groupName ? ` with ${group.groupName}` : ""}. Before you
@@ -61,7 +61,7 @@ export default async function JoinGroupPage({
               {group.shifts.map((shift) => (
                 <li
                   key={shift.startsAt.toISOString()}
-                  className="rounded-lg bg-background p-3 ring-1 ring-foreground/10"
+                  className="hover-gold rounded-lg bg-background p-3 ring-1 ring-foreground/10"
                 >
                   <span className="font-medium">{formatDate(shift.startsAt, zone)}</span>
                   <span className="block text-sm text-muted-foreground">

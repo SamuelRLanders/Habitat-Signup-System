@@ -33,7 +33,7 @@ export function JoinForm({
 
   if (state.success) {
     return (
-      <div role="status" className="flex flex-col gap-2 rounded-xl bg-muted/50 p-6 ring-1 ring-foreground/10">
+      <div role="status" className="flex flex-col gap-2 hover-gold rounded-xl bg-muted/50 p-6 ring-1 ring-foreground/10">
         <CheckCircle2Icon className="size-8 text-primary" aria-hidden="true" />
         <h2 className="text-2xl font-semibold">You&apos;re all set!</h2>
         <p className="text-muted-foreground">

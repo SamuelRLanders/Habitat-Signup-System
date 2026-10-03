@@ -89,7 +89,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
                 <Link
                   href={peopleHref({ ...search, ...filter.without, page: 1 })}
                   aria-label={`Remove filter: ${filter.label}`}
-                  className="flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+                  className="flex size-6 items-center justify-center hover-gold rounded-full text-muted-foreground hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   <XIcon className="size-3" />
                 </Link>
@@ -137,7 +137,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
             )}
           </p>
 
-          <div className="rounded-xl ring-1 ring-foreground/10">
+          <div className="hover-gold rounded-xl ring-1 ring-foreground/10">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -147,6 +147,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
                   <TableHead className="text-right">Age</TableHead>
                   <TableHead>Sex</TableHead>
                   <TableHead>T-shirt</TableHead>
+                  <TableHead>License</TableHead>
                   <TableHead className="text-right">Upcoming shifts</TableHead>
                   <TableHead>Joined</TableHead>
                 </TableRow>
@@ -189,6 +190,15 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
                     </TableCell>
                     <TableCell>
                       {labelOf(T_SHIRT_SIZES, person.profile?.tShirtSize) ?? <Blank />}
+                    </TableCell>
+                    <TableCell>
+                      {person.profile?.hasDriversLicense == null ? (
+                        <Blank />
+                      ) : person.profile.hasDriversLicense ? (
+                        "Yes"
+                      ) : (
+                        "No"
+                      )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {person.upcomingShifts}

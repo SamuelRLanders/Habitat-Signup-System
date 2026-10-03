@@ -95,7 +95,7 @@ function SignupTable({
   const columns = showStatus ? 6 : 5;
 
   return (
-    <div className="rounded-xl ring-1 ring-foreground/10">
+    <div className="hover-gold rounded-xl ring-1 ring-foreground/10">
       <Table>
         <TableHeader>
           <TableRow>

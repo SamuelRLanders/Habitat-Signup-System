@@ -35,6 +35,7 @@ export async function searchPeople(search: PeopleSearch) {
           dateOfBirth: true,
           sex: true,
           tShirtSize: true,
+          hasDriversLicense: true,
         },
       },
       _count: { select: { signups: { where: upcomingSignup(now) } } },
@@ -76,6 +77,7 @@ export async function exportPeople(search: PeopleSearch) {
           dateOfBirth: true,
           sex: true,
           tShirtSize: true,
+          hasDriversLicense: true,
           smsOptIn: true,
           smsOptInAt: true,
           createdAt: true,
@@ -145,6 +147,10 @@ function peopleWhere(search: PeopleSearch, now: Date): Prisma.UserWhereInput {
 
   if (search.texts === "yes") and.push(hasProfile({ smsOptIn: true }));
   if (search.texts === "no") and.push({ NOT: hasProfile({ smsOptIn: true }) });
+
+  // "No" leaves out people who haven't answered yet.
+  if (search.license === "yes") and.push(hasProfile({ hasDriversLicense: true }));
+  if (search.license === "no") and.push(hasProfile({ hasDriversLicense: false }));
 
   if (search.shifts === "yes") and.push({ signups: { some: upcomingSignup(now) } });
   if (search.shifts === "no") and.push({ signups: { none: upcomingSignup(now) } });

@@ -138,7 +138,7 @@ export function PeopleSearchBar({
                 if (search.q) go({ ...search, q: "" });
                 inputRef.current?.focus();
               }}
-              className="absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+              className="absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 items-center justify-center hover-gold rounded-full text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
             >
               <XIcon className="size-3.5" />
             </button>
@@ -251,6 +251,7 @@ function FiltersForm({
       </Group>
 
       <YesNoGroup filter="texts" search={search} />
+      <YesNoGroup filter="license" search={search} />
 
       <fieldset className="flex flex-col gap-2">
         <legend className="mb-2 text-sm font-medium">Joined between</legend>
@@ -356,7 +357,7 @@ function Pill({
         defaultChecked={defaultChecked}
         className="peer sr-only"
       />
-      <span className="flex h-7 items-center rounded-full border border-border px-3 text-[0.8rem] font-medium transition-colors select-none hover:bg-muted peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-checked:hover:bg-primary/80 peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50">
+      <span className="flex h-7 items-center hover-gold rounded-full border border-border px-3 text-[0.8rem] font-medium transition-colors select-none hover:bg-muted peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-checked:hover:bg-primary/80 peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50">
         {label}
       </span>
     </label>

@@ -70,6 +70,7 @@ export async function getProfileDefaults(userId: string) {
       dateOfBirth: true,
       sex: true,
       tShirtSize: true,
+      hasDriversLicense: true,
     },
   });
   if (!profile) return null;

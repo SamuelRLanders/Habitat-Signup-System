@@ -30,12 +30,10 @@ export default async function MePage() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold">
-        {profileSaved ? `Hi, ${user.name.split(" ")[0]}` : "Welcome"}
-      </h1>
+      <h1 className="sr-only">Your signups</h1>
 
       {!profileSaved && (
-        <div className="flex flex-col gap-3 rounded-xl bg-muted/50 p-5 ring-1 ring-foreground/10">
+        <div className="flex flex-col gap-3 rounded-xl border-l-4 border-gold bg-gold/15 p-5">
           <div className="flex flex-col gap-1">
             <h2 className="font-semibold">Add your details</h2>
             <p className="text-sm text-muted-foreground">
@@ -54,7 +52,7 @@ export default async function MePage() {
       )}
 
       <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-semibold">Upcoming shifts</h2>
+        <h2 className="border-l-4 border-gold pl-3 text-lg font-semibold">Upcoming shifts</h2>
         {upcoming.length === 0 ? (
           <p className="rounded-xl bg-muted p-4 text-sm">
             You&apos;re not signed up for any upcoming shifts.
@@ -68,7 +66,7 @@ export default async function MePage() {
       </section>
 
       <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-semibold">Builds you can sign up for</h2>
+        <h2 className="border-l-4 border-gold pl-3 text-lg font-semibold">Builds you can sign up for</h2>
         {openBuilds.length === 0 ? (
           <p className="rounded-xl bg-muted p-4 text-sm">
             There are no builds open for signups right now. Check back soon.
@@ -78,7 +76,7 @@ export default async function MePage() {
             {openBuilds.map((build) => (
               <li
                 key={build.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-xl p-4 ring-1 ring-foreground/10"
+                className="flex flex-wrap items-center justify-between gap-3 hover-gold rounded-xl p-4 ring-1 ring-foreground/10"
               >
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <span className="font-medium">{build.name}</span>
@@ -123,7 +121,7 @@ function RegistrationCard({ registration }: { registration: Upcoming }) {
   const isGroup = size > 1;
 
   return (
-    <article className="flex flex-col gap-4 rounded-xl p-4 ring-1 ring-foreground/10">
+    <article className="flex flex-col gap-4 hover-gold rounded-xl p-4 ring-1 ring-foreground/10">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
           {/* A cancelled build's page no longer exists. */}

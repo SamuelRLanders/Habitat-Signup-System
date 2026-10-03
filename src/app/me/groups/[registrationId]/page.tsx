@@ -49,7 +49,7 @@ export default async function GroupPage({
           </p>
         </div>
 
-        <ul className="flex flex-col divide-y rounded-xl ring-1 ring-foreground/10">
+        <ul className="flex flex-col divide-y hover-gold rounded-xl ring-1 ring-foreground/10">
           <MemberRow name={group.leaderName} joinedAt={group.createdAt} zone={zone} you />
           {groupMembers.map((member) => (
             <MemberRow

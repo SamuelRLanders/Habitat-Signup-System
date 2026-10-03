@@ -100,6 +100,9 @@ model VolunteerProfile {
   dateOfBirth           DateTime    @db.Date
   sex                   Sex?
   tShirtSize            TShirtSize?
+  // Null for details saved before the form asked; they're asked on their
+  // next signup.
+  hasDriversLicense     Boolean?
   smsOptIn              Boolean     @default(false)
   smsOptInAt            DateTime? // when consent was given (needed for SMS compliance)
   createdAt             DateTime    @default(now())

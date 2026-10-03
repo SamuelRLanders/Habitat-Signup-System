@@ -65,7 +65,7 @@ export function SectionFields({
         return (
           <div
             key={section.key}
-            className="flex flex-col gap-3 rounded-xl p-4 ring-1 ring-foreground/10"
+            className="flex flex-col gap-3 hover-gold rounded-xl p-4 ring-1 ring-foreground/10"
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium text-muted-foreground">

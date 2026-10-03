@@ -284,8 +284,10 @@ export async function submitSignup(
   };
 }
 
-// The volunteer's saved details, in the shape the rest of the signup uses.
+// The volunteer's saved details, in the shape the rest of the signup uses,
+// or null if they're missing an answer the form now requires.
 async function savedProfile(userId: string) {
   const profile = await getProfileDefaults(userId);
-  return profile && { firstName: profile.firstName, dateOfBirth: profile.dateOfBirth };
+  if (!profile || profile.hasDriversLicense === null) return null;
+  return { firstName: profile.firstName, dateOfBirth: profile.dateOfBirth };
 }

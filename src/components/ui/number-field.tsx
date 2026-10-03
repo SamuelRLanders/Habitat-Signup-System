@@ -17,7 +17,7 @@ function NumberField({
   "aria-describedby"?: string
 }) {
   const stepButton =
-    "flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors outline-none select-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.5"
+    "flex size-6 shrink-0 items-center justify-center hover-gold rounded-full text-muted-foreground transition-colors outline-none select-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-3.5"
 
   return (
     <NumberFieldPrimitive.Root
