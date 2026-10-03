@@ -78,7 +78,7 @@ export async function getBuild(buildId: string) {
         orderBy: { startsAt: "asc" },
         include: {
           signups: confirmedSpots,
-          _count: { select: { signups: true } },
+          _count: { select: { signups: true, preferences: true } },
         },
       },
     },
@@ -90,9 +90,10 @@ export async function getBuild(buildId: string) {
     shifts: build.shifts.map(({ signups, _count, ...shift }) => ({
       ...shift,
       filled: spotsTaken(signups),
-      // Includes cancelled signups. Shifts with any signups are cancelled
-      // rather than deleted, so their history is kept.
-      signupCount: _count.signups,
+      // Includes cancelled signups, and volunteers who chose the shift on a
+      // signup form. Shifts with any are cancelled rather than deleted, so
+      // their history is kept.
+      signupCount: _count.signups + _count.preferences,
     })),
   };
 }

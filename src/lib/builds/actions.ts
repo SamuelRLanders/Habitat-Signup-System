@@ -154,8 +154,11 @@ export async function deleteBuild(
 ): Promise<ActionState> {
   await requireAdmin();
 
-  const signups = await prisma.signup.count({ where: { shift: { buildId } } });
-  if (signups > 0) {
+  const [signups, preferences] = await Promise.all([
+    prisma.signup.count({ where: { shift: { buildId } } }),
+    prisma.shiftPreference.count({ where: { shift: { buildId } } }),
+  ]);
+  if (signups + preferences > 0) {
     return {
       error: "Volunteers have signed up for this build. Cancel it instead.",
     };
@@ -308,15 +311,19 @@ export async function updateShift(
   return { success: true };
 }
 
-// Deletes a shift nobody has signed up for. Otherwise cancels it, keeping the
-// signups on record.
+// Deletes a shift nobody has signed up for or chosen on a signup form.
+// Otherwise cancels it, keeping the record; volunteers' choices of it count
+// again if it's restored.
 export async function removeShift(
   shiftId: string,
 ): Promise<ActionState> {
   await requireAdmin();
 
-  const signups = await prisma.signup.count({ where: { shiftId } });
-  if (signups === 0) {
+  const [signups, preferences] = await Promise.all([
+    prisma.signup.count({ where: { shiftId } }),
+    prisma.shiftPreference.count({ where: { shiftId } }),
+  ]);
+  if (signups + preferences === 0) {
     await prisma.shift.deleteMany({ where: { id: shiftId } });
   } else {
     await prisma.shift.updateMany({

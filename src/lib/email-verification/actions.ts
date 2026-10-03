@@ -11,7 +11,9 @@ import {
 import { emailSchema } from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
 import { clientIp } from "@/lib/request";
+import { cancelDeadline } from "@/lib/form-signups/queries";
 import { formPhase } from "@/lib/signup-forms/phase";
+import { offeredShifts } from "@/lib/signup-forms/queries";
 import { formatDay, toDay } from "@/lib/time";
 import {
   checkCode,
@@ -22,8 +24,9 @@ import {
 } from "./session";
 
 // Volunteers confirming their email address on a signup form. Anyone can
-// call these, so codes are only sent for a form that's open, and the same
-// rate limits as admin sign-in apply.
+// call these, so codes are only sent while a form is open, or after it
+// closes for cancelling until the day's first shift. The same rate limits
+// as admin sign-in apply.
 
 export async function sendSignupCode(
   formId: string,
@@ -40,7 +43,7 @@ export async function sendSignupCode(
     where: { id: formId, status: "PUBLISHED" },
     select: { date: true, status: true, opensAt: true, closesAt: true },
   });
-  if (!form || formPhase(form) !== "open") {
+  if (!form || !(await canUseForm(form))) {
     return {
       status: "error",
       message: "This form isn't taking signups right now. Refresh the page to see why.",
@@ -56,8 +59,8 @@ export async function sendSignupCode(
     await sendEmail({
       to: email,
       subject: `${code} is your Purdue Habitat signup code`,
-      text: `Your code to sign up for the Purdue Habitat build day on ${day} is:\n\n${code}\n\nThe code expires in ${CODE_MINUTES} minutes. If you didn't ask for it, you can ignore this email.`,
-      html: `<p>Your code to sign up for the Purdue Habitat build day on ${day} is:</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px">${code}</p><p>The code expires in ${CODE_MINUTES} minutes. If you didn't ask for it, you can ignore this email.</p>`,
+      text: `Your Purdue Habitat code for the build day on ${day} is:\n\n${code}\n\nThe code expires in ${CODE_MINUTES} minutes. If you didn't ask for it, you can ignore this email.`,
+      html: `<p>Your Purdue Habitat code for the build day on ${day} is:</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px">${code}</p><p>The code expires in ${CODE_MINUTES} minutes. If you didn't ask for it, you can ignore this email.</p>`,
     });
   } catch (error) {
     console.error("Failed to send signup code", error);
@@ -65,6 +68,17 @@ export async function sendSignupCode(
   }
 
   return { status: "sent", email, sentAt: Date.now(), resendAfter: RESEND_AFTER_SECONDS };
+}
+
+// Open, or closed but with its first shift still to come, so volunteers
+// can cancel.
+async function canUseForm(form: Parameters<typeof formPhase>[0] & { date: Date }) {
+  const phase = formPhase(form);
+  if (phase === "open") return true;
+  if (phase !== "closed") return false;
+  const day = toDay(form.date);
+  const shifts = (await offeredShifts([day])).get(day) ?? [];
+  return new Date() < cancelDeadline(day, shifts);
 }
 
 const codeErrors = {

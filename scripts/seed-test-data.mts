@@ -54,6 +54,17 @@ async function clean() {
   await prisma.groupMember.deleteMany({ where: { registration: registrations } });
   await prisma.signup.deleteMany({ where: { registration: registrations } });
   await prisma.registration.deleteMany({ where: registrations });
+  // Signups through test forms or by test volunteers, which block deleting
+  // either, then the volunteers and forms themselves.
+  await prisma.formSignup.deleteMany({
+    where: {
+      OR: [
+        { form: { description: { startsWith: TEST_PREFIX } } },
+        { volunteer: { email: { endsWith: TEST_DOMAIN } } },
+      ],
+    },
+  });
+  await prisma.volunteer.deleteMany({ where: { email: { endsWith: TEST_DOMAIN } } });
   await prisma.build.deleteMany({ where: { id: { in: buildIds } } });
   const forms = await prisma.signupForm.deleteMany({
     where: { description: { startsWith: TEST_PREFIX } },

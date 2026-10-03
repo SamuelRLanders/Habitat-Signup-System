@@ -60,6 +60,10 @@ export default async function SignupFormPage({
               <PhaseBadge phase={phase} />
             </div>
             <p className="text-sm text-muted-foreground">{phaseNote(phase, form)}</p>
+            <p className="text-sm">
+              {form.signupCount} {form.signupCount === 1 ? "volunteer has" : "volunteers have"} signed up
+              {spots > 0 && ` of ${spots} ${spots === 1 ? "spot" : "spots"}`}.
+            </p>
           </div>
 
           <div className="flex flex-wrap items-start gap-2">
@@ -70,7 +74,11 @@ export default async function SignupFormPage({
             >
               Edit form
             </Link>
-            <StatusActions formId={form.id} status={form.status} />
+            <StatusActions
+              formId={form.id}
+              status={form.status}
+              signupCount={form.signupCount}
+            />
           </div>
         </div>
 
@@ -176,11 +184,34 @@ export default async function SignupFormPage({
 }
 
 // Drafts can be published or deleted; published forms can be unpublished.
-function StatusActions({ formId, status }: { formId: string; status: FormStatus }) {
+function StatusActions({
+  formId,
+  status,
+  signupCount,
+}: {
+  formId: string;
+  status: FormStatus;
+  signupCount: number;
+}) {
   const setStatus = (next: FormStatus) => setSignupFormStatus.bind(null, formId, next);
 
   if (status === "PUBLISHED") {
-    return <ActionButton action={setStatus("DRAFT")} label="Unpublish" />;
+    return (
+      <ActionButton
+        action={setStatus("DRAFT")}
+        label="Unpublish"
+        confirm={
+          signupCount > 0
+            ? {
+                title: "Unpublish this form?",
+                description:
+                  "Volunteers have signed up. Their signups are kept, but they won't be able to see, update or cancel them until the form is published again.",
+                confirmLabel: "Unpublish",
+              }
+            : undefined
+        }
+      />
+    );
   }
   return (
     <>

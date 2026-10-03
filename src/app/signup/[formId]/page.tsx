@@ -1,16 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { EmailCodeForm } from "@/components/email-code-form";
 import { PublicHeader } from "@/components/public-header";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  forgetVerifiedEmail,
-  sendSignupCode,
-  verifySignupCode,
-} from "@/lib/email-verification/actions";
-import { getVerifiedEmail } from "@/lib/email-verification/session";
 import { formPhase } from "@/lib/signup-forms/phase";
 import { getPublicForm, type OfferedShift } from "@/lib/signup-forms/queries";
 import {
@@ -20,6 +12,7 @@ import {
   formatWeekdayTime,
   timeZoneLabel,
 } from "@/lib/time";
+import { SignupArea } from "./signup-area";
 
 export async function generateMetadata({
   params,
@@ -30,7 +23,8 @@ export async function generateMetadata({
 }
 
 // A build day's public signup form. Volunteers can look it over once it's
-// published, sign up while it's open, and see that it's closed afterwards.
+// published and sign up while it's open. After it closes it says so, and
+// those who signed up can still cancel until the day's first shift.
 export default async function SignupFormPage({
   params,
 }: PageProps<"/signup/[formId]">) {
@@ -39,7 +33,6 @@ export default async function SignupFormPage({
   if (!form) notFound();
 
   const phase = formPhase(form);
-  const verifiedEmail = await getVerifiedEmail();
   const at = (date: Date) => formatWeekdayTime(date, DEFAULT_TIME_ZONE);
 
   return (
@@ -58,13 +51,16 @@ export default async function SignupFormPage({
         </header>
 
         {phase === "closed" ? (
-          <Notice title="This form has closed">
-            Signups for this build day ended {at(form.closesAt)}.{" "}
-            <Link href="/" className="underline underline-offset-4">
-              See other build days
-            </Link>
-            .
-          </Notice>
+          <>
+            <Notice title="This form has closed">
+              Signups for this build day ended {at(form.closesAt)}.{" "}
+              <Link href="/" className="underline underline-offset-4">
+                See other build days
+              </Link>
+              .
+            </Notice>
+            <SignupArea form={form} phase={phase} />
+          </>
         ) : (
           <>
             {phase === "not-open" && (
@@ -80,57 +76,10 @@ export default async function SignupFormPage({
 
             <Shifts shifts={form.shifts} />
 
-            {phase === "open" && (
-              <section className="flex flex-col gap-4" aria-labelledby="signup-heading">
-                <h2 id="signup-heading" className="text-lg font-semibold">
-                  Sign up
-                </h2>
-                {verifiedEmail ? (
-                  <>
-                    <VerifiedEmail email={verifiedEmail} />
-                    <Card>
-                      <CardContent className="py-6 text-center text-muted-foreground">
-                        The rest of the signup form is almost ready. Check
-                        back soon.
-                      </CardContent>
-                    </Card>
-                  </>
-                ) : (
-                  <div className="flex flex-col gap-4 rounded-xl p-5 ring-1 ring-foreground/10">
-                    <p className="text-sm text-muted-foreground">
-                      First, confirm your email address. We&apos;ll send you a
-                      6-digit code. You don&apos;t need an account.
-                    </p>
-                    <EmailCodeForm
-                      sendAction={sendSignupCode.bind(null, form.id)}
-                      verifyAction={verifySignupCode}
-                      verifyLabels={{ idle: "Continue", pending: "Checking…" }}
-                      restartHref={`/signup/${form.id}`}
-                    />
-                  </div>
-                )}
-              </section>
-            )}
+            <SignupArea form={form} phase={phase} />
           </>
         )}
       </main>
-    </div>
-  );
-}
-
-// The email this browser confirmed, with a way to switch to another, such
-// as on a shared computer.
-function VerifiedEmail({ email }: { email: string }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-l-4 border-gold bg-gold/15 px-4 py-3 text-sm">
-      <span>
-        Signing up as <strong>{email}</strong>
-      </span>
-      <form action={forgetVerifiedEmail}>
-        <Button type="submit" variant="outline" size="sm">
-          Not you? Use a different email
-        </Button>
-      </form>
     </div>
   );
 }

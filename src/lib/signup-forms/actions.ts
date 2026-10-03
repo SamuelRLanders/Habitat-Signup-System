@@ -156,12 +156,22 @@ export async function updateSignupForm(
 
   const existing = await prisma.signupForm.findUnique({
     where: { id: formId },
-    select: { date: true },
+    select: {
+      date: true,
+      _count: { select: { signups: { where: { cancelledAt: null } } } },
+    },
   });
   if (!existing) return { errors: { form: "This form no longer exists." } };
 
   const parsed = parseSignupForm(formData, toDay(existing.date));
   if (!parsed.ok) return parsed.state;
+
+  // Volunteers chose shifts on this day, so it has to stay put.
+  if (existing._count.signups > 0 && parsed.values.date.getTime() !== existing.date.getTime()) {
+    return {
+      errors: { date: "Volunteers have signed up for this day, so the form can't move to another one." },
+    };
+  }
 
   const taken = await dateTaken(parsed.values.date, formId);
   if (taken) return { errors: { date: taken } };
@@ -226,16 +236,19 @@ export async function setSignupFormStatus(
 }
 
 // Only drafts can be deleted, so a form volunteers might have the link to
-// doesn't vanish by accident.
+// doesn't vanish by accident, and only if nobody has signed up through it.
 export async function deleteSignupForm(formId: string): Promise<ActionState> {
   await requireAdmin();
 
   const form = await prisma.signupForm.findUnique({
     where: { id: formId },
-    select: { status: true },
+    select: { status: true, _count: { select: { signups: true } } },
   });
   if (form?.status === "PUBLISHED") {
     return { error: "Unpublish the form before deleting it." };
+  }
+  if (form && form._count.signups > 0) {
+    return { error: "Volunteers have signed up through this form, so it can't be deleted." };
   }
 
   await prisma.signupForm.deleteMany({ where: { id: formId } });

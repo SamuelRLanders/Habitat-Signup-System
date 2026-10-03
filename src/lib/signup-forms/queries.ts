@@ -114,13 +114,15 @@ export async function getSignupForm(formId: string) {
         orderBy: { position: "asc" },
         select: { id: true, title: true, body: true },
       },
+      _count: { select: { signups: { where: { cancelledAt: null } } } },
     },
   });
   if (!form) return null;
 
+  const { _count, ...rest } = form;
   const day = toDay(form.date);
   const shifts = (await offeredShifts([day])).get(day) ?? [];
-  return { ...form, day, shifts };
+  return { ...rest, day, shifts, signupCount: _count.signups };
 }
 
 // The forms for some days, by day, for linking to them from a build.
@@ -167,6 +169,10 @@ export const getPublicForm = cache(async (formId: string) => {
       description: true,
       opensAt: true,
       closesAt: true,
+      sections: {
+        orderBy: { position: "asc" },
+        select: { id: true, title: true, body: true },
+      },
     },
   });
   if (!form) return null;

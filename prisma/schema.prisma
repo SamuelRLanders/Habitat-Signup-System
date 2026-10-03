@@ -227,8 +227,9 @@ model Shift {
   buildId String
   build   Build  @relation(fields: [buildId], references: [id], onDelete: Cascade)
 
-  signups  Signup[]
-  messages Message[]
+  signups     Signup[]
+  preferences ShiftPreference[]
+  messages    Message[]
 
   @@index([buildId, startsAt])
 }
@@ -259,6 +260,7 @@ model SignupForm {
   createdBy     User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   sections FormSection[]
+  signups  FormSignup[]
 
   @@index([status, date])
 }
@@ -275,6 +277,69 @@ model FormSection {
   form   SignupForm @relation(fields: [formId], references: [id], onDelete: Cascade)
 
   @@index([formId, position])
+}
+
+// ─── Volunteers & form signups ───────────────────────────────────────────────
+
+// Someone who has signed up through a signup form, identified by the email
+// address they confirmed. Their details are the ones from their latest
+// signup, and fill in the next form they open.
+model Volunteer {
+  id                String     @id @default(cuid())
+  email             String     @unique // lowercased
+  firstName         String
+  lastName          String
+  phone             String // E.164, e.g. +17655550123
+  dateOfBirth       DateTime   @db.Date
+  tShirtSize        TShirtSize
+  hasDriversLicense Boolean
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  signups FormSignup[]
+}
+
+// A volunteer's signup for a build day, through its form. It keeps a copy
+// of the details as they were last submitted for this form. Cancelling
+// keeps the row; signing up again reuses it.
+model FormSignup {
+  id                String     @id @default(cuid())
+  firstName         String
+  lastName          String
+  phone             String // E.164
+  dateOfBirth       DateTime   @db.Date
+  tShirtSize        TShirtSize
+  hasDriversLicense Boolean
+  cancelledAt       DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  // Forms with signups can't be deleted, so this never cascades.
+  formId String
+  form   SignupForm @relation(fields: [formId], references: [id], onDelete: Restrict)
+
+  volunteerId String
+  volunteer   Volunteer @relation(fields: [volunteerId], references: [id], onDelete: Restrict)
+
+  preferences ShiftPreference[]
+
+  @@unique([formId, volunteerId])
+  @@index([volunteerId])
+}
+
+// A shift a volunteer said they could work. Admins use these to place
+// volunteers. A preference for a shift that's since been cancelled, or
+// moved to another day, is ignored but kept, so it counts again if the
+// shift is restored.
+model ShiftPreference {
+  signupId String
+  signup   FormSignup @relation(fields: [signupId], references: [id], onDelete: Cascade)
+
+  shiftId String
+  shift   Shift  @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@id([signupId, shiftId])
+  @@index([shiftId])
 }
 
 // ─── Volunteer email verification ────────────────────────────────────────────
