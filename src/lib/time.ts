@@ -80,6 +80,22 @@ export function formatDateRange(start: Date, end: Date, timeZone: string) {
   return format.formatRange(start, end);
 }
 
+// "Mon, Oct 5 at 9:00 AM", for times in the next few months.
+export function formatWeekdayTime(date: Date, timeZone: string) {
+  const day = date.toLocaleDateString("en-US", {
+    timeZone,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+  const time = date.toLocaleTimeString("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `${day} at ${time}`;
+}
+
 // "Sep 24, 2026, 3:15 PM"
 export function formatDateTime(date: Date, timeZone: string) {
   return date.toLocaleString("en-US", {

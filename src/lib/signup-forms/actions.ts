@@ -28,11 +28,10 @@ import { offeredShifts, today } from "./queries";
 // anyone who sends a POST request, not only through our forms. IDs bound to
 // an action are also sent by the browser, so they're treated as untrusted.
 
-// Forms show up on admin pages (including each build's page) and, once
-// published, on the home page.
+// Forms show up on admin pages, including each build's page. The public
+// pages are rendered for each request, so they're always current.
 function revalidateForms() {
   revalidatePath("/admin", "layout");
-  revalidatePath("/");
 }
 
 // ─── Creating and editing ────────────────────────────────────────────────────

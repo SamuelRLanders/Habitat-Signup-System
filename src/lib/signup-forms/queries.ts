@@ -1,9 +1,12 @@
 import "server-only";
+import { connection } from "next/server";
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { addDays, DEFAULT_TIME_ZONE, fromDay, toDateInput, toDay } from "@/lib/time";
 
 // Read queries for signup forms. The admin callers must run requireAdmin()
-// first; these functions don't check who is asking.
+// first; these functions don't check who is asking. The public ones only
+// return published forms.
 
 const HOUR = 60 * 60 * 1000;
 
@@ -128,3 +131,47 @@ export async function formsOnDays(days: string[]) {
   });
   return new Map(forms.map((form) => [toDay(form.date), form]));
 }
+
+// ─── Public ──────────────────────────────────────────────────────────────────
+// Whether a form is open depends on the time, so these wait for a request
+// rather than being rendered once at build time.
+
+// Published forms that haven't closed, soonest first, with the builds their
+// shifts are at.
+export async function listPublicForms() {
+  await connection();
+  const forms = await prisma.signupForm.findMany({
+    where: { status: "PUBLISHED", closesAt: { gt: new Date() } },
+    orderBy: { date: "asc" },
+    select: { id: true, date: true, status: true, opensAt: true, closesAt: true },
+  });
+
+  const shifts = await offeredShifts(forms.map((form) => toDay(form.date)));
+  return forms.map((form) => {
+    const day = toDay(form.date);
+    const builds = new Map((shifts.get(day) ?? []).map((s) => [s.build.id, s.build.name]));
+    return { ...form, day, buildNames: [...builds.values()] };
+  });
+}
+
+// A published form and its shifts, or null for a draft or an unknown ID.
+// cache() shares the lookup between the page and its metadata.
+export const getPublicForm = cache(async (formId: string) => {
+  await connection();
+  const form = await prisma.signupForm.findUnique({
+    where: { id: formId, status: "PUBLISHED" },
+    select: {
+      id: true,
+      date: true,
+      status: true,
+      description: true,
+      opensAt: true,
+      closesAt: true,
+    },
+  });
+  if (!form) return null;
+
+  const day = toDay(form.date);
+  const shifts = (await offeredShifts([day])).get(day) ?? [];
+  return { ...form, day, shifts };
+});
