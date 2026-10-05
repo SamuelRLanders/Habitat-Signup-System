@@ -30,3 +30,34 @@ export function ageOn(dateOfBirth: Date, day: string) {
 export function shirtLabel(size: TShirtSize) {
   return T_SHIRT_SIZES.find((option) => option.value === size)?.label ?? size;
 }
+
+// Purdue's driver approval form. Volunteers who'll drive for us must be
+// approved through it; admins then record the approval on the Drivers page.
+export const DRIVER_APPROVAL_URL =
+  "https://enroll.sambasafety.com/index.html?Z3VpZD1iNzE0MGNjYmQwYjM0NGExYTU4ODE4MzU4OTQzZGNjOSZmbG93LWlkPWRkMGE5Mjg2LTE5YTUtNDE0My1hOGFkLWZhNDM4MjNlOGM2MiZ0ZW5hbnQtaWQ9ZmNiYWZlNTItMDYyNi00MDQ3LWE4YTMtN2RmYTZjYWU3MTVj";
+
+export const TRANSPORTATION_OPTIONS = [
+  { value: "NEEDS_RIDE", label: "I need a ride to the site" },
+  { value: "OWN_WAY", label: "I can get to the site on my own" },
+  { value: "CAN_DRIVE", label: "I can help drive other volunteers" },
+] as const;
+
+// "Needs a ride", for admin lists.
+export const TRANSPORTATION_SHORT = {
+  NEEDS_RIDE: "Needs a ride",
+  OWN_WAY: "Own way",
+  CAN_DRIVE: "Can drive",
+} as const;
+
+// A volunteer's driver approval: none, pending since they said they filled
+// out the form, or approved through a day ("2027-10-05").
+export type DriverStatus =
+  | { status: "none" }
+  | { status: "pending" }
+  | { status: "approved"; until: string };
+
+// "4 seats", or "No car" for 0.
+export function seatsLabel(seats: number) {
+  if (seats === 0) return "No car";
+  return `${seats} ${seats === 1 ? "seat" : "seats"}`;
+}

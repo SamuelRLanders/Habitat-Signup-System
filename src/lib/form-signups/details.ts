@@ -42,7 +42,29 @@ export const detailsSchema = z.object({
 });
 
 export type DetailsField = keyof z.input<typeof detailsSchema>;
-export type SignupField = DetailsField | "shifts";
+// The other questions: the builds, the driver approval form (only for
+// volunteers with a license who aren't approved or pending), how they're
+// getting there, and their car's seats (only if they'll drive others).
+export type SignupField = DetailsField | "shifts" | "driverForm" | "transportation" | "carSeats";
+
+export const transportationSchema = z.enum(
+  ["NEEDS_RIDE", "OWN_WAY", "CAN_DRIVE"],
+  "Tell us how you're getting to the build site.",
+);
+
+export const driverFormSchema = z.enum(
+  ["done", "not-done"],
+  "Tell us whether you've filled out the driver approval form.",
+);
+
+export const MAX_CAR_SEATS = 15;
+
+// Seats in their car, counting the driver's; 0 means no car.
+export const carSeatsSchema = z
+  .string("Tell us how many seats your car has.")
+  .regex(/^\d{1,2}$/, "Tell us how many seats your car has.")
+  .transform(Number)
+  .refine((seats) => seats <= MAX_CAR_SEATS, `Enter at most ${MAX_CAR_SEATS} seats.`);
 
 // Whether someone born on dateOfBirth ("2008-10-11") is old enough on day
 // ("2026-10-10"). Dates are compared as YYYY-MM-DD strings, which sort the

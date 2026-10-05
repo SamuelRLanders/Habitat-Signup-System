@@ -39,10 +39,12 @@ const day = (date: string) => new Date(`${date}T00:00:00Z`);
 async function clean() {
   const testEmail = { endsWith: TEST_DOMAIN };
   const testForm = { description: { startsWith: TEST_PREFIX } };
-  // Signups block deleting their forms and volunteers, so they go first.
+  // Signups and driver approvals block deleting their forms and
+  // volunteers, so they go first.
   await prisma.formSignup.deleteMany({
     where: { OR: [{ form: testForm }, { volunteer: { email: testEmail } }] },
   });
+  await prisma.driverApproval.deleteMany({ where: { volunteer: { email: testEmail } } });
   const volunteers = await prisma.volunteer.deleteMany({ where: { email: testEmail } });
   const builds = await prisma.build.deleteMany({ where: { name: { startsWith: TEST_PREFIX } } });
   const forms = await prisma.signupForm.deleteMany({ where: testForm });
@@ -225,6 +227,7 @@ async function seed() {
     who: Awaited<ReturnType<typeof volunteer>>,
     form: { id: string } | null,
     shifts: { id: string }[],
+    transportation: "NEEDS_RIDE" | "OWN_WAY" | "CAN_DRIVE",
     cancelled = false,
   ) => {
     if (!form) return;
@@ -237,6 +240,8 @@ async function seed() {
         dateOfBirth,
         tShirtSize,
         hasDriversLicense,
+        transportation,
+        carSeats: transportation === "CAN_DRIVE" ? who.carSeats : null,
         formId: form.id,
         volunteerId: who.id,
         cancelledAt: cancelled ? new Date() : null,
@@ -248,18 +253,41 @@ async function seed() {
   const alice = await volunteer("alice", { first: "Alice", last: "Nguyen", shirt: "S", license: true, birthday: "1992-04-11" });
   const ben = await volunteer("ben", { first: "Ben", last: "Okafor", shirt: "L", license: true, birthday: "1985-09-02" });
   const carmen = await volunteer("carmen", { first: "Carmen", last: "Diaz", shirt: "M", license: false, birthday: "1978-01-23" });
-  const dana = await volunteer("dana", { first: "Dana", last: "Reyes", shirt: "XL", license: false, birthday: "2004-12-01" });
+  const dana = await volunteer("dana", { first: "Dana", last: "Reyes", shirt: "XL", license: true, birthday: "2004-12-01" });
   const eli = await volunteer("eli", { first: "Eli", last: "Brooks", shirt: "XL", license: true, birthday: "2000-06-30" });
+
+  // Drivers: Alice is approved, Ben and Eli are waiting for approval (Eli
+  // asked after a past approval ran out), and Dana has a license but hasn't
+  // filled out Purdue's form.
+  const daysAgo = (days: number) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const approve = (who: { id: string }, until: string, ago: number) =>
+    prisma.driverApproval.create({
+      data: {
+        volunteerId: who.id,
+        decision: "APPROVED",
+        requestedAt: daysAgo(ago + 5),
+        decidedAt: daysAgo(ago),
+        approvedUntil: day(until),
+        decidedByName: admin.name,
+        decidedById: admin.id,
+      },
+    });
+  await approve(alice, "2027-06-30", 90);
+  await approve(eli, "2026-09-15", 380);
+  await prisma.volunteer.update({ where: { id: alice.id }, data: { carSeats: 5 } });
+  await prisma.volunteer.update({ where: { id: ben.id }, data: { driverRequestedAt: daysAgo(3), carSeats: 7 } });
+  await prisma.volunteer.update({ where: { id: eli.id }, data: { driverRequestedAt: daysAgo(1), carSeats: 0 } });
+  const withCar = async (who: { id: string }) => prisma.volunteer.findUniqueOrThrow({ where: { id: who.id } });
 
   const [mapleOct10] = maple.shifts;
   const [cedarOct10] = cedar.shifts;
-  await signUp(alice, oct10, [mapleOct10, cedarOct10]);
-  await signUp(ben, oct10, [mapleOct10]);
-  await signUp(carmen, oct10, [cedarOct10]);
-  await signUp(eli, oct10, [mapleOct10, cedarOct10]);
-  await signUp(dana, oct10, [mapleOct10], true);
-  await signUp(alice, aug15, [summer.shifts[0]]);
-  await signUp(carmen, aug15, [summer.shifts[0]]);
+  await signUp(await withCar(alice), oct10, [mapleOct10, cedarOct10], "CAN_DRIVE");
+  await signUp(await withCar(ben), oct10, [mapleOct10], "CAN_DRIVE");
+  await signUp(carmen, oct10, [cedarOct10], "NEEDS_RIDE");
+  await signUp(await withCar(eli), oct10, [mapleOct10, cedarOct10], "OWN_WAY");
+  await signUp(dana, oct10, [mapleOct10], "NEEDS_RIDE", true);
+  await signUp(alice, aug15, [summer.shifts[0]], "OWN_WAY");
+  await signUp(carmen, aug15, [summer.shifts[0]], "NEEDS_RIDE");
 
   console.log(`
 Test data created. See it at ${SITE}/admin/forms, ${SITE}/admin/builds
@@ -278,6 +306,10 @@ with Maple).
 
 Volunteers: alice, ben, carmen, dana and eli @example.org. Open the Oct 10
 form with one of them to see, update or cancel their signup.
+
+Drivers (${SITE}/admin/drivers): Alice approved through Jun 30, 2027;
+Ben and Eli pending (Eli's earlier approval expired Sep 15); Dana has a
+license but isn't approved.
 
 Remove it all with: npm run seed:test -- --clean`);
 }

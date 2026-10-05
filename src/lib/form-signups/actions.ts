@@ -1,13 +1,22 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { driverStatuses } from "@/lib/drivers/status";
 import { getVerifiedEmail } from "@/lib/email-verification/session";
 import { firstErrors, formValues, type ActionState } from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
 import { formPhase } from "@/lib/signup-forms/phase";
 import { offeredShifts, totalSpots } from "@/lib/signup-forms/queries";
 import { fromDay, toDay } from "@/lib/time";
-import { detailsSchema, oldEnoughOn, TOO_YOUNG, type SignupField } from "./details";
+import {
+  carSeatsSchema,
+  detailsSchema,
+  driverFormSchema,
+  oldEnoughOn,
+  TOO_YOUNG,
+  transportationSchema,
+  type SignupField,
+} from "./details";
 import { sendCancellation, sendSignupConfirmation } from "./emails";
 import { cancelDeadline } from "./queries";
 
@@ -57,14 +66,43 @@ export async function submitSignup(
   }
 
   // ── Check the answers.
-  const parsed = detailsSchema.safeParse(formValues(formData));
+  const values = formValues(formData);
+  const parsed = detailsSchema.safeParse(values);
   const shiftIds = [...new Set(formData.getAll("shiftId").map(String))];
   const errors: SignupFormState["errors"] = parsed.success ? {} : firstErrors(parsed.error);
   if (shiftIds.length === 0) errors.shifts = "Choose at least one build you could work at.";
   if (parsed.success && !oldEnoughOn(parsed.data.dateOfBirth, form.day)) {
     errors.dateOfBirth = TOO_YOUNG;
   }
-  if (!parsed.success || Object.keys(errors).length > 0) return { errors };
+
+  // Driving. Volunteers with a license who aren't approved or pending are
+  // asked whether they've filled out Purdue's driver approval form; only
+  // drivers who are approved or pending (counting a "yes" just now) can
+  // offer to drive others, and then they give their car's seats.
+  const hasLicense = values.hasDriversLicense === "yes";
+  const known = await prisma.volunteer.findUnique({ where: { email }, select: { id: true } });
+  const driver = known
+    ? (await driverStatuses([known.id])).get(known.id)!
+    : { status: "none" as const };
+  const askDriverForm = hasLicense && driver.status === "none";
+  const driverForm = askDriverForm ? driverFormSchema.safeParse(values.driverForm) : null;
+  if (driverForm && !driverForm.success) errors.driverForm = driverForm.error.issues[0].message;
+  const nowPending = driverForm?.success && driverForm.data === "done";
+
+  const transportation = transportationSchema.safeParse(values.transportation);
+  if (!transportation.success) errors.transportation = transportation.error.issues[0].message;
+  const drives = transportation.success && transportation.data === "CAN_DRIVE";
+  if (drives && !(hasLicense && (driver.status !== "none" || nowPending))) {
+    errors.transportation =
+      "Only volunteers with a driver's license who are approved or waiting for approval can drive others.";
+  }
+  const carSeats = drives ? carSeatsSchema.safeParse(values.carSeats) : null;
+  if (carSeats && !carSeats.success) errors.carSeats = carSeats.error.issues[0].message;
+
+  if (!parsed.success || !transportation.success || Object.keys(errors).length > 0) {
+    return { errors };
+  }
+  const seats = carSeats?.success ? carSeats.data : null;
 
   const offered = new Map(form.shifts.map((shift) => [shift.id, shift]));
   if (!shiftIds.every((id) => offered.has(id))) {
@@ -97,16 +135,23 @@ export async function submitSignup(
           if (taken >= capacity) return { full: true as const };
         }
 
-        // Their latest details, for the next form they fill out.
+        // Their latest details, for the next form they fill out. Saying
+        // they've filled out the driver form makes their approval pending.
+        const latest = {
+          ...details,
+          ...(nowPending && { driverRequestedAt: new Date() }),
+          ...(seats !== null && { carSeats: seats }),
+        };
         const volunteer = await tx.volunteer.upsert({
           where: { email },
-          create: { email, ...details },
-          update: details,
+          create: { email, ...latest },
+          update: latest,
         });
+        const answers = { ...details, transportation: transportation.data, carSeats: seats };
         const signup = await tx.formSignup.upsert({
           where: { formId_volunteerId: { formId, volunteerId: volunteer.id } },
-          create: { formId, volunteerId: volunteer.id, ...details },
-          update: { ...details, cancelledAt: null },
+          create: { formId, volunteerId: volunteer.id, ...answers },
+          update: { ...answers, cancelledAt: null },
         });
 
         // Replace their choices among the shifts offered now. Choices for

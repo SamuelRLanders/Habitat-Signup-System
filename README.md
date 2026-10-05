@@ -8,7 +8,8 @@ A web app for the Purdue Habitat for Humanity chapter. Volunteer organization le
 - See published build days on the home page, each with its shifts, builds and addresses
 - Before a form opens, look over the day; after it closes, see that it's closed
 - Confirm an email address with an emailed 6-digit code, remembered on that browser for 2 hours
-- Fill out the form: name, phone, birthday, T-shirt size, driver's license, and every shift that day they could work. Read the form's sections, such as which waivers to sign and links to them.
+- Fill out the form in steps: name, phone, birthday, T-shirt size and driver's license; every build that day they could work at; Purdue driver approval (if they have a license); how they're getting there; their car's seats (if they'll drive others); then each waiver.
+- Licensed volunteers are asked to fill out Purdue's driver approval form. Saying they did makes their approval pending, and only pending or approved drivers can offer to drive others.
 - Volunteers must be 18 or older on the build day
 - Details are filled in from their last signup
 - Update their signup while the form is open, and cancel it until the day's first shift starts, with an email each time
@@ -20,6 +21,9 @@ A web app for the Purdue Habitat for Humanity chapter. Volunteer organization le
 - See each form's volunteers, the shifts each could work, how many are willing to work each shift, and T-shirt and driver's license totals. Download them as a CSV with a column per shift.
 - See who's willing to work each shift
 - Search and filter every volunteer on the People page, and download them as a CSV
+- Approve pending drivers through an end date (suggested a year after they asked), decline them, or revoke an approval on the Drivers page. Each decision records the admin's name, and approved drivers are emailed.
+- Check drivers against Purdue's approved driver list: download ApprovedDrivers.xlsx from Purdue's SharePoint, upload it on the Drivers page, and approve the matches (by email, or by name to double-check) with their Purdue end dates. Approved drivers Purdue has renewed can be extended. The file isn't kept.
+- See each volunteer's driver status and how they're getting there on the rosters, with ride and seat totals
 - Cancel and restore builds and shifts. Cancelled ones disappear from forms, and volunteers' choices of them come back if they're restored.
 
 ## Tech Stack
@@ -46,6 +50,7 @@ A web app for the Purdue Habitat for Humanity chapter. Volunteer organization le
 - **Volunteer**: someone who has signed up, identified by the email they confirmed, with their latest details
 - **FormSignup**: a volunteer's signup for a build day, with a copy of the details they submitted for it. Cancelling keeps the row.
 - **ShiftPreference**: a shift a volunteer said they could work
+- **DriverApproval**: an admin's approval (through an end date) or decline of a volunteer's Purdue driver approval, with the admin's name. A volunteer is pending while `Volunteer.driverRequestedAt` is set.
 - **VolunteerCode**, **VolunteerSession**: the codes volunteers confirm their email with, and the 2-hour browser sessions that follow (both stored hashed)
 - **Message**, **MessageRecipient**: for emails admins will send to volunteers (not built yet)
 
@@ -95,6 +100,7 @@ npm run dev                # http://localhost:3000
 - `src/lib/email-verification/`: volunteers' email codes and 2-hour sessions
 - `src/lib/builds/`: build and shift queries and Server Actions
 - `src/lib/admin/`: the People page's search and queries
+- `src/lib/drivers/`: driver approval status, the Drivers page's queries, and approve/decline/revoke
 - `src/lib/auth/`: admin sign-in (Better Auth config, `requireAdmin()`, the sign-in Server Actions, and code rate limits)
 - `src/lib/time.ts`: time zone conversion and date formatting (shift times are stored in UTC)
 - `src/proxy.ts`: redirects signed-out visitors away from `/admin`

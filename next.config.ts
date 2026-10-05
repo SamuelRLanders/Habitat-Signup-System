@@ -1,6 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      // Room for Purdue's approved driver spreadsheet, uploaded on the
+      // Drivers page. (Vercel accepts request bodies up to 4.5MB.)
+      bodySizeLimit: "4mb",
+    },
+  },
   async redirects() {
     return [
       // The admin Volunteers tab was renamed People.

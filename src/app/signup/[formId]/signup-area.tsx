@@ -20,7 +20,8 @@ import { formatPhone } from "@/lib/phone";
 import type { FormPhase } from "@/lib/signup-forms/phase";
 import { shiftLabel, shiftTime, type OfferedShift } from "@/lib/signup-forms/queries";
 import { formatDay, fromDay } from "@/lib/time";
-import { shirtLabel } from "@/lib/volunteers";
+import { seatsLabel, shirtLabel, TRANSPORTATION_OPTIONS } from "@/lib/volunteers";
+import type { Transportation } from "@/generated/prisma/enums";
 import { SignupFields, type BuildChoice, type DetailsDefaults } from "./signup-fields";
 import { SignupPanel } from "./signup-panel";
 
@@ -68,14 +69,17 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
   const mine = await getMySignup(form.id, email);
   const active = mine?.signup && !mine.signup.cancelledAt ? mine.signup : null;
 
-  const fields = (submitLabel: string, chosenIds: string[]) => (
+  const fields = (submitLabel: string, editing: boolean) => (
     <SignupFields
       action={submitSignup.bind(null, form.id)}
       sections={form.sections}
       builds={form.shifts.map(toChoice)}
       defaults={mine ? toDefaults(mine.details) : null}
-      chosenIds={chosenIds}
-      editing={chosenIds.length > 0}
+      chosenIds={editing ? (active?.shiftIds ?? []) : []}
+      transportation={editing ? (active?.transportation ?? null) : null}
+      driver={mine?.driver ?? { status: "none" }}
+      savedCarSeats={mine?.carSeats ?? null}
+      editing={editing}
       submitLabel={submitLabel}
     />
   );
@@ -86,9 +90,16 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
       <SignupPanel
         key={active.updatedAt.getTime()}
         summary={
-          <Summary email={email} details={mine!.details} shifts={form.shifts} chosen={active.shiftIds} />
+          <Summary
+            email={email}
+            details={mine!.details}
+            shifts={form.shifts}
+            chosen={active.shiftIds}
+            transportation={active.transportation}
+            carSeats={mine!.carSeats}
+          />
         }
-        editForm={open ? fields("Save changes", active.shiftIds) : null}
+        editForm={open ? fields("Save changes", true) : null}
         cancelButton={
           <ActionButton
             action={cancelSignup.bind(null, form.id)}
@@ -131,7 +142,7 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
               You cancelled your signup for this day. You can sign up again below.
             </p>
           )}
-          {fields("Sign up", [])}
+          {fields("Sign up", false)}
         </>
       );
   }
@@ -186,12 +197,17 @@ function Summary({
   details,
   shifts,
   chosen,
+  transportation,
+  carSeats,
 }: {
   email: string;
   details: MySignup["details"];
   shifts: OfferedShift[];
   chosen: string[];
+  transportation: Transportation | null;
+  carSeats: number | null;
 }) {
+  const getting = TRANSPORTATION_OPTIONS.find((option) => option.value === transportation)?.label;
   // Only shifts still offered: a cancelled shift no longer counts.
   const chosenShifts = shifts.filter((shift) => chosen.includes(shift.id));
   const shirt = shirtLabel(details.tShirtSize);
@@ -227,6 +243,15 @@ function Summary({
         <dd>{shirt}</dd>
         <dt className="text-muted-foreground">Driver&apos;s license</dt>
         <dd>{details.hasDriversLicense ? "Yes" : "No"}</dd>
+        {getting && (
+          <>
+            <dt className="text-muted-foreground">Getting there</dt>
+            <dd>
+              {getting}
+              {transportation === "CAN_DRIVE" && carSeats !== null && ` (${seatsLabel(carSeats).toLowerCase()})`}
+            </dd>
+          </>
+        )}
       </dl>
 
       <div className="flex flex-col gap-2 text-sm">

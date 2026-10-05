@@ -1,4 +1,5 @@
 import "server-only";
+import { driverStatuses } from "@/lib/drivers/status";
 import { prisma } from "@/lib/prisma";
 import { addDays, DEFAULT_TIME_ZONE, toDay, zonedDateTime } from "@/lib/time";
 
@@ -19,6 +20,7 @@ export async function getMySignup(formId: string, email: string) {
       dateOfBirth: true,
       tShirtSize: true,
       hasDriversLicense: true,
+      carSeats: true,
       signups: {
         where: { formId },
         select: {
@@ -29,6 +31,7 @@ export async function getMySignup(formId: string, email: string) {
           dateOfBirth: true,
           tShirtSize: true,
           hasDriversLicense: true,
+          transportation: true,
           cancelledAt: true,
           updatedAt: true,
           preferences: { select: { shiftId: true } },
@@ -39,6 +42,7 @@ export async function getMySignup(formId: string, email: string) {
   if (!volunteer) return null;
 
   const [signup] = volunteer.signups;
+  const driver = (await driverStatuses([volunteer.id])).get(volunteer.id)!;
   // What they last told this form, or else what they told the last one.
   const from = signup ?? volunteer;
   return {
@@ -50,12 +54,15 @@ export async function getMySignup(formId: string, email: string) {
       tShirtSize: from.tShirtSize,
       hasDriversLicense: from.hasDriversLicense,
     },
+    driver,
+    carSeats: volunteer.carSeats,
     signup: signup
       ? {
           id: signup.id,
           cancelledAt: signup.cancelledAt,
           updatedAt: signup.updatedAt,
           shiftIds: signup.preferences.map((p) => p.shiftId),
+          transportation: signup.transportation,
         }
       : null,
   };

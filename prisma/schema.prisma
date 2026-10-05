@@ -41,6 +41,19 @@ enum TShirtSize {
   XXXL
 }
 
+// How a volunteer is getting to the build site, from their signup.
+enum Transportation {
+  NEEDS_RIDE // needs help getting there
+  OWN_WAY // getting there on their own
+  CAN_DRIVE // can drive others (only offered to pending or approved drivers)
+}
+
+// An admin's decision on a volunteer's Purdue driver approval.
+enum DriverDecision {
+  APPROVED
+  DECLINED
+}
+
 enum MessageChannel {
   EMAIL
   SMS
@@ -73,9 +86,10 @@ model User {
   accounts Account[]
 
   // Admin activity.
-  buildsCreated Build[]
-  formsCreated  SignupForm[]
-  messagesSent  Message[]
+  buildsCreated   Build[]
+  formsCreated    SignupForm[]
+  driverDecisions DriverApproval[]
+  messagesSent    Message[]
 }
 
 // ─── Auth (managed by Better Auth) ───────────────────────────────────────────
@@ -252,27 +266,66 @@ model Volunteer {
   dateOfBirth       DateTime   @db.Date
   tShirtSize        TShirtSize
   hasDriversLicense Boolean
+  // When they said on a signup form that they'd filled out Purdue's driver
+  // approval form. Set while their approval is pending; cleared when an
+  // admin approves or declines it.
+  driverRequestedAt DateTime?
+  // Seats in their car, counting the driver's; 0 if they don't have one.
+  // Null until they offer to drive others.
+  carSeats          Int?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
   signups           FormSignup[]
+  driverApprovals   DriverApproval[]
   messageRecipients MessageRecipient[]
+}
+
+// An admin's decision on a volunteer's driver approval, kept as a record.
+// A volunteer is an approved driver while their latest approval hasn't
+// passed its end date or been revoked. Re-approving adds a new row.
+model DriverApproval {
+  id            String         @id @default(cuid())
+  decision      DriverDecision
+  // When the volunteer said they'd filled out the form.
+  requestedAt   DateTime
+  decidedAt     DateTime       @default(now())
+  // The last day they're approved, in Indiana time. Approvals only.
+  approvedUntil DateTime?      @db.Date
+  // An approval ended early by an admin.
+  revokedAt     DateTime?
+  revokedByName String?
+
+  // The admin who decided, with their name copied as on Build.
+  decidedByName String
+  decidedById   String?
+  decidedBy     User?   @relation(fields: [decidedById], references: [id], onDelete: SetNull)
+
+  volunteerId String
+  volunteer   Volunteer @relation(fields: [volunteerId], references: [id], onDelete: Restrict)
+
+  @@index([volunteerId, decidedAt])
+  @@index([decision, approvedUntil])
 }
 
 // A volunteer's signup for a build day, through its form. It keeps a copy
 // of the details as they were last submitted for this form. Cancelling
 // keeps the row; signing up again reuses it.
 model FormSignup {
-  id                String     @id @default(cuid())
+  id                String          @id @default(cuid())
   firstName         String
   lastName          String
   phone             String // E.164
-  dateOfBirth       DateTime   @db.Date
+  dateOfBirth       DateTime        @db.Date
   tShirtSize        TShirtSize
   hasDriversLicense Boolean
+  // Null for signups made before the form asked.
+  transportation    Transportation?
+  // A copy of their car's seats when they offered to drive others.
+  carSeats          Int?
   cancelledAt       DateTime?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   // Forms with signups can't be deleted, so this never cascades.
   formId String

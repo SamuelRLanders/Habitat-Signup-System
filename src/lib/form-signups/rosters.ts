@@ -1,4 +1,5 @@
 import "server-only";
+import { driverStatuses } from "@/lib/drivers/status";
 import { prisma } from "@/lib/prisma";
 import type { OfferedShift } from "@/lib/signup-forms/queries";
 import { fromDay, toDateInput, toDay } from "@/lib/time";
@@ -17,10 +18,12 @@ const rosterSelect = {
   dateOfBirth: true,
   tShirtSize: true,
   hasDriversLicense: true,
+  transportation: true,
+  carSeats: true,
   cancelledAt: true,
   createdAt: true,
   updatedAt: true,
-  volunteer: { select: { email: true } },
+  volunteer: { select: { id: true, email: true } },
   preferences: { select: { shiftId: true } },
 } as const;
 
@@ -33,9 +36,11 @@ export async function getFormRoster(formId: string, shifts: OfferedShift[]) {
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     select: rosterSelect,
   });
+  const drivers = await driverStatuses(signups.map((s) => s.volunteer.id));
   return signups.map(({ volunteer, preferences, ...signup }) => ({
     ...signup,
     email: volunteer.email,
+    driver: drivers.get(volunteer.id)!,
     shiftIds: preferences.map((p) => p.shiftId).filter((id) => offered.has(id)),
   }));
 }
@@ -59,9 +64,11 @@ export async function getShiftVolunteers(shift: {
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     select: rosterSelect,
   });
+  const drivers = await driverStatuses(signups.map((s) => s.volunteer.id));
   return signups.map(({ volunteer, preferences, ...signup }) => ({
     ...signup,
     email: volunteer.email,
+    driver: drivers.get(volunteer.id)!,
     otherShiftIds: preferences.map((p) => p.shiftId).filter((id) => id !== shift.id),
   }));
 }

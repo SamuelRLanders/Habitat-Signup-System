@@ -93,12 +93,14 @@ export function YesNoField({
   hint,
   defaultValue,
   error,
+  onChange,
 }: {
   field: string;
   label: string;
   hint?: string;
   defaultValue: boolean | null;
   error?: string;
+  onChange?: (value: boolean) => void;
 }) {
   const [value, setValue] = useState(
     defaultValue === null ? null : defaultValue ? "yes" : "no",
@@ -141,7 +143,10 @@ export function YesNoField({
               name={field}
               value={option}
               checked={value === option}
-              onChange={() => setValue(option)}
+              onChange={() => {
+                setValue(option);
+                onChange?.(option === "yes");
+              }}
               className="sr-only"
             />
             {optionLabel}

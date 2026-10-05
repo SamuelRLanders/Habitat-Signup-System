@@ -255,18 +255,32 @@ export default async function SignupFormPage({
   );
 }
 
-// "T-shirts: S 2 · M 5 · L 3 · 4 with a driver's license", for ordering
-// shirts and planning rides.
+// "T-shirts: S 2 · M 5 · L 3" and "3 need a ride · 2 can drive (1 approved,
+// 1 pending), 9 seats", for ordering shirts and planning rides. A driver
+// declined or revoked after signing up counts as no longer approved.
 function Totals({ signups }: { signups: RosterSignup[] }) {
+  const count = (test: (signup: RosterSignup) => boolean) => signups.filter(test).length;
   const sizes = T_SHIRT_SIZES.flatMap((size) => {
-    const count = signups.filter((signup) => signup.tShirtSize === size.value).length;
-    return count > 0 ? [`${size.label} ${count}`] : [];
+    const n = count((signup) => signup.tShirtSize === size.value);
+    return n > 0 ? [`${size.label} ${n}`] : [];
   });
-  const drivers = signups.filter((signup) => signup.hasDriversLicense).length;
+  const drivers = signups.filter((signup) => signup.transportation === "CAN_DRIVE");
+  const approved = drivers.filter((signup) => signup.driver.status === "approved").length;
+  const pending = drivers.filter((signup) => signup.driver.status === "pending").length;
+  const seats = drivers.reduce((sum, signup) => sum + (signup.carSeats ?? 0), 0);
   return (
-    <p className="text-sm text-muted-foreground">
-      T-shirts: {sizes.join(" · ")} · {drivers} with a driver&apos;s license
-    </p>
+    <div className="flex flex-col gap-0.5 text-sm text-muted-foreground">
+      <p>T-shirts: {sizes.join(" · ")}</p>
+      <p>
+        {count((s) => s.transportation === "NEEDS_RIDE")} need a ride ·{" "}
+        {drivers.length} can drive ({approved} approved, {pending} pending
+        {drivers.length - approved - pending > 0 &&
+          `, ${drivers.length - approved - pending} no longer approved`}
+        ),{" "}
+        {seats} {seats === 1 ? "seat" : "seats"} · {count((s) => s.transportation === "OWN_WAY")} getting
+        there on their own
+      </p>
+    </div>
   );
 }
 
