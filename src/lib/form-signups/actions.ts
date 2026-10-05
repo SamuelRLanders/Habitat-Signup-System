@@ -20,10 +20,12 @@ import {
 import { sendCancellation, sendSignupConfirmation } from "./emails";
 import { cancelDeadline } from "./queries";
 
-// Volunteers signing up through a form, changing their signup, and
-// cancelling it. Anyone can post to these, so everything is checked here:
-// the confirmed email comes from the session cookie, never the form, and
-// the form has to be open (or, to cancel, its first shift not started).
+// Volunteers signing up through a form and cancelling their signup. A
+// signup can't be changed (that keeps placing drivers and riders simple):
+// to change it, they cancel and sign up again. Anyone can post to these,
+// so everything is checked here: the confirmed email comes from the
+// session cookie, never the form, and the form has to be open (or, to
+// cancel, its first shift not started).
 
 export type SignupFormState = {
   errors?: Partial<Record<SignupField | "form", string>>;
@@ -50,8 +52,8 @@ async function loadForm(formId: string) {
   return { ...form, day, shifts };
 }
 
-// Signs up, or saves changes to an existing signup. Signing up again after
-// cancelling counts as a new signup.
+// Signs up. Signing up again after cancelling counts as a new signup, but
+// someone already signed up can't sign up again over it.
 export async function submitSignup(
   formId: string,
   _prev: SignupFormState,
@@ -125,15 +127,13 @@ export async function submitSignup(
         // both take its last spot.
         await tx.$queryRaw`SELECT id FROM "SignupForm" WHERE id = ${formId} FOR UPDATE`;
 
-        const existing = await tx.formSignup.findFirst({
-          where: { formId, volunteer: { email } },
-          select: { cancelledAt: true },
+        const active = await tx.formSignup.findFirst({
+          where: { formId, volunteer: { email }, cancelledAt: null },
+          select: { id: true },
         });
-        const isNew = !existing || existing.cancelledAt !== null;
-        if (isNew) {
-          const taken = await tx.formSignup.count({ where: { formId, cancelledAt: null } });
-          if (taken >= capacity) return { full: true as const };
-        }
+        if (active) return { outcome: "already" as const };
+        const taken = await tx.formSignup.count({ where: { formId, cancelledAt: null } });
+        if (taken >= capacity) return { outcome: "full" as const };
 
         // Their latest details, for the next form they fill out. Saying
         // they've filled out the driver form makes their approval pending.
@@ -154,16 +154,13 @@ export async function submitSignup(
           update: { ...answers, cancelledAt: null },
         });
 
-        // Replace their choices among the shifts offered now. Choices for
-        // cancelled shifts are kept, in case those come back.
-        await tx.shiftPreference.deleteMany({
-          where: { signupId: signup.id, shiftId: { in: [...offered.keys()] } },
-        });
+        // Signing up again replaces every choice from the cancelled signup.
+        await tx.shiftPreference.deleteMany({ where: { signupId: signup.id } });
         await tx.shiftPreference.createMany({
           data: shiftIds.map((shiftId) => ({ signupId: signup.id, shiftId })),
         });
 
-        return { full: false as const, updated: !isNew };
+        return { outcome: "saved" as const };
       },
       { timeout: 20_000 },
     );
@@ -172,7 +169,15 @@ export async function submitSignup(
     return { errors: { form: "Something went wrong saving your signup. Please try again in a moment." } };
   }
 
-  if (result.full) {
+  if (result.outcome === "already") {
+    revalidateSignup(formId);
+    return {
+      errors: {
+        form: "You're already signed up for this day. To make changes, cancel your signup and sign up again.",
+      },
+    };
+  }
+  if (result.outcome === "full") {
     revalidateSignup(formId);
     return { errors: { form: "Sorry, this build day just filled up." } };
   }
@@ -185,7 +190,6 @@ export async function submitSignup(
       formId,
       day: form.day,
       shifts: shiftIds.map((id) => offered.get(id)!),
-      updated: result.updated,
     });
   } catch (error) {
     console.error("Failed to send signup confirmation", error);

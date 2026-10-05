@@ -305,7 +305,7 @@ Landscaping, Summer Blitz Build (past) and Cedar Lane Home (shares days
 with Maple).
 
 Volunteers: alice, ben, carmen, dana and eli @example.org. Open the Oct 10
-form with one of them to see, update or cancel their signup.
+form with one of them to see or cancel their signup.
 
 Drivers (${SITE}/admin/drivers): Alice approved through Jun 30, 2027;
 Ben and Eli pending (Eli's earlier approval expired Sep 15); Dana has a

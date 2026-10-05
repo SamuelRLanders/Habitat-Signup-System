@@ -306,7 +306,7 @@ function StatusActions({
             ? {
                 title: "Unpublish this form?",
                 description:
-                  "Volunteers have signed up. Their signups are kept, but they won't be able to see, update or cancel them until the form is published again.",
+                  "Volunteers have signed up. Their signups are kept, but they won't be able to see or cancel them until the form is published again.",
                 confirmLabel: "Unpublish",
               }
             : undefined

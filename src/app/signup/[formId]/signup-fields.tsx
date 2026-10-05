@@ -47,18 +47,12 @@ type SignupFieldsProps = {
   action: (prev: SignupFormState, formData: FormData) => Promise<SignupFormState>;
   sections: { id: string; title: string; body: string }[];
   builds: BuildChoice[];
-  // Saved details to start from, and the earlier answers when changing a
-  // signup.
+  // Saved details to start from.
   defaults: DetailsDefaults | null;
-  chosenIds: string[];
-  transportation: Transportation | null;
   // The volunteer's driver approval, and their car's seats if they've
   // given them before.
   driver: DriverStatus;
   savedCarSeats: number | null;
-  // Changing an existing signup: every step starts out done.
-  editing: boolean;
-  submitLabel: string;
 };
 
 type Errors = Partial<Record<SignupField | "form", string>>;
@@ -94,24 +88,17 @@ export function SignupFields({
   sections,
   builds,
   defaults,
-  chosenIds,
-  transportation: savedTransportation,
   driver,
   savedCarSeats,
-  editing,
-  submitLabel,
 }: SignupFieldsProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const [license, setLicense] = useState(defaults?.hasDriversLicense ?? null);
   const [driverForm, setDriverForm] = useState<"done" | "not-done" | null>(null);
-  const [transport, setTransport] = useState(savedTransportation);
+  const [transport, setTransport] = useState<Transportation | null>(null);
   const [seats, setSeats] = useState(savedCarSeats);
   const [editingSeats, setEditingSeats] = useState(savedCarSeats === null);
   const [name, setName] = useState(defaults ? `${defaults.firstName} ${defaults.lastName}` : "");
-  // Ignore earlier choices for builds that aren't offered anymore.
-  const [chosen, setChosen] = useState(
-    () => new Set(chosenIds.filter((id) => builds.some((b) => b.id === id))),
-  );
+  const [chosen, setChosen] = useState<Set<string>>(() => new Set());
 
   // Only drivers who are approved or waiting for approval (counting a
   // "yes" just now) can offer to drive others.
@@ -129,14 +116,7 @@ export function SignupFields({
   const lastId = steps[steps.length - 1].id;
 
   const [active, setActive] = useState("info");
-  const [done, setDone] = useState<Set<string>>(
-    () =>
-      new Set(
-        editing
-          ? ["info", "builds", "driver", "transport", "car", ...sections.map((s) => `waiver-${s.id}`)]
-          : [],
-      ),
-  );
+  const [done, setDone] = useState<Set<string>>(() => new Set());
   // Problems found before submitting; after submitting, the server's.
   const [stepErrors, setStepErrors] = useState<Errors | null>(null);
 
@@ -269,7 +249,7 @@ export function SignupFields({
               </p>
             )}
             <Button type="submit" size="lg" disabled={pending} className="w-full sm:w-fit">
-              {pending ? "Saving…" : submitLabel}
+              {pending ? "Signing up…" : "Sign up"}
             </Button>
           </div>
         ) : (

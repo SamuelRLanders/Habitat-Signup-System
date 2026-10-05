@@ -23,7 +23,6 @@ import { formatDay, fromDay } from "@/lib/time";
 import { seatsLabel, shirtLabel, TRANSPORTATION_OPTIONS } from "@/lib/volunteers";
 import type { Transportation } from "@/generated/prisma/enums";
 import { SignupFields, type BuildChoice, type DetailsDefaults } from "./signup-fields";
-import { SignupPanel } from "./signup-panel";
 
 type SignupAreaProps = {
   form: {
@@ -37,9 +36,10 @@ type SignupAreaProps = {
 
 // Everything on a form's page below the build details, as a panel for each
 // step: confirming an email, then the signed-in email, then the form (or
-// the volunteer's signup, with Update and Cancel). While the form is open,
-// anyone can sign up. After it closes, volunteers who signed up can still
-// cancel until the day's first shift starts.
+// the volunteer's signup, with Cancel). Signups can't be changed; to change
+// one, volunteers cancel and sign up again. While the form is open, anyone
+// can sign up. After it closes, volunteers who signed up can still cancel
+// until the day's first shift starts.
 export async function SignupArea({ form, phase }: SignupAreaProps) {
   const canCancel = new Date() < cancelDeadline(form.day, form.shifts);
   if (phase !== "open" && !(phase === "closed" && canCancel)) return null;
@@ -69,53 +69,40 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
   const mine = await getMySignup(form.id, email);
   const active = mine?.signup && !mine.signup.cancelledAt ? mine.signup : null;
 
-  const fields = (submitLabel: string, editing: boolean) => (
-    <SignupFields
-      action={submitSignup.bind(null, form.id)}
-      sections={form.sections}
-      builds={form.shifts.map(toChoice)}
-      defaults={mine ? toDefaults(mine.details) : null}
-      chosenIds={editing ? (active?.shiftIds ?? []) : []}
-      transportation={editing ? (active?.transportation ?? null) : null}
-      driver={mine?.driver ?? { status: "none" }}
-      savedCarSeats={mine?.carSeats ?? null}
-      editing={editing}
-      submitLabel={submitLabel}
-    />
-  );
-
   let content;
   if (active) {
     content = (
-      <SignupPanel
-        key={active.updatedAt.getTime()}
-        summary={
-          <Summary
-            email={email}
-            details={mine!.details}
-            shifts={form.shifts}
-            chosen={active.shiftIds}
-            transportation={active.transportation}
-            carSeats={mine!.carSeats}
-          />
-        }
-        editForm={open ? fields("Save changes", true) : null}
-        cancelButton={
+      <Panel title="Your signup">
+        <Summary
+          email={email}
+          details={mine!.details}
+          shifts={form.shifts}
+          chosen={active.shiftIds}
+          transportation={active.transportation}
+          carSeats={mine!.carSeats}
+        />
+        {open && (
+          <p className="text-sm text-muted-foreground">
+            Need to change something? Cancel your signup, then sign up again
+            with your new answers.
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
           <ActionButton
             action={cancelSignup.bind(null, form.id)}
             label="Cancel my signup"
-            variant="ghost"
+            variant="outline"
             size="default"
             confirm={{
               title: "Cancel your signup?",
               description: open
-                ? `You'll be taken off the list for ${formatDay(form.day, "short")}. You can sign up again while the form is open.`
+                ? `You'll be taken off the list for ${formatDay(form.day, "short")}. You can sign up again while the form is open, if there's still room.`
                 : `You'll be taken off the list for ${formatDay(form.day, "short")}. The form has closed, so you won't be able to sign up again.`,
               confirmLabel: "Cancel signup",
             }}
           />
-        }
-      />
+        </div>
+      </Panel>
     );
   } else if (!open) {
     content = (
@@ -142,7 +129,14 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
               You cancelled your signup for this day. You can sign up again below.
             </p>
           )}
-          {fields("Sign up", false)}
+          <SignupFields
+            action={submitSignup.bind(null, form.id)}
+            sections={form.sections}
+            builds={form.shifts.map(toChoice)}
+            defaults={mine ? toDefaults(mine.details) : null}
+            driver={mine?.driver ?? { status: "none" }}
+            savedCarSeats={mine?.carSeats ?? null}
+          />
         </>
       );
   }
@@ -258,8 +252,8 @@ function Summary({
         <p className="font-medium">Builds you could work at</p>
         {chosenShifts.length === 0 ? (
           <p className="text-muted-foreground">
-            None of the builds you chose are still scheduled. Update your
-            signup to choose others.
+            None of the builds you chose are still scheduled. Cancel your
+            signup and sign up again to choose others.
           </p>
         ) : (
           <ul className="flex flex-col gap-1">

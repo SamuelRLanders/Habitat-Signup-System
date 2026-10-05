@@ -33,7 +33,6 @@ export async function getMySignup(formId: string, email: string) {
           hasDriversLicense: true,
           transportation: true,
           cancelledAt: true,
-          updatedAt: true,
           preferences: { select: { shiftId: true } },
         },
       },
@@ -60,7 +59,6 @@ export async function getMySignup(formId: string, email: string) {
       ? {
           id: signup.id,
           cancelledAt: signup.cancelledAt,
-          updatedAt: signup.updatedAt,
           shiftIds: signup.preferences.map((p) => p.shiftId),
           transportation: signup.transportation,
         }

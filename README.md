@@ -12,7 +12,7 @@ A web app for the Purdue Habitat for Humanity chapter. Volunteer organization le
 - Licensed volunteers are asked to fill out Purdue's driver approval form. Saying they did makes their approval pending, and only pending or approved drivers can offer to drive others.
 - Volunteers must be 18 or older on the build day
 - Details are filled in from their last signup
-- Update their signup while the form is open, and cancel it until the day's first shift starts, with an email each time
+- Cancel their signup until the day's first shift starts, with an email each time. Signups can't be changed: to change one, volunteers cancel and sign up again while the form is open
 
 **For admins (sign in with an emailed code)**
 - Create builds (name, address, time zone) and add shifts to them (date, time, spots, notes)

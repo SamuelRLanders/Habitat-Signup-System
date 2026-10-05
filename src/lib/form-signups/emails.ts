@@ -5,7 +5,7 @@ import { shiftLabel, type OfferedShift } from "@/lib/signup-forms/queries";
 import { formatDay } from "@/lib/time";
 
 // Emails to volunteers about their signup. Each links back to the form,
-// where they confirm their email again to update or cancel.
+// where they confirm their email again to cancel.
 
 type SignupEmail = {
   to: string;
@@ -20,24 +20,21 @@ export async function sendSignupConfirmation({
   formId,
   day,
   shifts,
-  updated,
-}: SignupEmail & { shifts: OfferedShift[]; updated: boolean }) {
+}: SignupEmail & { shifts: OfferedShift[] }) {
   const date = formatDay(day);
   const url = absoluteUrl(`/signup/${formId}`);
-  const intro = updated
-    ? `Your signup for the Purdue Habitat build day on ${date} is updated.`
-    : `Thanks for signing up for the Purdue Habitat build day on ${date}!`;
+  const intro = `Thanks for signing up for the Purdue Habitat build day on ${date}!`;
   const lines = shifts.map(shiftLabel);
 
   await sendEmail({
     to,
-    subject: updated ? `Your signup for ${formatDay(day, "short")} is updated` : `You're signed up for ${formatDay(day, "short")}`,
+    subject: `You're signed up for ${formatDay(day, "short")}`,
     text: [
       `Hi ${firstName},`,
       intro,
       `You said you could work at:\n${lines.map((line) => `- ${line}`).join("\n")}`,
       "We'll let you know which build you're placed at.",
-      `To update or cancel your signup, go to ${url} and confirm your email.`,
+      `To cancel your signup, go to ${url} and confirm your email. To make changes, cancel and sign up again.`,
     ].join("\n\n"),
     html: [
       `<p>Hi ${escapeHtml(firstName)},</p>`,
@@ -45,7 +42,7 @@ export async function sendSignupConfirmation({
       `<p>You said you could work at:</p>`,
       `<ul>${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`,
       `<p>We'll let you know which build you're placed at.</p>`,
-      `<p>To update or cancel your signup, <a href="${url}">go to the signup form</a> and confirm your email.</p>`,
+      `<p>To cancel your signup, <a href="${url}">go to the signup form</a> and confirm your email. To make changes, cancel and sign up again.</p>`,
     ].join(""),
   });
 }
