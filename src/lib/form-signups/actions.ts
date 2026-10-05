@@ -60,7 +60,7 @@ export async function submitSignup(
   const parsed = detailsSchema.safeParse(formValues(formData));
   const shiftIds = [...new Set(formData.getAll("shiftId").map(String))];
   const errors: SignupFormState["errors"] = parsed.success ? {} : firstErrors(parsed.error);
-  if (shiftIds.length === 0) errors.shifts = "Choose at least one shift you could work.";
+  if (shiftIds.length === 0) errors.shifts = "Choose at least one build you could work at.";
   if (parsed.success && !oldEnoughOn(parsed.data.dateOfBirth, form.day)) {
     errors.dateOfBirth = TOO_YOUNG;
   }
@@ -70,7 +70,7 @@ export async function submitSignup(
   if (!shiftIds.every((id) => offered.has(id))) {
     return {
       errors: {
-        shifts: "One of the shifts you chose is no longer offered. Refresh the page to see the current shifts.",
+        shifts: "One of the builds you chose is no longer offered that day. Refresh the page to see the current builds.",
       },
     };
   }

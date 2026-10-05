@@ -35,6 +35,8 @@ type ShiftDialogProps = {
   // Adding: pick several dates, one new shift per date. Editing: one date.
   mode: "add" | "edit";
   defaults?: Record<ShiftField, string>;
+  // Days the build already has a shift on. Each build has one shift a day.
+  takenDays: string[];
 };
 
 export function ShiftDialog({ trigger, ...props }: ShiftDialogProps) {
@@ -67,6 +69,7 @@ function ShiftForm({
   timeZoneLabel,
   mode,
   defaults,
+  takenDays,
   onSaved,
 }: Omit<ShiftDialogProps, "trigger"> & { onSaved: () => void }) {
   const [dateCount, setDateCount] = useState(0);
@@ -103,17 +106,24 @@ function ShiftForm({
             <MultiDatePicker
               {...fieldProps("date")}
               disablePast
+              disabledDays={takenDays}
               onChange={(dates) => setDateCount(dates.length)}
             />
             <p className="text-sm text-muted-foreground">
               Each date gets its own copy of this shift, which you can edit
-              separately later.
+              separately later. Days that already have a shift are greyed
+              out: each build has one shift per day.
             </p>
           </>
         ) : (
           <>
             <Label htmlFor="shift-date">Date</Label>
-            <DatePicker {...fieldProps("date")} defaultValue={initial("date")} />
+            <DatePicker
+              {...fieldProps("date")}
+              defaultValue={initial("date")}
+              // This shift's own day stays pickable.
+              disabledDays={takenDays.filter((day) => day !== initial("date"))}
+            />
           </>
         )}
         <FieldError field="date" error={errors.date} />

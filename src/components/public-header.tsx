@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SiteBrand } from "@/components/site-brand";
+import { buttonVariants } from "@/components/ui/button";
 
 // The header on the pages volunteers see, which don't need signing in.
 export function PublicHeader() {
@@ -8,7 +9,7 @@ export function PublicHeader() {
       <SiteBrand href="/" label="Purdue Habitat Volunteering" />
       <Link
         href="/login"
-        className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+        className={buttonVariants({ variant: "outline", size: "sm" })}
       >
         Admin sign in
       </Link>

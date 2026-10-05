@@ -240,7 +240,10 @@ export async function createShifts(
 ): Promise<ShiftFormState> {
   await requireAdmin();
 
-  const build = await prisma.build.findUnique({ where: { id: buildId } });
+  const build = await prisma.build.findUnique({
+    where: { id: buildId },
+    include: { shifts: { select: { id: true, startsAt: true } } },
+  });
   if (!build) return { errors: { form: "This build no longer exists." } };
   if (build.status === "CANCELLED") {
     return { errors: { form: "Shifts can't be added to a cancelled build." } };
@@ -248,6 +251,10 @@ export async function createShifts(
 
   const parsed = parseShifts(formData, newShiftDatesSchema, build.timeZone);
   if (!parsed.ok) return { errors: parsed.errors };
+
+  const taken = takenDays(build.shifts, build.timeZone);
+  const clashes = parsed.shifts.filter((s) => taken.has(toDateInput(s.startsAt, build.timeZone)));
+  if (clashes.length > 0) return { errors: { date: oneShiftPerDay(clashes, build.timeZone) } };
 
   const now = new Date();
   const past = parsed.shifts.filter((shift) => shift.startsAt < now);
@@ -279,17 +286,34 @@ export async function updateShift(
 
   const existing = await prisma.shift.findUnique({
     where: { id: shiftId },
-    include: { build: true },
+    include: { build: { include: { shifts: { select: { id: true, startsAt: true } } } } },
   });
   if (!existing) return { errors: { form: "This shift no longer exists." } };
 
-  const parsed = parseShifts(formData, editedShiftDateSchema, existing.build.timeZone);
+  const zone = existing.build.timeZone;
+  const parsed = parseShifts(formData, editedShiftDateSchema, zone);
   if (!parsed.ok) return { errors: parsed.errors };
   const [shift] = parsed.shifts;
+
+  const others = existing.build.shifts.filter((s) => s.id !== shiftId);
+  if (takenDays(others, zone).has(toDateInput(shift.startsAt, zone))) {
+    return { errors: { date: oneShiftPerDay([shift], zone) } };
+  }
 
   await prisma.shift.update({ where: { id: shiftId }, data: shift });
   revalidateAdmin();
   return { success: true };
+}
+
+// Each build has at most one shift a day, since a signup form offers one
+// choice per build. Cancelled shifts count: restore or edit one instead.
+function takenDays(shifts: { startsAt: Date }[], timeZone: string) {
+  return new Set(shifts.map((shift) => toDateInput(shift.startsAt, timeZone)));
+}
+
+function oneShiftPerDay(clashes: { startsAt: Date }[], timeZone: string) {
+  const days = clashes.map((s) => formatDate(s.startsAt, timeZone)).join("; ");
+  return `This build already has a shift on ${days}. Each build has one shift per day, so edit or restore that one instead.`;
 }
 
 // Deletes a shift nobody has signed up for or chosen on a signup form.

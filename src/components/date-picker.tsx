@@ -18,6 +18,8 @@ type DatePickerProps = {
   defaultValue?: string;
   placeholder?: string;
   disablePast?: boolean;
+  // Days that can't be picked, such as ones already taken: "2026-10-04".
+  disabledDays?: string[];
   "aria-invalid"?: boolean;
   "aria-describedby"?: string;
 };
@@ -36,6 +38,7 @@ export function DatePicker({
   defaultValue,
   placeholder = "Pick a date",
   disablePast,
+  disabledDays,
   birthday,
   clearable,
   ...aria
@@ -68,13 +71,11 @@ export function DatePicker({
             setDate(day);
             setOpen(false);
           }}
-          disabled={
-            disablePast
-              ? { before: startOfToday() }
-              : birthday
-                ? { after: startOfToday() }
-                : undefined
-          }
+          disabled={[
+            ...(disablePast ? [{ before: startOfToday() }] : []),
+            ...(birthday ? [{ after: startOfToday() }] : []),
+            ...(disabledDays ?? []).map(parseDay).filter((day) => day !== undefined),
+          ]}
           {...(birthday && {
             captionLayout: "dropdown",
             startMonth: new Date(1900, 0),
@@ -115,6 +116,7 @@ export function MultiDatePicker({
   id,
   name,
   disablePast,
+  disabledDays,
   onChange,
   ...aria
 }: MultiDatePickerProps) {
@@ -146,7 +148,10 @@ export function MultiDatePicker({
             selected={dates}
             defaultMonth={dates[0]}
             onSelect={(days) => update(days ?? [])}
-            disabled={disablePast ? { before: startOfToday() } : undefined}
+            disabled={[
+              ...(disablePast ? [{ before: startOfToday() }] : []),
+              ...(disabledDays ?? []).map(parseDay).filter((day) => day !== undefined),
+            ]}
             className={calendarClass}
           />
           <div className="flex items-center justify-between gap-2 border-t p-2">

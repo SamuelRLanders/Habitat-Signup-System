@@ -80,7 +80,7 @@ async function seed() {
     process.exit(1);
   }
 
-  // ── Builds and shifts
+  // ── Builds and shifts (each build has one shift a day)
   const shift = (date: string, start: number, end: number, capacity: number, notes?: string) => ({
     startsAt: at(date, start),
     endsAt: at(date, end),
@@ -111,9 +111,7 @@ async function seed() {
     description: "A three-bedroom home for the Rivera family. We're framing walls and raising the roof trusses this month.\n\nWear closed-toe shoes. Lunch is provided on Saturdays.",
     shifts: [
       shift("2026-10-10", 8, 12, 12, "Framing. No experience needed."),
-      shift("2026-10-10", 13, 17, 12),
       shift("2026-10-17", 8, 12, 10),
-      shift("2026-10-17", 13, 17, 10),
       shift("2026-10-24", 8, 14, 15, "Roof trusses. Must be comfortable on ladders."),
     ],
   });
@@ -123,7 +121,6 @@ async function seed() {
     description: "Interior finishing on a duplex: drywall, painting, and trim.",
     shifts: [
       shift("2026-11-07", 9, 13, 6),
-      shift("2026-11-07", 13, 17, 6),
       shift("2026-11-14", 9, 15, 8, "Painting day. Wear clothes you don't mind getting paint on."),
       shift("2026-11-21", 9, 13, 4),
     ],
@@ -254,13 +251,13 @@ async function seed() {
   const dana = await volunteer("dana", { first: "Dana", last: "Reyes", shirt: "XL", license: false, birthday: "2004-12-01" });
   const eli = await volunteer("eli", { first: "Eli", last: "Brooks", shirt: "XL", license: true, birthday: "2000-06-30" });
 
-  const [mapleAm, maplePm] = maple.shifts;
+  const [mapleOct10] = maple.shifts;
   const [cedarOct10] = cedar.shifts;
-  await signUp(alice, oct10, [mapleAm, cedarOct10]);
-  await signUp(ben, oct10, [mapleAm, maplePm]);
+  await signUp(alice, oct10, [mapleOct10, cedarOct10]);
+  await signUp(ben, oct10, [mapleOct10]);
   await signUp(carmen, oct10, [cedarOct10]);
-  await signUp(eli, oct10, [mapleAm, maplePm, cedarOct10]);
-  await signUp(dana, oct10, [maplePm], true);
+  await signUp(eli, oct10, [mapleOct10, cedarOct10]);
+  await signUp(dana, oct10, [mapleOct10], true);
   await signUp(alice, aug15, [summer.shifts[0]]);
   await signUp(carmen, aug15, [summer.shifts[0]]);
 

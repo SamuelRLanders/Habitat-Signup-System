@@ -10,27 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-// Layout pieces shared by the volunteer-facing forms.
-
-export function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="flex flex-col gap-4">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold">{title}</h2>
-        {description && <p className="text-sm text-muted-foreground">{description}</p>}
-      </div>
-      {children}
-    </section>
-  );
-}
+// Fields shared by the volunteer-facing forms.
 
 // A label, the control, and a hint or error below. The error's id is
 // "<htmlFor>-error", for the control's aria-describedby.

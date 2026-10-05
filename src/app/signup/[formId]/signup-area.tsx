@@ -1,8 +1,8 @@
-import { CheckCircle2Icon } from "lucide-react";
+import { CheckCircle2Icon, CheckIcon } from "lucide-react";
 import { ActionButton } from "@/components/action-button";
 import { EmailCodeForm } from "@/components/email-code-form";
+import { Panel } from "@/components/panel";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   forgetVerifiedEmail,
   sendSignupCode,
@@ -21,7 +21,7 @@ import type { FormPhase } from "@/lib/signup-forms/phase";
 import { shiftLabel, shiftTime, type OfferedShift } from "@/lib/signup-forms/queries";
 import { formatDay, fromDay } from "@/lib/time";
 import { shirtLabel } from "@/lib/volunteers";
-import { SignupFields, type DetailsDefaults, type ShiftChoice } from "./signup-fields";
+import { SignupFields, type BuildChoice, type DetailsDefaults } from "./signup-fields";
 import { SignupPanel } from "./signup-panel";
 
 type SignupAreaProps = {
@@ -34,10 +34,11 @@ type SignupAreaProps = {
   phase: FormPhase;
 };
 
-// The bottom of a form's page, where volunteers confirm their email and
-// then sign up, or see, update or cancel their signup. While the form is
-// open, anyone can sign up. After it closes, volunteers who signed up can
-// still cancel until the day's first shift starts.
+// Everything on a form's page below the build details, as a panel for each
+// step: confirming an email, then the signed-in email, then the form (or
+// the volunteer's signup, with Update and Cancel). While the form is open,
+// anyone can sign up. After it closes, volunteers who signed up can still
+// cancel until the day's first shift starts.
 export async function SignupArea({ form, phase }: SignupAreaProps) {
   const canCancel = new Date() < cancelDeadline(form.day, form.shifts);
   if (phase !== "open" && !(phase === "closed" && canCancel)) return null;
@@ -46,34 +47,35 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
   const email = await getVerifiedEmail();
   if (!email) {
     return (
-      <Area title={open ? "Sign up" : "Already signed up?"}>
-        <div className="flex flex-col gap-4 rounded-xl p-5 ring-1 ring-foreground/10">
-          <p className="text-sm text-muted-foreground">
-            {open
-              ? "First, confirm your email address. We'll send you a 6-digit code. You don't need an account."
-              : "Confirm your email address to see or cancel your signup. We'll send you a 6-digit code."}
-          </p>
-          <EmailCodeForm
-            sendAction={sendSignupCode.bind(null, form.id)}
-            verifyAction={verifySignupCode}
-            verifyLabels={{ idle: "Continue", pending: "Checking…" }}
-            restartHref={`/signup/${form.id}`}
-          />
-        </div>
-      </Area>
+      <Panel
+        title={open ? "Sign in with your email" : "Already signed up?"}
+        description={
+          open
+            ? "We'll send you a 6-digit code to confirm it's you. You don't need an account."
+            : "Confirm your email address to see or cancel your signup. We'll send you a 6-digit code."
+        }
+      >
+        <EmailCodeForm
+          sendAction={sendSignupCode.bind(null, form.id)}
+          verifyAction={verifySignupCode}
+          verifyLabels={{ idle: "Continue", pending: "Checking…" }}
+          restartHref={`/signup/${form.id}`}
+        />
+      </Panel>
     );
   }
 
   const mine = await getMySignup(form.id, email);
   const active = mine?.signup && !mine.signup.cancelledAt ? mine.signup : null;
 
-  const fields = (submitLabel: string, chosenShiftIds: string[]) => (
+  const fields = (submitLabel: string, chosenIds: string[]) => (
     <SignupFields
       action={submitSignup.bind(null, form.id)}
       sections={form.sections}
-      shifts={form.shifts.map(toChoice)}
+      builds={form.shifts.map(toChoice)}
       defaults={mine ? toDefaults(mine.details) : null}
-      chosenShiftIds={chosenShiftIds}
+      chosenIds={chosenIds}
+      editing={chosenIds.length > 0}
       submitLabel={submitLabel}
     />
   );
@@ -106,73 +108,76 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
     );
   } else if (!open) {
     content = (
-      <p className="text-sm text-muted-foreground">
-        {mine?.signup
-          ? "Your signup for this day is cancelled."
-          : `We don't have a signup for ${email} on this day.`}
-      </p>
+      <Panel title="Your signup">
+        <p className="text-sm text-muted-foreground">
+          {mine?.signup
+            ? "Your signup for this day is cancelled."
+            : `We don't have a signup for ${email} on this day.`}
+        </p>
+      </Panel>
     );
   } else {
     const capacity = form.shifts.reduce((sum, shift) => sum + shift.capacity, 0);
     const taken = await countActiveSignups(form.id);
     content =
       capacity === 0 ? (
-        <Message>No shifts are scheduled for this day right now, so there&apos;s nothing to sign up for yet.</Message>
+        <Message>No builds are scheduled for this day right now, so there&apos;s nothing to sign up for yet.</Message>
       ) : taken >= capacity ? (
         <Message>This build day is full. Thanks for your interest! Check the home page for other days.</Message>
       ) : (
-        <div className="flex flex-col gap-6">
+        <>
           {mine?.signup?.cancelledAt && (
-            <p className="text-sm text-muted-foreground">
+            <p className="px-2 text-sm text-muted-foreground">
               You cancelled your signup for this day. You can sign up again below.
             </p>
           )}
           {fields("Sign up", [])}
-        </div>
+        </>
       );
   }
 
   return (
-    <Area title={open && !active ? "Sign up" : "Your signup"}>
-      <VerifiedEmail email={email} />
+    <>
+      <SignedIn email={email} />
       {content}
-    </Area>
-  );
-}
-
-function Area({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="flex flex-col gap-4" aria-labelledby="signup-heading">
-      <h2 id="signup-heading" className="text-lg font-semibold">
-        {title}
-      </h2>
-      {children}
-    </section>
+    </>
   );
 }
 
 function Message({ children }: { children: React.ReactNode }) {
   return (
-    <Card>
-      <CardContent className="py-6 text-center text-muted-foreground">{children}</CardContent>
-    </Card>
+    <Panel>
+      <p className="py-2 text-center text-muted-foreground">{children}</p>
+    </Panel>
   );
 }
 
 // The email this browser confirmed, with a way to switch to another, such
-// as on a shared computer.
-function VerifiedEmail({ email }: { email: string }) {
+// as on a shared computer. It's a finished step, so it's greyed like the
+// form's finished steps.
+function SignedIn({ email }: { email: string }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-l-4 border-gold bg-gold/15 px-4 py-3 text-sm">
-      <span>
-        Confirmed email: <strong>{email}</strong>
-      </span>
-      <form action={forgetVerifiedEmail}>
-        <Button type="submit" variant="outline" size="sm">
-          Not you? Use a different email
-        </Button>
-      </form>
-    </div>
+    <Panel className="bg-muted/40 ring-foreground/5">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+        <span className="flex items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+          >
+            <CheckIcon className="size-4" />
+          </span>
+          <span className="flex flex-col">
+            <span className="text-base font-semibold">Signed in</span>
+            <span className="text-muted-foreground">{email}</span>
+          </span>
+        </span>
+        <form action={forgetVerifiedEmail}>
+          <Button type="submit" variant="outline" size="sm">
+            Not you? Use a different email
+          </Button>
+        </form>
+      </div>
+    </Panel>
   );
 }
 
@@ -198,14 +203,14 @@ function Summary({
   });
 
   return (
-    <div role="status" className="flex flex-col gap-5 rounded-xl bg-muted/50 p-5 ring-1 ring-foreground/10">
+    <div role="status" className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
         <h3 className="flex items-center gap-2 text-xl font-semibold">
           <CheckCircle2Icon className="size-6 text-primary" aria-hidden="true" />
           You&apos;re signed up
         </h3>
         <p className="text-sm text-muted-foreground">
-          We&apos;ll email {email} to let you know which shift you&apos;re placed on.
+          We&apos;ll email {email} to let you know which build you&apos;re placed at.
         </p>
       </div>
 
@@ -225,10 +230,10 @@ function Summary({
       </dl>
 
       <div className="flex flex-col gap-2 text-sm">
-        <p className="font-medium">Shifts you could work</p>
+        <p className="font-medium">Builds you could work at</p>
         {chosenShifts.length === 0 ? (
           <p className="text-muted-foreground">
-            None of the shifts you chose are still scheduled. Update your
+            None of the builds you chose are still scheduled. Update your
             signup to choose others.
           </p>
         ) : (
@@ -243,11 +248,11 @@ function Summary({
   );
 }
 
-function toChoice(shift: OfferedShift): ShiftChoice {
+function toChoice(shift: OfferedShift): BuildChoice {
   return {
     id: shift.id,
-    buildId: shift.build.id,
     buildName: shift.build.name,
+    address: shift.build.address,
     time: shiftTime(shift),
     notes: shift.notes,
   };

@@ -35,16 +35,16 @@ export async function sendSignupConfirmation({
     text: [
       `Hi ${firstName},`,
       intro,
-      `You said you could work:\n${lines.map((line) => `- ${line}`).join("\n")}`,
-      "We'll let you know which shift you're placed on.",
+      `You said you could work at:\n${lines.map((line) => `- ${line}`).join("\n")}`,
+      "We'll let you know which build you're placed at.",
       `To update or cancel your signup, go to ${url} and confirm your email.`,
     ].join("\n\n"),
     html: [
       `<p>Hi ${escapeHtml(firstName)},</p>`,
       `<p>${escapeHtml(intro)}</p>`,
-      `<p>You said you could work:</p>`,
+      `<p>You said you could work at:</p>`,
       `<ul>${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`,
-      `<p>We'll let you know which shift you're placed on.</p>`,
+      `<p>We'll let you know which build you're placed at.</p>`,
       `<p>To update or cancel your signup, <a href="${url}">go to the signup form</a> and confirm your email.</p>`,
     ].join(""),
   });

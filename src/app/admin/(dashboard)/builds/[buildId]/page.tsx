@@ -128,6 +128,7 @@ export default async function BuildPage({
               submitLabel="Add shift"
               trigger={{ label: "Add shifts" }}
               timeZoneLabel={zoneLabel}
+              takenDays={[...days.keys()]}
             />
           )}
         </div>
@@ -193,6 +194,7 @@ export default async function BuildPage({
                             submitLabel="Save shift"
                             trigger={{ label: "Edit", variant: "ghost" }}
                             timeZoneLabel={zoneLabel}
+                            takenDays={[...days.keys()]}
                             defaults={{
                               date: toDateInput(shift.startsAt, zone),
                               startTime: toTimeInput(shift.startsAt, zone),

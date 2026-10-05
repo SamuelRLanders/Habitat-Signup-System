@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Panel } from "@/components/panel";
 import { Button } from "@/components/ui/button";
 
 // A volunteer's existing signup: a summary with Update and Cancel buttons,
@@ -30,7 +31,7 @@ export function SignupPanel({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <Panel title="Your signup">
       {summary}
       <div className="flex flex-wrap gap-2">
         {editForm && (
@@ -40,6 +41,6 @@ export function SignupPanel({
         )}
         {cancelButton}
       </div>
-    </div>
+    </Panel>
   );
 }
