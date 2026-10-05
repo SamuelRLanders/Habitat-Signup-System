@@ -35,8 +35,6 @@ type ShiftDialogProps = {
   // Adding: pick several dates, one new shift per date. Editing: one date.
   mode: "add" | "edit";
   defaults?: Record<ShiftField, string>;
-  // Spots already taken, shown as a hint when editing.
-  filled?: number;
 };
 
 export function ShiftDialog({ trigger, ...props }: ShiftDialogProps) {
@@ -69,7 +67,6 @@ function ShiftForm({
   timeZoneLabel,
   mode,
   defaults,
-  filled,
   onSaved,
 }: Omit<ShiftDialogProps, "trigger"> & { onSaved: () => void }) {
   const [dateCount, setDateCount] = useState(0);
@@ -140,14 +137,9 @@ function ShiftForm({
         <NumberField
           {...fieldProps("capacity")}
           defaultValue={Number(initial("capacity")) || undefined}
-          min={Math.max(1, filled ?? 0)}
+          min={1}
           max={500}
         />
-        {filled ? (
-          <p className="text-sm text-muted-foreground">
-            {filled} {filled === 1 ? "spot is" : "spots are"} already filled.
-          </p>
-        ) : null}
         <FieldError field="capacity" error={errors.capacity} />
       </div>
 

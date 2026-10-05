@@ -28,9 +28,7 @@ import {
   MAX_AGE,
   parsePeopleSearch,
   peopleHref,
-  ROLE_FILTERS,
   SEARCH_FIELDS,
-  SEX_FILTERS,
   SIZE_FILTERS,
   withoutFilters,
   YES_NO_FILTERS,
@@ -45,17 +43,21 @@ const PLACEHOLDERS: Record<SearchField, string> = {
   lastName: "Search by last name",
   email: "Search by email",
   phone: "Search by phone number",
-  address: "Search by address",
 };
+
+type FormChoice = { value: string; label: string };
 
 // The search box, the field it searches, and the Filters button. Searching
 // changes the URL, and the page reruns the search on the server.
 export function PeopleSearchBar({
   search,
   filterCount,
+  forms,
 }: {
   search: PeopleSearch;
   filterCount: number;
+  // Signup forms, for the "Signed up for" filter.
+  forms: FormChoice[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -166,6 +168,7 @@ export function PeopleSearchBar({
           {/* Mounted only while open, so each opening starts from the URL. */}
           <FiltersForm
             search={search}
+            forms={forms}
             onApply={(next) => {
               setFiltersOpen(false);
               go(next);
@@ -181,9 +184,11 @@ export function PeopleSearchBar({
 // same parser as the page's URL.
 function FiltersForm({
   search,
+  forms,
   onApply,
 }: {
   search: PeopleSearch;
+  forms: FormChoice[];
   onApply: (next: PeopleSearch) => void;
 }) {
   return (
@@ -206,19 +211,6 @@ function FiltersForm({
         </DialogDescription>
       </DialogHeader>
 
-      <Group legend="Sex">
-        {SEX_FILTERS.map((option) => (
-          <Pill
-            key={option.value}
-            type="checkbox"
-            name="sex"
-            value={option.value}
-            label={option.label}
-            defaultChecked={search.sex.includes(option.value)}
-          />
-        ))}
-      </Group>
-
       <Group legend="T-shirt size">
         {SIZE_FILTERS.map((option) => (
           <Pill
@@ -232,7 +224,7 @@ function FiltersForm({
         ))}
       </Group>
 
-      <Group legend="Age" hint="People without a saved birthday are left out.">
+      <Group legend="Age">
         <NumberField
           name="ageMin"
           aria-label="Minimum age"
@@ -250,45 +242,49 @@ function FiltersForm({
         />
       </Group>
 
-      <YesNoGroup filter="texts" search={search} />
       <YesNoGroup filter="license" search={search} />
+      <YesNoGroup filter="upcoming" search={search} />
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="mb-2 text-sm font-medium">Joined between</legend>
+        <legend className="mb-2 text-sm font-medium">Signed up for</legend>
+        <Select
+          name="form"
+          items={[{ value: "", label: "Any build day" }, ...forms]}
+          defaultValue={search.form ?? ""}
+        >
+          <SelectTrigger aria-label="Signed up for" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="max-h-72">
+            <SelectItem value="">Any build day</SelectItem>
+            {forms.map((form) => (
+              <SelectItem key={form.value} value={form.value}>
+                {form.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-2">
+        <legend className="mb-2 text-sm font-medium">First signed up between</legend>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <DatePicker
             name="joinedFrom"
-            aria-label="Joined on or after"
+            aria-label="First signed up on or after"
             placeholder="Any start"
             defaultValue={search.joinedFrom ?? undefined}
             clearable
           />
           <DatePicker
             name="joinedTo"
-            aria-label="Joined on or before"
+            aria-label="First signed up on or before"
             placeholder="Any end"
             defaultValue={search.joinedTo ?? undefined}
             clearable
           />
         </div>
       </fieldset>
-
-      <YesNoGroup filter="shifts" search={search} />
-      <YesNoGroup filter="details" search={search} />
-
-      <Group legend="Role">
-        <Pill type="radio" name="role" value="" label="Any" defaultChecked={!search.role} />
-        {ROLE_FILTERS.map((option) => (
-          <Pill
-            key={option.value}
-            type="radio"
-            name="role"
-            value={option.value}
-            label={option.label}
-            defaultChecked={search.role === option.value}
-          />
-        ))}
-      </Group>
 
       <DialogFooter className="sm:justify-between">
         <Button type="button" variant="ghost" onClick={() => onApply(withoutFilters(search))}>

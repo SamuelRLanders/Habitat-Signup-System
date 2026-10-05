@@ -13,7 +13,7 @@ function csvCell(value: Cell) {
   if (value === null || value === undefined) return "";
   let text = value instanceof Date ? value.toISOString() : String(value);
   // A spreadsheet runs a cell starting with = + - or @ as a formula, which
-  // someone could abuse by typing one into their profile. Prefixing ' makes
+  // someone could abuse by typing one into a signup form. Prefixing ' makes
   // it plain text. Phone numbers (+17655550123) are safe and left alone.
   if (/^[=+\-@\t\r]/.test(text) && !/^\+\d+$/.test(text)) text = `'${text}`;
   if (/[",\r\n]/.test(text) || text.trim() !== text) {

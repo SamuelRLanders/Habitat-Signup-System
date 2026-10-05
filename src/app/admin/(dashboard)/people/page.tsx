@@ -2,7 +2,6 @@ import { DownloadIcon, XIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cn } from "cn";
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -22,24 +21,27 @@ import {
   withoutFilters,
   type PeopleSearch,
 } from "@/lib/admin/people-search";
-import { searchPeople } from "@/lib/admin/queries";
+import { listFormChoices, searchPeople } from "@/lib/admin/queries";
 import { requireAdmin } from "@/lib/auth/dal";
 import { formatPhone } from "@/lib/phone";
 import { DEFAULT_TIME_ZONE, formatDate, toDateInput } from "@/lib/time";
-import { ageOn, SEX_OPTIONS, T_SHIRT_SIZES } from "@/lib/volunteers";
+import { ageOn, shirtLabel } from "@/lib/volunteers";
 import { PeopleSearchBar } from "./people-search";
 
 export const metadata: Metadata = { title: "People" };
 
-// Everyone with an account, searched and filtered through the URL, 100 at
-// a time. Group members who only joined through a group link don't
-// have accounts, so they appear on shift rosters instead.
+// Every volunteer who has signed up through a signup form, searched and
+// filtered through the URL, 100 at a time. Details are each volunteer's
+// latest.
 export default async function PeoplePage({ searchParams }: PageProps<"/admin/people">) {
   await requireAdmin();
 
   const search = parsePeopleSearch(await searchParams);
-  const { total, page, pageCount, people } = await searchPeople(search);
-  const filters = activeFilters(search);
+  const [{ total, page, pageCount, people }, forms] = await Promise.all([
+    searchPeople(search),
+    listFormChoices(),
+  ]);
+  const filters = activeFilters(search, new Map(forms.map((f) => [f.value, f.label])));
   const searching = search.q !== "" || filters.length > 0;
   const today = toDateInput(new Date(), DEFAULT_TIME_ZONE);
 
@@ -53,8 +55,8 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold">People</h1>
           <p className="text-sm text-muted-foreground">
-            Everyone who has signed in. Group members who joined through a
-            group link are listed on each shift&apos;s volunteer list.
+            Everyone who has signed up through a signup form, with the
+            details from their latest signup.
           </p>
         </div>
         {total > 0 ? (
@@ -76,7 +78,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
       </div>
 
       <div className="flex flex-col gap-3">
-        <PeopleSearchBar search={search} filterCount={filters.length} />
+        <PeopleSearchBar search={search} filterCount={filters.length} forms={forms} />
 
         {filters.length > 0 && (
           <ul aria-label="Active filters" className="flex flex-wrap items-center gap-1.5">
@@ -120,7 +122,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
                 </Link>
               </>
             ) : (
-              <p>Nobody has signed in yet.</p>
+              <p>Nobody has signed up yet.</p>
             )}
           </CardContent>
         </Card>
@@ -145,63 +147,31 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead className="text-right">Age</TableHead>
-                  <TableHead>Sex</TableHead>
                   <TableHead>T-shirt</TableHead>
                   <TableHead>License</TableHead>
-                  <TableHead className="text-right">Upcoming shifts</TableHead>
-                  <TableHead>Joined</TableHead>
+                  <TableHead className="text-right">Upcoming days</TableHead>
+                  <TableHead>First signed up</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {people.map((person) => (
                   <TableRow key={person.id}>
                     <TableCell className="font-medium">
-                      <span className="flex flex-wrap items-center gap-2">
-                        {person.name || (
-                          <span className="font-normal text-muted-foreground">
-                            No details yet
-                          </span>
-                        )}
-                        {person.role === "ADMIN" && <Badge variant="secondary">Admin</Badge>}
-                      </span>
+                      {person.firstName} {person.lastName}
                     </TableCell>
                     <TableCell>
                       <a href={`mailto:${person.email}`} className="hover:underline">
                         {person.email}
                       </a>
                     </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {person.profile ? (
-                        <>
-                          {formatPhone(person.profile.phone)}
-                          {person.profile.smsOptIn && (
-                            <span className="block text-xs text-muted-foreground">Texts OK</span>
-                          )}
-                        </>
-                      ) : (
-                        <Blank />
-                      )}
-                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{formatPhone(person.phone)}</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {person.profile ? ageOn(person.profile.dateOfBirth, today) : <Blank />}
+                      {ageOn(person.dateOfBirth, today)}
                     </TableCell>
-                    <TableCell>
-                      {labelOf(SEX_OPTIONS, person.profile?.sex) ?? <Blank />}
-                    </TableCell>
-                    <TableCell>
-                      {labelOf(T_SHIRT_SIZES, person.profile?.tShirtSize) ?? <Blank />}
-                    </TableCell>
-                    <TableCell>
-                      {person.profile?.hasDriversLicense == null ? (
-                        <Blank />
-                      ) : person.profile.hasDriversLicense ? (
-                        "Yes"
-                      ) : (
-                        "No"
-                      )}
-                    </TableCell>
+                    <TableCell>{shirtLabel(person.tShirtSize)}</TableCell>
+                    <TableCell>{person.hasDriversLicense ? "Yes" : "No"}</TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {person.upcomingShifts}
+                      {person.upcomingSignups}
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {formatDate(person.createdAt, DEFAULT_TIME_ZONE)}
@@ -254,12 +224,4 @@ function Pagination({
       {pageLink(page + 1, "Next")}
     </nav>
   );
-}
-
-function Blank() {
-  return <span className="text-muted-foreground">—</span>;
-}
-
-function labelOf<T extends string>(options: { value: T; label: string }[], value?: T | null) {
-  return options.find((option) => option.value === value)?.label;
 }

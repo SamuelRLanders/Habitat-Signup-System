@@ -12,8 +12,8 @@ datasource db {
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
+// Only admins sign in. Kept as a field so the sign-in check stays explicit.
 enum Role {
-  VOLUNTEER // no longer used: only admins sign in
   ADMIN
 }
 
@@ -29,17 +29,6 @@ enum BuildStatus {
 enum FormStatus {
   DRAFT // admins only
   PUBLISHED // listed on the home page until it closes
-}
-
-enum SignupStatus {
-  CONFIRMED
-  WAITLISTED
-  CANCELLED
-}
-
-enum Sex {
-  FEMALE
-  MALE
 }
 
 enum TShirtSize {
@@ -66,58 +55,27 @@ enum DeliveryStatus {
 
 // ─── Users ───────────────────────────────────────────────────────────────────
 
-// Everyone who signs in with an emailed code. Only admins can sign in, and
-// they're added by the admin:add script, never from a form. VOLUNTEER users
-// are left from when volunteers signed in too. Better Auth uses this as its
-// "user" model, so name, emailVerified and image are fields it requires.
+// An admin, who signs in with an emailed code. Admins are added by the
+// admin:add script, never from a form; volunteers don't have accounts (see
+// Volunteer). Better Auth uses this as its "user" model, so name,
+// emailVerified and image are fields it requires.
 model User {
   id            String   @id @default(cuid())
   email         String   @unique
-  name          String   @default("") // kept in sync with the profile's name
+  name          String   @default("")
   emailVerified Boolean  @default(false)
   image         String?
-  role          Role     @default(VOLUNTEER)
+  role          Role     @default(ADMIN)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  profile  VolunteerProfile?
   sessions Session[]
   accounts Account[]
-
-  registrations     Registration[]
-  signups           Signup[]
-  waiverAcceptances WaiverAcceptance[]
-  messageRecipients MessageRecipient[]
 
   // Admin activity.
   buildsCreated Build[]
   formsCreated  SignupForm[]
   messagesSent  Message[]
-}
-
-// The details the signup form collects, kept apart from User so they aren't
-// loaded with every session check. A new user has none until their first
-// signup (or until they fill in their profile).
-model VolunteerProfile {
-  firstName             String
-  lastName              String
-  phone                 String // E.164, e.g. +17655550123
-  address               String
-  emergencyContactName  String
-  emergencyContactPhone String // E.164
-  dateOfBirth           DateTime    @db.Date
-  sex                   Sex?
-  tShirtSize            TShirtSize?
-  // Null for details saved before the form asked; they're asked on their
-  // next signup.
-  hasDriversLicense     Boolean?
-  smsOptIn              Boolean     @default(false)
-  smsOptInAt            DateTime? // when consent was given (needed for SMS compliance)
-  createdAt             DateTime    @default(now())
-  updatedAt             DateTime    @updatedAt
-
-  userId String @id
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // ─── Auth (managed by Better Auth) ───────────────────────────────────────────
@@ -206,20 +164,22 @@ model Build {
   createdById   String?
   createdBy     User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
-  shifts        Shift[]
-  registrations Registration[]
+  shifts Shift[]
 
   @@index([status])
 }
 
-// A block of time volunteers can sign up for at a build.
+// A block of time volunteers can work at a build. Volunteers don't sign up
+// for a shift directly: they say on the day's signup form which shifts they
+// could work.
 model Shift {
   id          String    @id @default(cuid())
   startsAt    DateTime
   endsAt      DateTime
-  capacity    Int // total volunteer spots; each signup uses its registration's size
+  capacity    Int // volunteer spots
   notes       String?   @db.Text
-  // Shifts with signups are cancelled rather than deleted, to keep a record.
+  // Shifts volunteers have chosen are cancelled rather than deleted, to keep
+  // a record.
   cancelledAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -227,7 +187,6 @@ model Shift {
   buildId String
   build   Build  @relation(fields: [buildId], references: [id], onDelete: Cascade)
 
-  signups     Signup[]
   preferences ShiftPreference[]
   messages    Message[]
 
@@ -296,7 +255,8 @@ model Volunteer {
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
-  signups FormSignup[]
+  signups           FormSignup[]
+  messageRecipients MessageRecipient[]
 }
 
 // A volunteer's signup for a build day, through its form. It keeps a copy
@@ -374,138 +334,9 @@ model VolunteerSession {
   @@index([expiresAt])
 }
 
-// ─── Registrations & signups ─────────────────────────────────────────────────
-
-// One submission of the signup form: a volunteer signing up alone (size 1),
-// or leading a group (size > 1, including the leader) for one or more shifts
-// of a build. Waivers are handled outside this app; the build's sections
-// tell volunteers where to sign them.
-model Registration {
-  id          String    @id @default(cuid())
-  groupName   String? // e.g. "First Baptist Youth Group"; null for individuals
-  // Spots this registration takes on each of its confirmed shifts. The
-  // leader can change it later if every shift still has room.
-  size        Int       @default(1)
-  // Secret token for the join link the leader shares with group members.
-  // Null for individuals. The link stops working once the last shift starts.
-  joinToken   String?   @unique
-  // When the volunteer dismissed this registration's card after Habitat
-  // cancelled the build. The card only stays hidden while the build is
-  // cancelled, so it comes back if the build is restored.
-  dismissedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  // Builds with signups can't be deleted, so this never cascades.
-  buildId String
-  build   Build  @relation(fields: [buildId], references: [id], onDelete: Restrict)
-
-  leaderId String // the individual, or the group leader
-  leader   User   @relation(fields: [leaderId], references: [id])
-
-  signups           Signup[]
-  groupMembers      GroupMember[]
-  waiverAcceptances WaiverAcceptance[]
-
-  @@index([leaderId])
-  @@index([buildId])
-}
-
-// A registration's spot(s) on one shift. Each shift can be cancelled on its
-// own; the registration's other shifts are unaffected.
-model Signup {
-  id          String       @id @default(cuid())
-  status      SignupStatus @default(CONFIRMED)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  cancelledAt DateTime?
-
-  shiftId String
-  shift   Shift  @relation(fields: [shiftId], references: [id], onDelete: Cascade)
-
-  registrationId String
-  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-
-  // Always the registration's leader. Stored here so a volunteer can only
-  // have one signup per shift. Signing up again after cancelling reuses the
-  // row and moves it to the new registration.
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  @@unique([shiftId, userId])
-  @@index([registrationId])
-  @@index([userId])
-}
-
-// A group member who joined through the leader's link. Group
-// members don't have user accounts; this row is how they're identified, and
-// their phone number is used to text them on build days.
-model GroupMember {
-  id          String    @id @default(cuid())
-  legalName   String
-  dateOfBirth DateTime  @db.Date
-  phone       String // E.164
-  smsOptIn    Boolean   @default(false)
-  smsOptInAt  DateTime?
-  createdAt   DateTime  @default(now())
-
-  registrationId String
-  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-
-  waiverAcceptance  WaiverAcceptance?
-  messageRecipients MessageRecipient[]
-
-  @@index([registrationId])
-}
-
-// ─── Waivers (no longer used) ────────────────────────────────────────────────
-
-// Volunteers used to sign a built-in waiver as part of signing up. Waivers
-// are now signed outside the app, linked from each build's sections. These
-// tables only hold signatures made before that change.
-
-// Waiver text is versioned and never edited in place.
-model Waiver {
-  id        String   @id @default(cuid())
-  version   Int      @unique
-  title     String
-  body      String   @db.Text
-  isActive  Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  acceptances WaiverAcceptance[]
-}
-
-// An immutable record of someone accepting a waiver version for a
-// registration, by typing their full legal name. The signer is either a user
-// (the leader or an individual) or a group member, never both; a database
-// check enforces this. Deleting anything a record points to is blocked.
-model WaiverAcceptance {
-  id         String   @id @default(cuid())
-  signedName String // typed full legal name, exactly as entered
-  signedAt   DateTime @default(now())
-  ipAddress  String?
-  userAgent  String?
-
-  waiverId String
-  waiver   Waiver @relation(fields: [waiverId], references: [id])
-
-  registrationId String
-  registration   Registration @relation(fields: [registrationId], references: [id], onDelete: Restrict)
-
-  userId String?
-  user   User?   @relation(fields: [userId], references: [id], onDelete: Restrict)
-
-  groupMemberId String?      @unique
-  groupMember   GroupMember? @relation(fields: [groupMemberId], references: [id], onDelete: Restrict)
-
-  @@index([registrationId])
-  @@index([userId])
-}
-
 // ─── Messaging ───────────────────────────────────────────────────────────────
 
-// An email or text sent by an admin, usually to everyone signed up for a shift.
+// An email or text sent by an admin, usually to the volunteers on a shift.
 model Message {
   id        String         @id @default(cuid())
   channel   MessageChannel
@@ -522,8 +353,7 @@ model Message {
   recipients MessageRecipient[]
 }
 
-// Delivery status for each recipient of a message: a user or a group member
-// (never both; a database check enforces this).
+// Delivery status for each volunteer a message was sent to.
 model MessageRecipient {
   id         String         @id @default(cuid())
   to         String // email address or phone number at send time
@@ -535,11 +365,9 @@ model MessageRecipient {
   messageId String
   message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
-  userId String?
-  user   User?   @relation(fields: [userId], references: [id], onDelete: Restrict)
-
-  groupMemberId String?
-  groupMember   GroupMember? @relation(fields: [groupMemberId], references: [id], onDelete: Restrict)
+  volunteerId String
+  volunteer   Volunteer @relation(fields: [volunteerId], references: [id], onDelete: Restrict)
 
   @@index([messageId])
+  @@index([volunteerId])
 }

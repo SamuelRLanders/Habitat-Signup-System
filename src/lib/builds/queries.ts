@@ -1,19 +1,15 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
+import { getShiftVolunteers, willingByShift } from "@/lib/form-signups/rosters";
 import { prisma } from "@/lib/prisma";
-import { spotsTaken } from "@/lib/signups/queries";
+import { formsOnDays, offeredShifts } from "@/lib/signup-forms/queries";
+import { toDateInput } from "@/lib/time";
 
 // Read queries for the admin build pages. Callers must run requireAdmin()
 // first; these functions don't check who is asking.
 
 export const BUILD_LIST_TABS = ["upcoming", "past"] as const;
 export type BuildListTab = (typeof BUILD_LIST_TABS)[number];
-
-// Only confirmed signups take up spots. Each takes its registration's size.
-const confirmedSpots = {
-  where: { status: "CONFIRMED" },
-  select: { registration: { select: { size: true } } },
-} satisfies Prisma.Shift$signupsArgs;
 
 export async function listBuilds(tab: BuildListTab) {
   const now = new Date();
@@ -37,23 +33,20 @@ export async function listBuilds(tab: BuildListTab) {
       shifts: {
         where: { cancelledAt: null },
         orderBy: { startsAt: "asc" },
-        select: {
-          startsAt: true,
-          endsAt: true,
-          capacity: true,
-          signups: confirmedSpots,
-        },
+        select: { id: true, startsAt: true, endsAt: true, capacity: true },
       },
     },
   });
 
+  const willing = await willingByShift(builds.flatMap((b) => b.shifts.map((s) => s.id)));
   const summaries = builds.map(({ shifts, ...build }) => ({
     ...build,
     shiftCount: shifts.length,
     firstShiftAt: shifts.at(0)?.startsAt ?? null,
     lastShiftAt: shifts.at(-1)?.endsAt ?? null,
     capacity: shifts.reduce((total, shift) => total + shift.capacity, 0),
-    filled: shifts.reduce((total, s) => total + spotsTaken(s.signups), 0),
+    // Volunteers willing to work any of the build's shifts, each counted once.
+    willing: new Set(shifts.flatMap((shift) => willing.get(shift.id) ?? [])).size,
   }));
 
   // Soonest first for upcoming builds, with new builds that have no shifts
@@ -76,76 +69,46 @@ export async function getBuild(buildId: string) {
     include: {
       shifts: {
         orderBy: { startsAt: "asc" },
-        include: {
-          signups: confirmedSpots,
-          _count: { select: { signups: true, preferences: true } },
-        },
+        include: { _count: { select: { preferences: true } } },
       },
     },
   });
   if (!build) return null;
 
+  const willing = await willingByShift(build.shifts.map((shift) => shift.id));
   return {
     ...build,
-    shifts: build.shifts.map(({ signups, _count, ...shift }) => ({
+    shifts: build.shifts.map(({ _count, ...shift }) => ({
       ...shift,
-      filled: spotsTaken(signups),
-      // Includes cancelled signups, and volunteers who chose the shift on a
-      // signup form. Shifts with any are cancelled rather than deleted, so
-      // their history is kept.
-      signupCount: _count.signups + _count.preferences,
+      willing: willing.get(shift.id)?.length ?? 0,
+      // Everyone who ever chose the shift, including cancelled signups.
+      // Shifts with any are cancelled rather than deleted, so the record is
+      // kept.
+      chosenCount: _count.preferences,
     })),
   };
 }
 
-// A shift's volunteers: each signup's leader (or individual) with their
-// contact details, and for groups, the members who have joined through the
-// group's link.
+// A shift with the volunteers willing to work it, the other shifts that day
+// (to show what else each volunteer would work), and the day's form.
 export async function getShiftRoster(buildId: string, shiftId: string) {
   const shift = await prisma.shift.findUnique({
     where: { id: shiftId, buildId },
-    include: {
-      build: true,
-      signups: {
-        orderBy: { createdAt: "asc" },
-        select: {
-          id: true,
-          status: true,
-          createdAt: true,
-          user: {
-            select: {
-              email: true,
-              name: true,
-              profile: { select: { phone: true, smsOptIn: true } },
-            },
-          },
-          registration: {
-            select: {
-              size: true,
-              groupName: true,
-              groupMembers: {
-                orderBy: { createdAt: "asc" },
-                select: {
-                  id: true,
-                  legalName: true,
-                  phone: true,
-                  smsOptIn: true,
-                  createdAt: true,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
+    include: { build: true },
   });
   if (!shift) return null;
 
-  const confirmed = shift.signups.filter((s) => s.status === "CONFIRMED");
+  const day = toDateInput(shift.startsAt, shift.build.timeZone);
+  const [volunteers, dayShifts, forms] = await Promise.all([
+    getShiftVolunteers(shift),
+    offeredShifts([day]),
+    formsOnDays([day]),
+  ]);
   return {
     ...shift,
-    filled: spotsTaken(confirmed),
-    confirmed,
-    other: shift.signups.filter((s) => s.status !== "CONFIRMED"),
+    day,
+    volunteers,
+    dayShifts: dayShifts.get(day) ?? [],
+    form: forms.get(day) ?? null,
   };
 }

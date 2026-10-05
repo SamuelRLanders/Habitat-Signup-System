@@ -2,22 +2,22 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { PAGE_SIZE, type PeopleSearch } from "@/lib/admin/people-search";
 import { prisma } from "@/lib/prisma";
-import { DEFAULT_TIME_ZONE, toDateInput, zonedDateTime } from "@/lib/time";
+import { addDays, DEFAULT_TIME_ZONE, formatDay, fromDay, toDateInput, toDay, zonedDateTime } from "@/lib/time";
 
-// Read queries for admin pages that aren't about one build. Callers must run
-// requireAdmin() first; these functions don't check who is asking.
+// Read queries for admin pages that aren't about one build or form. Callers
+// must run requireAdmin() first; these functions don't check who is asking.
 
-// One page of the People search: everyone who has signed in and matches,
-// with their saved details and how many shifts they're signed up for (as an
-// individual or a group leader). A page past the end shows the last page.
+// One page of the People search: every volunteer who has signed up through a
+// form and matches, with their latest details and how many upcoming build
+// days they're signed up for. A page past the end shows the last page.
 export async function searchPeople(search: PeopleSearch) {
-  const now = new Date();
-  const where = peopleWhere(search, now);
-  const total = await prisma.user.count({ where });
+  const today = toDateInput(new Date(), DEFAULT_TIME_ZONE);
+  const where = peopleWhere(search, today);
+  const total = await prisma.volunteer.count({ where });
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = Math.min(search.page, pageCount);
 
-  const users = await prisma.user.findMany({
+  const volunteers = await prisma.volunteer.findMany({
     where,
     orderBy: PEOPLE_ORDER,
     skip: (page - 1) * PAGE_SIZE,
@@ -25,20 +25,14 @@ export async function searchPeople(search: PeopleSearch) {
     select: {
       id: true,
       email: true,
-      name: true,
-      role: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      dateOfBirth: true,
+      tShirtSize: true,
+      hasDriversLicense: true,
       createdAt: true,
-      profile: {
-        select: {
-          phone: true,
-          smsOptIn: true,
-          dateOfBirth: true,
-          sex: true,
-          tShirtSize: true,
-          hasDriversLicense: true,
-        },
-      },
-      _count: { select: { signups: { where: upcomingSignup(now) } } },
+      _count: { select: { signups: { where: upcomingSignup(today) } } },
     },
   });
 
@@ -46,123 +40,89 @@ export async function searchPeople(search: PeopleSearch) {
     total,
     page,
     pageCount,
-    people: users.map(({ _count, ...user }) => ({
-      ...user,
-      upcomingShifts: _count.signups,
+    people: volunteers.map(({ _count, ...volunteer }) => ({
+      ...volunteer,
+      upcomingSignups: _count.signups,
     })),
   };
 }
 
-// Everyone matching the search, on every page, with the columns of the User
-// and VolunteerProfile tables the CSV download includes.
+// Everyone matching the search, on every page, with the Volunteer table's
+// columns for the CSV download.
 export async function exportPeople(search: PeopleSearch) {
-  return prisma.user.findMany({
-    where: peopleWhere(search, new Date()),
+  const today = toDateInput(new Date(), DEFAULT_TIME_ZONE);
+  return prisma.volunteer.findMany({
+    where: peopleWhere(search, today),
     orderBy: PEOPLE_ORDER,
     select: {
       email: true,
-      name: true,
-      emailVerified: true,
-      role: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      dateOfBirth: true,
+      tShirtSize: true,
+      hasDriversLicense: true,
       createdAt: true,
       updatedAt: true,
-      profile: {
-        select: {
-          firstName: true,
-          lastName: true,
-          phone: true,
-          address: true,
-          emergencyContactName: true,
-          emergencyContactPhone: true,
-          dateOfBirth: true,
-          sex: true,
-          tShirtSize: true,
-          hasDriversLicense: true,
-          smsOptIn: true,
-          smsOptInAt: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      },
     },
   });
 }
 
-// By last name, then first name. People with no saved details sort last,
-// by email.
-const PEOPLE_ORDER: Prisma.UserOrderByWithRelationInput[] = [
-  { profile: { lastName: "asc" } },
-  { profile: { firstName: "asc" } },
+// Every signup form, newest day first, for the "Signed up for" filter.
+export async function listFormChoices() {
+  const forms = await prisma.signupForm.findMany({
+    orderBy: { date: "desc" },
+    select: { id: true, date: true },
+  });
+  return forms.map((form) => ({ value: form.id, label: formatDay(toDay(form.date), "short") }));
+}
+
+const PEOPLE_ORDER: Prisma.VolunteerOrderByWithRelationInput[] = [
+  { lastName: "asc" },
+  { firstName: "asc" },
   { email: "asc" },
 ];
 
-// A confirmed signup for a shift that hasn't started or been cancelled.
-function upcomingSignup(now: Date): Prisma.SignupWhereInput {
-  return { status: "CONFIRMED", shift: { cancelledAt: null, startsAt: { gt: now } } };
+// A signup that isn't cancelled, for a build day that hasn't passed.
+function upcomingSignup(today: string): Prisma.FormSignupWhereInput {
+  return { cancelledAt: null, form: { date: { gte: fromDay(today) } } };
 }
 
-function peopleWhere(search: PeopleSearch, now: Date): Prisma.UserWhereInput {
-  const and: Prisma.UserWhereInput[] = [];
-  const hasProfile = (profile: Prisma.VolunteerProfileWhereInput) => ({ profile: { is: profile } });
-  const noProfile = { profile: { is: null } };
+function peopleWhere(search: PeopleSearch, today: string): Prisma.VolunteerWhereInput {
+  const and: Prisma.VolunteerWhereInput[] = [];
 
   const text = textWhere(search);
   if (text) and.push(text);
 
-  // "none" also matches people with no saved details.
-  if (search.sex.length > 0) {
-    const chosen = search.sex.filter((sex) => sex !== "none");
-    and.push({
-      OR: [
-        hasProfile({ sex: { in: chosen } }),
-        ...(search.sex.includes("none") ? [hasProfile({ sex: null }), noProfile] : []),
-      ],
-    });
-  }
-  if (search.size.length > 0) {
-    const chosen = search.size.filter((size) => size !== "none");
-    and.push({
-      OR: [
-        hasProfile({ tShirtSize: { in: chosen } }),
-        ...(search.size.includes("none") ? [hasProfile({ tShirtSize: null }), noProfile] : []),
-      ],
-    });
-  }
+  if (search.size.length > 0) and.push({ tShirtSize: { in: search.size } });
 
-  // Ages are counted in the admin time zone, today. At least N means born
-  // on or before this day N years ago; at most N means born after this day
-  // N + 1 years ago.
+  // Ages are counted today. At least N means born on or before this day N
+  // years ago; at most N means born after this day N + 1 years ago.
   if (search.ageMin !== null || search.ageMax !== null) {
-    const today = toDateInput(now, DEFAULT_TIME_ZONE);
     const dateOfBirth: Prisma.DateTimeFilter = {};
     if (search.ageMin !== null) dateOfBirth.lte = yearsBefore(today, search.ageMin);
     if (search.ageMax !== null) dateOfBirth.gt = yearsBefore(today, search.ageMax + 1);
-    and.push(hasProfile({ dateOfBirth }));
+    and.push({ dateOfBirth });
   }
 
-  if (search.role) and.push({ role: search.role });
+  if (search.license) and.push({ hasDriversLicense: search.license === "yes" });
 
-  if (search.details === "yes") and.push({ profile: { isNot: null } });
-  if (search.details === "no") and.push(noProfile);
+  if (search.upcoming === "yes") and.push({ signups: { some: upcomingSignup(today) } });
+  if (search.upcoming === "no") and.push({ signups: { none: upcomingSignup(today) } });
 
-  if (search.texts === "yes") and.push(hasProfile({ smsOptIn: true }));
-  if (search.texts === "no") and.push({ NOT: hasProfile({ smsOptIn: true }) });
+  if (search.form) {
+    and.push({ signups: { some: { formId: search.form, cancelledAt: null } } });
+  }
 
-  // "No" leaves out people who haven't answered yet.
-  if (search.license === "yes") and.push(hasProfile({ hasDriversLicense: true }));
-  if (search.license === "no") and.push(hasProfile({ hasDriversLicense: false }));
-
-  if (search.shifts === "yes") and.push({ signups: { some: upcomingSignup(now) } });
-  if (search.shifts === "no") and.push({ signups: { none: upcomingSignup(now) } });
-
-  // Whole days in the admin time zone, both ends included.
+  // When they first signed up: whole days in the admin time zone, both ends
+  // included.
   if (search.joinedFrom || search.joinedTo) {
     const createdAt: Prisma.DateTimeFilter = {};
     if (search.joinedFrom) {
       createdAt.gte = zonedDateTime(search.joinedFrom, "00:00", DEFAULT_TIME_ZONE);
     }
     if (search.joinedTo) {
-      createdAt.lt = zonedDateTime(nextDay(search.joinedTo), "00:00", DEFAULT_TIME_ZONE);
+      createdAt.lt = zonedDateTime(addDays(search.joinedTo, 1), "00:00", DEFAULT_TIME_ZONE);
     }
     and.push({ createdAt });
   }
@@ -174,23 +134,21 @@ function peopleWhere(search: PeopleSearch, now: Date): Prisma.UserWhereInput {
 // field. "Any field" matches each word separately, so "nguyen alice" finds
 // Alice Nguyen. Phone searches compare digits only, so "(765) 555" matches
 // +17655550123.
-function textWhere({ by, q }: PeopleSearch): Prisma.UserWhereInput | null {
+function textWhere({ by, q }: PeopleSearch): Prisma.VolunteerWhereInput | null {
   if (!q) return null;
   const has = (value: string) => ({ contains: value, mode: "insensitive" as const });
   const phoneHas = (value: string) => {
     const digits = value.replace(/\D/g, "");
-    return digits ? { profile: { is: { phone: { contains: digits } } } } : null;
+    return digits ? { phone: { contains: digits } } : null;
   };
 
   switch (by) {
     case "firstName":
-      return { profile: { is: { firstName: has(q) } } };
+      return { firstName: has(q) };
     case "lastName":
-      return { profile: { is: { lastName: has(q) } } };
+      return { lastName: has(q) };
     case "email":
       return { email: has(q) };
-    case "address":
-      return { profile: { is: { address: has(q) } } };
     case "phone":
       // No digits can't match any phone number.
       return phoneHas(q) ?? { id: { in: [] } };
@@ -200,10 +158,9 @@ function textWhere({ by, q }: PeopleSearch): Prisma.UserWhereInput | null {
           const phone = phoneHas(word);
           return {
             OR: [
-              { name: has(word) },
+              { firstName: has(word) },
+              { lastName: has(word) },
               { email: has(word) },
-              { profile: { is: { firstName: has(word) } } },
-              { profile: { is: { lastName: has(word) } } },
               ...(phone ? [phone] : []),
             ],
           };
@@ -218,10 +175,4 @@ function yearsBefore(day: string, years: number) {
   const [year, month, date] = day.split("-").map(Number);
   const daysInMonth = new Date(Date.UTC(year - years, month, 0)).getUTCDate();
   return new Date(Date.UTC(year - years, month - 1, Math.min(date, daysInMonth)));
-}
-
-// "2026-09-25" → "2026-09-26"
-function nextDay(day: string) {
-  const [year, month, date] = day.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, date + 1)).toISOString().slice(0, 10);
 }

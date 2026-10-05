@@ -20,13 +20,12 @@ export const auth = betterAuth({
   user: {
     additionalFields: {
       // input: false means sign-in can never set it. Admins are made with
-      // the admin:add script. VOLUNTEER is left from when volunteers
-      // signed in too.
+      // the admin:add script; everyone with an account is an admin.
       role: {
-        type: ["VOLUNTEER", "ADMIN"],
+        type: ["ADMIN"],
         input: false,
         required: false,
-        defaultValue: "VOLUNTEER",
+        defaultValue: "ADMIN",
       },
     },
   },

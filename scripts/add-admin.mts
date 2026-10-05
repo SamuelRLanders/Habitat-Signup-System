@@ -1,5 +1,5 @@
-// Makes someone an admin who can use the dashboard. If they've already
-// signed in as a volunteer, their account is upgraded.
+// Adds an admin who can sign in and use the dashboard. Volunteers don't
+// have accounts, so everyone added here is an admin.
 // Usage: npm run admin:add -- someone@example.org "Their Name"
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -20,11 +20,8 @@ const prisma = new PrismaClient({
 
 try {
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing?.role === "ADMIN") {
+  if (existing) {
     console.log(`${email} is already an admin.`);
-  } else if (existing) {
-    await prisma.user.update({ where: { email }, data: { role: "ADMIN" } });
-    console.log(`Made ${email} an admin.`);
   } else {
     await prisma.user.create({ data: { email, name, role: "ADMIN" } });
     console.log(`Added ${name} <${email}> as an admin.`);

@@ -22,24 +22,24 @@ export function StatusBadge({ status }: { status: BuildStatus }) {
   return <Badge variant="destructive">Cancelled</Badge>;
 }
 
-// "6 / 10 spots filled" with a bar underneath.
+// "6 willing · 10 spots" with a bar underneath. Willing means volunteers
+// who said on the day's signup form that they could work it; a volunteer
+// can be willing to work several shifts.
 export function SpotsMeter({
-  filled,
+  willing,
   capacity,
   className,
 }: {
-  filled: number;
+  willing: number;
   capacity: number;
   className?: string;
 }) {
-  const percent = capacity > 0 ? Math.min(100, (filled / capacity) * 100) : 0;
-  const full = capacity > 0 && filled >= capacity;
+  const percent = capacity > 0 ? Math.min(100, (willing / capacity) * 100) : 0;
 
   return (
     <div className={cn("flex min-w-32 flex-col gap-1", className)}>
       <span className="text-sm tabular-nums">
-        {filled} / {capacity} spots filled
-        {full && <span className="font-medium"> · Full</span>}
+        {willing} willing · {capacity} {capacity === 1 ? "spot" : "spots"}
       </span>
       <div
         className="h-1.5 overflow-hidden rounded-full bg-muted"

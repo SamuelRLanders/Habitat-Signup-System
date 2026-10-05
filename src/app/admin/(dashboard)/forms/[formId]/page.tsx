@@ -1,3 +1,4 @@
+import { DownloadIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -7,18 +8,22 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { FormStatus } from "@/generated/prisma/enums";
 import { requireAdmin } from "@/lib/auth/dal";
+import { getFormRoster, type RosterSignup } from "@/lib/form-signups/rosters";
 import { prisma } from "@/lib/prisma";
 import { deleteSignupForm, setSignupFormStatus } from "@/lib/signup-forms/actions";
 import { formPhase } from "@/lib/signup-forms/phase";
-import { getSignupForm, totalSpots } from "@/lib/signup-forms/queries";
+import { getSignupForm, shiftLabel, totalSpots } from "@/lib/signup-forms/queries";
 import {
   DEFAULT_TIME_ZONE,
+  formatDate,
   formatDay,
   formatTimeRange,
   timeZoneLabel,
   toDay,
 } from "@/lib/time";
-import { BackLink } from "../../builds/build-parts";
+import { T_SHIRT_SIZES } from "@/lib/volunteers";
+import { BackLink, SpotsMeter } from "../../builds/build-parts";
+import { VolunteerTable } from "../../volunteer-table";
 import { PhaseBadge, phaseNote } from "../form-parts";
 import { ShareDialog } from "../share-dialog";
 
@@ -44,12 +49,21 @@ export default async function SignupFormPage({
 
   const phase = formPhase(form);
   const spots = totalSpots(form.shifts);
+  const roster = await getFormRoster(form.id, form.shifts);
+  const active = roster.filter((signup) => !signup.cancelledAt);
+  const cancelled = roster.filter((signup) => signup.cancelledAt);
+  const labels = new Map(form.shifts.map((shift) => [shift.id, shiftLabel(shift)]));
+  // How many active signups chose each shift.
+  const willing = new Map<string, number>();
+  for (const signup of active) {
+    for (const id of signup.shiftIds) willing.set(id, (willing.get(id) ?? 0) + 1);
+  }
   // The day's shifts under a heading for each build, in order of each
   // build's first shift.
   const builds = [...Map.groupBy(form.shifts, (shift) => shift.build.id).values()];
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-8">
+    <div className="mx-auto flex max-w-5xl flex-col gap-8">
       <div className="flex flex-col gap-4">
         <BackLink href="/admin/forms">Back to forms</BackLink>
 
@@ -146,15 +160,73 @@ export default async function SignupFormPage({
                           </p>
                         )}
                       </div>
-                      <span className="text-sm tabular-nums">
-                        {shift.capacity} {shift.capacity === 1 ? "spot" : "spots"}
-                      </span>
+                      <SpotsMeter willing={willing.get(shift.id) ?? 0} capacity={shift.capacity} />
                     </li>
                   ))}
                 </ul>
               </div>
             );
           })
+        )}
+      </section>
+
+      <section className="flex flex-col gap-4" aria-labelledby="volunteers-heading">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <h2 id="volunteers-heading" className="text-lg font-semibold">
+              Volunteers ({active.length})
+            </h2>
+            {active.length > 0 && <Totals signups={active} />}
+          </div>
+          {roster.length > 0 && (
+            // A plain link, not <Link>: it downloads a file.
+            <a
+              href={`/admin/forms/${form.id}/export`}
+              download
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <DownloadIcon aria-hidden="true" />
+              Download CSV
+            </a>
+          )}
+        </div>
+
+        {active.length === 0 ? (
+          <Card>
+            <CardContent className="py-6 text-center text-muted-foreground">
+              Nobody has signed up yet.
+            </CardContent>
+          </Card>
+        ) : (
+          <VolunteerTable
+            day={form.day}
+            shiftsHeading="Could work"
+            rows={active.map((signup) => ({
+              ...signup,
+              shifts: signup.shiftIds.flatMap((id) => labels.get(id) ?? []),
+            }))}
+          />
+        )}
+
+        {cancelled.length > 0 && (
+          <details className="rounded-xl p-4 text-sm ring-1 ring-foreground/10">
+            <summary className="cursor-pointer font-medium">
+              Cancelled signups ({cancelled.length})
+            </summary>
+            <ul className="mt-3 flex flex-col gap-1">
+              {cancelled.map((signup) => (
+                <li key={signup.id}>
+                  {signup.firstName} {signup.lastName} ·{" "}
+                  <a href={`mailto:${signup.email}`} className="hover:underline">
+                    {signup.email}
+                  </a>{" "}
+                  <span className="text-muted-foreground">
+                    · cancelled {formatDate(signup.cancelledAt!, DEFAULT_TIME_ZONE)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
       </section>
 
@@ -180,6 +252,21 @@ export default async function SignupFormPage({
         )}
       </section>
     </div>
+  );
+}
+
+// "T-shirts: S 2 · M 5 · L 3 · 4 with a driver's license", for ordering
+// shirts and planning rides.
+function Totals({ signups }: { signups: RosterSignup[] }) {
+  const sizes = T_SHIRT_SIZES.flatMap((size) => {
+    const count = signups.filter((signup) => signup.tShirtSize === size.value).length;
+    return count > 0 ? [`${size.label} ${count}`] : [];
+  });
+  const drivers = signups.filter((signup) => signup.hasDriversLicense).length;
+  return (
+    <p className="text-sm text-muted-foreground">
+      T-shirts: {sizes.join(" · ")} · {drivers} with a driver&apos;s license
+    </p>
   );
 }
 

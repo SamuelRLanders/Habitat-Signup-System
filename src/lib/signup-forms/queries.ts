@@ -2,7 +2,15 @@ import "server-only";
 import { connection } from "next/server";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
-import { addDays, DEFAULT_TIME_ZONE, fromDay, toDateInput, toDay } from "@/lib/time";
+import {
+  addDays,
+  DEFAULT_TIME_ZONE,
+  formatTimeRange,
+  fromDay,
+  timeZoneLabel,
+  toDateInput,
+  toDay,
+} from "@/lib/time";
 
 // Read queries for signup forms. The admin callers must run requireAdmin()
 // first; these functions don't check who is asking. The public ones only
@@ -71,6 +79,18 @@ export type OfferedShift = {
   };
 };
 
+// "8:00 AM – 12:00 PM", noting the time zone if it isn't Indiana's.
+export function shiftTime(shift: OfferedShift) {
+  const zone = shift.build.timeZone;
+  const time = formatTimeRange(shift.startsAt, shift.endsAt, zone);
+  return zone === DEFAULT_TIME_ZONE ? time : `${time} (${timeZoneLabel(zone)} time)`;
+}
+
+// "Maple Street Home, 8:00 AM – 12:00 PM"
+export function shiftLabel(shift: OfferedShift) {
+  return `${shift.build.name}, ${shiftTime(shift)}`;
+}
+
 // The total number of volunteers a form can take: the spots on all its
 // shifts.
 export function totalSpots(shifts: { capacity: number }[]) {
@@ -86,22 +106,24 @@ export const FORM_LIST_TABS = ["upcoming", "past"] as const;
 export type FormListTab = (typeof FORM_LIST_TABS)[number];
 
 // Forms for today and later, soonest first, or earlier ones, most recent
-// first, each with its shift count and total spots.
+// first, each with its shift count, total spots and signups.
 export async function listSignupForms(tab: FormListTab) {
   const day = fromDay(today());
   const forms = await prisma.signupForm.findMany({
     where: { date: tab === "upcoming" ? { gte: day } : { lt: day } },
     orderBy: { date: tab === "upcoming" ? "asc" : "desc" },
+    include: { _count: { select: { signups: { where: { cancelledAt: null } } } } },
   });
 
   const shifts = await offeredShifts(forms.map((form) => toDay(form.date)));
-  return forms.map((form) => {
+  return forms.map(({ _count, ...form }) => {
     const formShifts = shifts.get(toDay(form.date)) ?? [];
     return {
       ...form,
       day: toDay(form.date),
       shiftCount: formShifts.length,
       spots: totalSpots(formShifts),
+      signupCount: _count.signups,
     };
   });
 }

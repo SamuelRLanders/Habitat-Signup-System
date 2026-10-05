@@ -12,7 +12,6 @@ import {
   type FormState,
 } from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
-import { spotsTaken } from "@/lib/signups/queries";
 import {
   formatDate,
   TIME_ZONES,
@@ -147,18 +146,15 @@ export async function setBuildStatus(
   return {};
 }
 
-// Only builds nobody has signed up for can be deleted. Others are cancelled,
-// which keeps the record of who signed up.
+// Only builds whose shifts no volunteer has chosen can be deleted. Others
+// are cancelled, which keeps the record of who signed up.
 export async function deleteBuild(
   buildId: string,
 ): Promise<ActionState> {
   await requireAdmin();
 
-  const [signups, preferences] = await Promise.all([
-    prisma.signup.count({ where: { shift: { buildId } } }),
-    prisma.shiftPreference.count({ where: { shift: { buildId } } }),
-  ]);
-  if (signups + preferences > 0) {
+  const chosen = await prisma.shiftPreference.count({ where: { shift: { buildId } } });
+  if (chosen > 0) {
     return {
       error: "Volunteers have signed up for this build. Cancel it instead.",
     };
@@ -283,28 +279,13 @@ export async function updateShift(
 
   const existing = await prisma.shift.findUnique({
     where: { id: shiftId },
-    include: {
-      build: true,
-      signups: {
-        where: { status: "CONFIRMED" },
-        select: { registration: { select: { size: true } } },
-      },
-    },
+    include: { build: true },
   });
   if (!existing) return { errors: { form: "This shift no longer exists." } };
 
   const parsed = parseShifts(formData, editedShiftDateSchema, existing.build.timeZone);
   if (!parsed.ok) return { errors: parsed.errors };
   const [shift] = parsed.shifts;
-
-  const filled = spotsTaken(existing.signups);
-  if (shift.capacity < filled) {
-    return {
-      errors: {
-        capacity: `${filled} spots are already filled, so this shift needs at least ${filled} spots.`,
-      },
-    };
-  }
 
   await prisma.shift.update({ where: { id: shiftId }, data: shift });
   revalidateAdmin();
@@ -319,11 +300,8 @@ export async function removeShift(
 ): Promise<ActionState> {
   await requireAdmin();
 
-  const [signups, preferences] = await Promise.all([
-    prisma.signup.count({ where: { shiftId } }),
-    prisma.shiftPreference.count({ where: { shiftId } }),
-  ]);
-  if (signups + preferences === 0) {
+  const chosen = await prisma.shiftPreference.count({ where: { shiftId } });
+  if (chosen === 0) {
     await prisma.shift.deleteMany({ where: { id: shiftId } });
   } else {
     await prisma.shift.updateMany({

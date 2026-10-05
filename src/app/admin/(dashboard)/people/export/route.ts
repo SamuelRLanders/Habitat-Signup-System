@@ -3,33 +3,22 @@ import { parsePeopleSearch } from "@/lib/admin/people-search";
 import { exportPeople } from "@/lib/admin/queries";
 import { getAdmin } from "@/lib/auth/dal";
 import { toCsv } from "@/lib/csv";
-import { DEFAULT_TIME_ZONE, toDateInput } from "@/lib/time";
+import { DEFAULT_TIME_ZONE, toDateInput, toDay } from "@/lib/time";
 
-// Downloads everyone matching the People page's current search (every page
-// of it) as a CSV. Columns use the User and VolunteerProfile tables' names,
-// leaving out IDs. The profile's timestamps are prefixed so they don't
-// clash with the user's.
+// Downloads every volunteer matching the People page's current search
+// (every page of it) as a CSV. Columns use the Volunteer table's names,
+// leaving out IDs. Details are each volunteer's latest; createdAt is when
+// they first signed up.
 const HEADER = [
   "email",
-  "name",
-  "emailVerified",
-  "role",
-  "createdAt",
-  "updatedAt",
   "firstName",
   "lastName",
   "phone",
-  "address",
-  "emergencyContactName",
-  "emergencyContactPhone",
   "dateOfBirth",
-  "sex",
   "tShirtSize",
   "hasDriversLicense",
-  "smsOptIn",
-  "smsOptInAt",
-  "profileCreatedAt",
-  "profileUpdatedAt",
+  "createdAt",
+  "updatedAt",
 ];
 
 export async function GET(request: NextRequest) {
@@ -40,28 +29,17 @@ export async function GET(request: NextRequest) {
   }
 
   const people = await exportPeople(parsePeopleSearch(request.nextUrl.searchParams));
-  const rows = people.map(({ profile, ...user }) => [
-    user.email,
-    user.name,
-    user.emailVerified,
-    user.role,
-    user.createdAt,
-    user.updatedAt,
-    profile?.firstName,
-    profile?.lastName,
-    profile?.phone,
-    profile?.address,
-    profile?.emergencyContactName,
-    profile?.emergencyContactPhone,
+  const rows = people.map((person) => [
+    person.email,
+    person.firstName,
+    person.lastName,
+    person.phone,
     // A date-only column: "1992-04-11".
-    profile?.dateOfBirth.toISOString().slice(0, 10),
-    profile?.sex,
-    profile?.tShirtSize,
-    profile?.hasDriversLicense,
-    profile?.smsOptIn,
-    profile?.smsOptInAt,
-    profile?.createdAt,
-    profile?.updatedAt,
+    toDay(person.dateOfBirth),
+    person.tShirtSize,
+    person.hasDriversLicense,
+    person.createdAt,
+    person.updatedAt,
   ]);
 
   const today = toDateInput(new Date(), DEFAULT_TIME_ZONE);

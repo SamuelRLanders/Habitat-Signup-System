@@ -18,15 +18,9 @@ import {
 } from "@/lib/form-signups/queries";
 import { formatPhone } from "@/lib/phone";
 import type { FormPhase } from "@/lib/signup-forms/phase";
-import type { OfferedShift } from "@/lib/signup-forms/queries";
-import {
-  DEFAULT_TIME_ZONE,
-  formatDay,
-  formatTimeRange,
-  fromDay,
-  timeZoneLabel,
-} from "@/lib/time";
-import { T_SHIRT_SIZES } from "@/lib/volunteers";
+import { shiftLabel, shiftTime, type OfferedShift } from "@/lib/signup-forms/queries";
+import { formatDay, fromDay } from "@/lib/time";
+import { shirtLabel } from "@/lib/volunteers";
 import { SignupFields, type DetailsDefaults, type ShiftChoice } from "./signup-fields";
 import { SignupPanel } from "./signup-panel";
 
@@ -195,7 +189,7 @@ function Summary({
 }) {
   // Only shifts still offered: a cancelled shift no longer counts.
   const chosenShifts = shifts.filter((shift) => chosen.includes(shift.id));
-  const shirt = T_SHIRT_SIZES.find((size) => size.value === details.tShirtSize)?.label;
+  const shirt = shirtLabel(details.tShirtSize);
   const birthday = fromDay(details.dateOfBirth).toLocaleDateString("en-US", {
     timeZone: "UTC",
     month: "long",
@@ -240,21 +234,13 @@ function Summary({
         ) : (
           <ul className="flex flex-col gap-1">
             {chosenShifts.map((shift) => (
-              <li key={shift.id}>
-                {shift.build.name}, {shiftTime(shift)}
-              </li>
+              <li key={shift.id}>{shiftLabel(shift)}</li>
             ))}
           </ul>
         )}
       </div>
     </div>
   );
-}
-
-function shiftTime(shift: OfferedShift) {
-  const zone = shift.build.timeZone;
-  const time = formatTimeRange(shift.startsAt, shift.endsAt, zone);
-  return zone === DEFAULT_TIME_ZONE ? time : `${time} (${timeZoneLabel(zone)} time)`;
 }
 
 function toChoice(shift: OfferedShift): ShiftChoice {

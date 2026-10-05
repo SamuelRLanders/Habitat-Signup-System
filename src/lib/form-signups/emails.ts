@@ -1,8 +1,8 @@
 import "server-only";
 import { escapeHtml, sendEmail } from "@/lib/email";
 import { absoluteUrl } from "@/lib/request";
-import type { OfferedShift } from "@/lib/signup-forms/queries";
-import { DEFAULT_TIME_ZONE, formatDay, formatTimeRange, timeZoneLabel } from "@/lib/time";
+import { shiftLabel, type OfferedShift } from "@/lib/signup-forms/queries";
+import { formatDay } from "@/lib/time";
 
 // Emails to volunteers about their signup. Each links back to the form,
 // where they confirm their email again to update or cancel.
@@ -13,14 +13,6 @@ type SignupEmail = {
   formId: string;
   day: string; // "2026-10-10"
 };
-
-// "Maple Street Home, 8:00 AM – 12:00 PM"
-function shiftLine(shift: OfferedShift) {
-  const zone = shift.build.timeZone;
-  const time = formatTimeRange(shift.startsAt, shift.endsAt, zone);
-  const zoneNote = zone === DEFAULT_TIME_ZONE ? "" : ` (${timeZoneLabel(zone)} time)`;
-  return `${shift.build.name}, ${time}${zoneNote}`;
-}
 
 export async function sendSignupConfirmation({
   to,
@@ -35,7 +27,7 @@ export async function sendSignupConfirmation({
   const intro = updated
     ? `Your signup for the Purdue Habitat build day on ${date} is updated.`
     : `Thanks for signing up for the Purdue Habitat build day on ${date}!`;
-  const lines = shifts.map(shiftLine);
+  const lines = shifts.map(shiftLabel);
 
   await sendEmail({
     to,

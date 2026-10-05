@@ -1,22 +1,22 @@
-// Fills the database with test builds, shifts, volunteers, and signups, for
-// trying the app by hand. Everything it makes is marked so it can be removed:
-// builds are named "[Test] …", signup forms' descriptions start with
-// "[Test] ", and users have @example.org emails. Running it
-// again replaces the old test data. Real data is never touched.
+// Fills the database with test builds, shifts, signup forms, volunteers and
+// their signups, for trying the app by hand. Everything it makes is marked
+// so it can be removed: builds are named "[Test] …", signup forms'
+// descriptions start with "[Test] ", and volunteers have @example.org
+// emails. Running it again replaces the old test data. Real data is never
+// touched.
 //
 // Usage: npm run seed:test                 (replace the test data)
-//        npm run seed:test -- --people 350 (also add 350 made-up people,
+//        npm run seed:test -- --people 350 (also add 350 made-up volunteers,
 //                                           for trying the People search)
 //        npm run seed:test -- --clean      (only remove it)
 //
-// Only admins sign in now. The test volunteers and their signups are made
-// the old way (accounts and registrations) so the admin rosters and People
-// page have something to show until signup forms replace them.
+// Volunteers don't sign in. To try signing up, open a form with any
+// @example.org address: until RESEND_API_KEY is set, codes print in the
+// terminal running `npm run dev`.
 import "dotenv/config";
-import { randomBytes, randomUUID } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import type { Sex, TShirtSize } from "../src/generated/prisma/enums";
+import type { TShirtSize } from "../src/generated/prisma/enums";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -34,87 +34,47 @@ function at(date: string, hour: number) {
   return new Date(Date.UTC(y, m - 1, d, hour + offset));
 }
 
+const day = (date: string) => new Date(`${date}T00:00:00Z`);
+
 async function clean() {
-  const users = await prisma.user.findMany({
-    where: { email: { endsWith: TEST_DOMAIN } },
-    select: { id: true },
-  });
-  const builds = await prisma.build.findMany({
-    where: { name: { startsWith: TEST_PREFIX } },
-    select: { id: true },
-  });
-  const userIds = users.map((u) => u.id);
-  const buildIds = builds.map((b) => b.id);
-  // Registrations for test builds or by test users. Old built-in waiver
-  // records block deletes on purpose, so they go first.
-  const registrations = {
-    OR: [{ buildId: { in: buildIds } }, { leaderId: { in: userIds } }],
-  };
-  await prisma.waiverAcceptance.deleteMany({ where: { registration: registrations } });
-  await prisma.groupMember.deleteMany({ where: { registration: registrations } });
-  await prisma.signup.deleteMany({ where: { registration: registrations } });
-  await prisma.registration.deleteMany({ where: registrations });
-  // Signups through test forms or by test volunteers, which block deleting
-  // either, then the volunteers and forms themselves.
+  const testEmail = { endsWith: TEST_DOMAIN };
+  const testForm = { description: { startsWith: TEST_PREFIX } };
+  // Signups block deleting their forms and volunteers, so they go first.
   await prisma.formSignup.deleteMany({
-    where: {
-      OR: [
-        { form: { description: { startsWith: TEST_PREFIX } } },
-        { volunteer: { email: { endsWith: TEST_DOMAIN } } },
-      ],
-    },
+    where: { OR: [{ form: testForm }, { volunteer: { email: testEmail } }] },
   });
-  await prisma.volunteer.deleteMany({ where: { email: { endsWith: TEST_DOMAIN } } });
-  await prisma.build.deleteMany({ where: { id: { in: buildIds } } });
-  const forms = await prisma.signupForm.deleteMany({
-    where: { description: { startsWith: TEST_PREFIX } },
-  });
-  await prisma.loginCodeRequest.deleteMany({ where: { email: { endsWith: TEST_DOMAIN } } });
-  await prisma.user.deleteMany({ where: { id: { in: userIds } } });
-  console.log(`Removed ${builds.length} test builds, ${forms.count} test forms and ${users.length} test users.`);
+  const volunteers = await prisma.volunteer.deleteMany({ where: { email: testEmail } });
+  const builds = await prisma.build.deleteMany({ where: { name: { startsWith: TEST_PREFIX } } });
+  const forms = await prisma.signupForm.deleteMany({ where: testForm });
+  await prisma.volunteerCode.deleteMany({ where: { email: testEmail } });
+  await prisma.volunteerSession.deleteMany({ where: { email: testEmail } });
+  await prisma.loginCodeRequest.deleteMany({ where: { email: testEmail } });
+  console.log(
+    `Removed ${builds.count} test builds, ${forms.count} test forms and ${volunteers.count} test volunteers.`,
+  );
 }
 
 type Person = {
   first: string;
   last: string;
-  sex?: Sex;
-  shirt?: TShirtSize;
-  sms?: boolean;
+  shirt: TShirtSize;
+  license: boolean;
   birthday: string;
 };
 
-async function makeUser(email: string, person: Person | null) {
-  return prisma.user.create({
-    data: {
-      email,
-      name: person ? `${person.first} ${person.last}` : "",
-      emailVerified: true,
-      profile: person
-        ? {
-            create: {
-              firstName: person.first,
-              lastName: person.last,
-              phone: `+1765555${String(Math.floor(1000 + Math.random() * 9000))}`,
-              smsOptIn: person.sms ?? false,
-              smsOptInAt: person.sms ? new Date() : null,
-              address: "123 Test St, Lafayette, IN 47901",
-              emergencyContactName: "Test Contact",
-              emergencyContactPhone: "+17655550100",
-              dateOfBirth: new Date(`${person.birthday}T00:00:00Z`),
-              sex: person.sex,
-              tShirtSize: person.shirt,
-            },
-          }
-        : undefined,
-    },
-  });
+function details(person: Person) {
+  return {
+    firstName: person.first,
+    lastName: person.last,
+    phone: `+1765555${String(Math.floor(1000 + Math.random() * 9000))}`,
+    dateOfBirth: day(person.birthday),
+    tShirtSize: person.shirt,
+    hasDriversLicense: person.license,
+  };
 }
 
 async function seed() {
-  const admin = await prisma.user.findFirst({
-    where: { role: "ADMIN" },
-    orderBy: { createdAt: "asc" },
-  });
+  const admin = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } });
   if (!admin) {
     console.error('No admin yet. Add one first: npm run admin:add -- you@example.org "Your Name"');
     process.exit(1);
@@ -157,7 +117,7 @@ async function seed() {
       shift("2026-10-24", 8, 14, 15, "Roof trusses. Must be comfortable on ladders."),
     ],
   });
-  const riverside = await createBuild({
+  await createBuild({
     name: "Riverside Duplex",
     address: "88 Riverside Dr, West Lafayette, IN 47906",
     description: "Interior finishing on a duplex: drywall, painting, and trim.",
@@ -174,20 +134,20 @@ async function seed() {
     description: "Porch and ramp repair for a veteran's home. Still being planned.",
     shifts: [shift("2026-12-05", 9, 13, 5), shift("2026-12-12", 9, 13, 5)],
   });
-  const elm = await createBuild({
+  await createBuild({
     name: "Elm Court Landscaping",
     address: "7 Elm Ct, Lafayette, IN 47909",
-    description: "Final landscaping before the family moves in. Signups are full.",
+    description: "Final landscaping before the family moves in.",
     shifts: [shift("2026-10-31", 9, 12, 8)],
   });
-  // Already happened, so it shows under past shifts.
+  // Already happened, so it shows under past builds.
   const summer = await createBuild({
     name: "Summer Blitz Build",
     address: "300 Harrison St, Lafayette, IN 47901",
     shifts: [shift("2026-08-15", 8, 12, 20), shift("2026-08-22", 8, 12, 20)],
   });
   // Shares build days with Maple, so those days' forms span two builds.
-  await createBuild({
+  const cedar = await createBuild({
     name: "Cedar Lane Home",
     address: "2210 Cedar Ln, West Lafayette, IN 47906",
     description: "Exterior siding on a new home.",
@@ -212,14 +172,13 @@ async function seed() {
     sections?: typeof waivers;
   }) => {
     // Forms are one per day, so leave a day alone if it has a real form.
-    const date = new Date(`${data.date}T00:00:00Z`);
-    if (await prisma.signupForm.findUnique({ where: { date } })) {
+    if (await prisma.signupForm.findUnique({ where: { date: day(data.date) } })) {
       console.log(`Skipped the ${data.date} test form: that day already has a form.`);
-      return;
+      return null;
     }
-    await prisma.signupForm.create({
+    return prisma.signupForm.create({
       data: {
-        date,
+        date: day(data.date),
         status: data.status,
         opensAt: at(...data.opens),
         closesAt: at(...data.closes),
@@ -230,7 +189,7 @@ async function seed() {
       },
     });
   };
-  await createForm({
+  const oct10 = await createForm({
     date: "2026-10-10",
     status: "PUBLISHED",
     opens: ["2026-09-28", 9],
@@ -253,7 +212,7 @@ async function seed() {
     closes: ["2026-11-05", 22],
     description: "Still being planned.",
   });
-  await createForm({
+  const aug15 = await createForm({
     date: "2026-08-15",
     status: "PUBLISHED",
     opens: ["2026-08-01", 9],
@@ -261,168 +220,101 @@ async function seed() {
     description: "Summer blitz kickoff.",
   });
 
-  // ── Users. Dana has no saved details, to try the first-time flow.
-  const alice = await makeUser(`alice${TEST_DOMAIN}`, { first: "Alice", last: "Nguyen", sex: "FEMALE", shirt: "S", sms: true, birthday: "1992-04-11" });
-  const ben = await makeUser(`ben${TEST_DOMAIN}`, { first: "Ben", last: "Okafor", sex: "MALE", shirt: "L", sms: true, birthday: "1985-09-02" });
-  const carmen = await makeUser(`carmen${TEST_DOMAIN}`, { first: "Carmen", last: "Diaz", shirt: "M", birthday: "1978-01-23" });
-  await makeUser(`dana${TEST_DOMAIN}`, null);
-  const eli = await makeUser(`eli${TEST_DOMAIN}`, { first: "Eli", last: "Brooks", sex: "MALE", shirt: "XL", sms: false, birthday: "2000-06-30" });
-
-  // ── Signups
-  const register = async ({
-    user,
-    build,
-    shifts,
-    size = 1,
-    groupName,
-  }: {
-    user: { id: string };
-    build: { id: string };
-    shifts: { id: string }[];
-    size?: number;
-    groupName?: string;
-  }) => {
-    const registration = await prisma.registration.create({
+  // ── Volunteers and their signups. Each signup copies the volunteer's
+  // details, as the real form does.
+  const volunteer = (email: string, person: Person) =>
+    prisma.volunteer.create({ data: { email: email + TEST_DOMAIN, ...details(person) } });
+  const signUp = async (
+    who: Awaited<ReturnType<typeof volunteer>>,
+    form: { id: string } | null,
+    shifts: { id: string }[],
+    cancelled = false,
+  ) => {
+    if (!form) return;
+    const { firstName, lastName, phone, dateOfBirth, tShirtSize, hasDriversLicense } = who;
+    await prisma.formSignup.create({
       data: {
-        buildId: build.id,
-        leaderId: user.id,
-        size,
-        groupName: size > 1 ? groupName : null,
-        joinToken: size > 1 ? randomBytes(18).toString("base64url") : null,
-        signups: { create: shifts.map((s) => ({ shiftId: s.id, userId: user.id })) },
-      },
-    });
-    return registration;
-  };
-  const memberJoins = async (registrationId: string, legalName: string, birthday: string, sms: boolean) => {
-    await prisma.groupMember.create({
-      data: {
-        registrationId,
-        legalName,
-        dateOfBirth: new Date(`${birthday}T00:00:00Z`),
-        phone: `+1317555${String(Math.floor(1000 + Math.random() * 9000))}`,
-        smsOptIn: sms,
-        smsOptInAt: sms ? new Date() : null,
+        firstName,
+        lastName,
+        phone,
+        dateOfBirth,
+        tShirtSize,
+        hasDriversLicense,
+        formId: form.id,
+        volunteerId: who.id,
+        cancelledAt: cancelled ? new Date() : null,
+        preferences: { create: shifts.map((s) => ({ shiftId: s.id })) },
       },
     });
   };
 
-  // Alice: on her own, two Maple shifts, and a past one.
-  await register({ user: alice, build: maple, shifts: [maple.shifts[0], maple.shifts[2]] });
-  await register({ user: alice, build: summer, shifts: [summer.shifts[0]] });
+  const alice = await volunteer("alice", { first: "Alice", last: "Nguyen", shirt: "S", license: true, birthday: "1992-04-11" });
+  const ben = await volunteer("ben", { first: "Ben", last: "Okafor", shirt: "L", license: true, birthday: "1985-09-02" });
+  const carmen = await volunteer("carmen", { first: "Carmen", last: "Diaz", shirt: "M", license: false, birthday: "1978-01-23" });
+  const dana = await volunteer("dana", { first: "Dana", last: "Reyes", shirt: "XL", license: false, birthday: "2004-12-01" });
+  const eli = await volunteer("eli", { first: "Eli", last: "Brooks", shirt: "XL", license: true, birthday: "2000-06-30" });
 
-  // Ben: leads a youth group of 6 at Maple and Riverside. Three have joined.
-  const youth = await register({
-    user: ben,
-    build: maple,
-    shifts: [maple.shifts[0], maple.shifts[4]],
-    size: 6,
-    groupName: "Lafayette Youth Group",
-  });
-  await memberJoins(youth.id, "Grace Kim", "1999-02-14", true);
-  await memberJoins(youth.id, "Marcus Hall", "2001-11-03", false);
-  await memberJoins(youth.id, "Priya Shah", "1998-07-19", true);
-  await register({
-    user: ben,
-    build: riverside,
-    shifts: [riverside.shifts[2]],
-    size: 4,
-    groupName: "Lafayette Youth Group",
-  });
-
-  // Carmen: one Riverside shift, which nearly fills it, and a past shift.
-  await register({ user: carmen, build: riverside, shifts: [riverside.shifts[3]] });
-  await register({ user: carmen, build: summer, shifts: [summer.shifts[1]] });
-
-  // Eli: leads a group of 3 nobody else has joined yet.
-  await register({
-    user: eli,
-    build: riverside,
-    shifts: [riverside.shifts[0], riverside.shifts[1]],
-    size: 3,
-    groupName: "Brooks Family",
-  });
-
-  // Fill up Elm Court.
-  await register({ user: carmen, build: elm, shifts: [elm.shifts[0]], size: 8, groupName: "Diaz Landscaping Crew" });
+  const [mapleAm, maplePm] = maple.shifts;
+  const [cedarOct10] = cedar.shifts;
+  await signUp(alice, oct10, [mapleAm, cedarOct10]);
+  await signUp(ben, oct10, [mapleAm, maplePm]);
+  await signUp(carmen, oct10, [cedarOct10]);
+  await signUp(eli, oct10, [mapleAm, maplePm, cedarOct10]);
+  await signUp(dana, oct10, [maplePm], true);
+  await signUp(alice, aug15, [summer.shifts[0]]);
+  await signUp(carmen, aug15, [summer.shifts[0]]);
 
   console.log(`
 Test data created. See it at ${SITE}/admin/forms, ${SITE}/admin/builds
-and ${SITE}/admin/people.
+and ${SITE}/admin/people. Volunteers see published forms at ${SITE}/.
 
 Signup forms:
-  Sat, Oct 10   published and open; Maple and Cedar Lane shifts; waivers
+  Sat, Oct 10   open; Maple and Cedar Lane shifts; waivers; 4 signups
+                and 1 cancelled
   Sat, Oct 17   published, opens Oct 11
   Sat, Nov 7    draft
-  Sat, Aug 15   past
+  Sat, Aug 15   past, 2 signups
 
-Builds:
-  Maple Street Home      signups on several shifts
-  Riverside Duplex       signups, including groups
-  Oak Avenue Repair      no signups
-  Elm Court Landscaping  one full shift
-  Summer Blitz Build     past shifts only
-  Cedar Lane Home        shifts on the same days as Maple, no signups
+Builds: Maple Street Home, Riverside Duplex, Oak Avenue Repair, Elm Court
+Landscaping, Summer Blitz Build (past) and Cedar Lane Home (shares days
+with Maple).
 
-Volunteers (records only; volunteers can't sign in):
-  alice, ben, carmen, dana and eli @example.org
+Volunteers: alice, ben, carmen, dana and eli @example.org. Open the Oct 10
+form with one of them to see, update or cancel their signup.
 
 Remove it all with: npm run seed:test -- --clean`);
 }
 
-// Lots of made-up people with a spread of details and join dates, and about
-// one in ten with no saved details. Their emails are person0001@example.org
-// and so on, so clean() removes them too.
+// Lots of made-up volunteers with a spread of details and first-signup
+// dates. Their emails are person0001@example.org and so on, so clean()
+// removes them too.
 async function seedPeople(count: number) {
-  const female = ["Olivia", "Emma", "Ava", "Sophia", "Mia", "Harper", "Amelia", "Grace", "Zoe", "Lucia", "Nora", "Maya", "Aisha", "Hannah", "Chloe"];
-  const male = ["Liam", "Noah", "James", "Lucas", "Mateo", "Ethan", "Henry", "Owen", "Samuel", "Jamal", "Wei", "Diego", "Caleb", "Isaac", "Leo"];
+  const firstNames = ["Olivia", "Emma", "Ava", "Sophia", "Mia", "Harper", "Amelia", "Grace", "Zoe", "Lucia", "Nora", "Maya", "Aisha", "Hannah", "Chloe", "Liam", "Noah", "James", "Lucas", "Mateo", "Ethan", "Henry", "Owen", "Samuel", "Jamal", "Wei", "Diego", "Caleb", "Isaac", "Leo"];
   const lastNames = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin", "Lee", "Thompson", "White", "Harris", "Clark", "Lewis", "Robinson", "Walker", "Young", "Allen", "King", "O'Brien", "Müller"];
   const sizes: TShirtSize[] = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"];
   const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
   const now = Date.now();
   const twoYears = 2 * 365 * 24 * 60 * 60 * 1000;
 
-  const users = [];
-  const profiles = [];
+  const volunteers = [];
   for (let i = 1; i <= count; i++) {
-    const id = randomUUID();
-    const isFemale = Math.random() < 0.5;
-    const first = pick(isFemale ? female : male);
-    const last = pick(lastNames);
-    const hasProfile = Math.random() > 0.1;
-    const createdAt = new Date(now - Math.random() * twoYears);
-    users.push({
-      id,
-      email: `person${String(i).padStart(4, "0")}${TEST_DOMAIN}`,
-      name: hasProfile ? `${first} ${last}` : "",
-      emailVerified: true,
-      createdAt,
-    });
-    if (!hasProfile) continue;
-    const sms = Math.random() < 0.5;
     const birthYear = 1950 + Math.floor(Math.random() * 58);
-    const birthday = new Date(Date.UTC(birthYear, Math.floor(Math.random() * 12), 1 + Math.floor(Math.random() * 28)));
-    profiles.push({
-      userId: id,
-      firstName: first,
-      lastName: last,
+    const createdAt = new Date(now - Math.random() * twoYears);
+    volunteers.push({
+      email: `person${String(i).padStart(4, "0")}${TEST_DOMAIN}`,
+      firstName: pick(firstNames),
+      lastName: pick(lastNames),
       phone: `+1765${String(2000000 + Math.floor(Math.random() * 7999999))}`,
-      address: `${100 + Math.floor(Math.random() * 9000)} ${pick(["Main", "Oak", "Elm", "Salem", "Union", "Ferry"])} St, Lafayette, IN 4790${Math.floor(Math.random() * 10)}`,
-      emergencyContactName: `${pick([...female, ...male])} ${last}`,
-      emergencyContactPhone: "+17655550100",
-      dateOfBirth: birthday,
-      // Some leave the optional choices blank.
-      sex: Math.random() < 0.15 ? null : isFemale ? ("FEMALE" as Sex) : ("MALE" as Sex),
-      tShirtSize: Math.random() < 0.15 ? null : pick(sizes),
-      smsOptIn: sms,
-      smsOptInAt: sms ? createdAt : null,
+      dateOfBirth: new Date(Date.UTC(birthYear, Math.floor(Math.random() * 12), 1 + Math.floor(Math.random() * 28))),
+      tShirtSize: pick(sizes),
+      hasDriversLicense: Math.random() < 0.7,
       createdAt,
+      updatedAt: createdAt,
     });
   }
-  await prisma.user.createMany({ data: users });
-  await prisma.volunteerProfile.createMany({ data: profiles });
+  await prisma.volunteer.createMany({ data: volunteers });
   console.log(`
-Added ${count} made-up people (person0001${TEST_DOMAIN} and on) for the People search.`);
+Added ${count} made-up volunteers (person0001${TEST_DOMAIN} and on) for the People search.`);
 }
 
 try {

@@ -52,7 +52,7 @@ export default async function BuildPage({
   const zone = build.timeZone;
   const zoneLabel = timeZoneLabel(zone);
   const cancelled = build.status === "CANCELLED";
-  const hasSignups = build.shifts.some((shift) => shift.signupCount > 0);
+  const hasSignups = build.shifts.some((shift) => shift.chosenCount > 0);
 
   // Group shifts under a heading for each day.
   const days = Map.groupBy(build.shifts, (shift) =>
@@ -176,7 +176,7 @@ export default async function BuildPage({
                         )}
                       </div>
 
-                      <SpotsMeter filled={shift.filled} capacity={shift.capacity} />
+                      <SpotsMeter willing={shift.willing} capacity={shift.capacity} />
 
                       <div className="flex flex-wrap items-start gap-1">
                         <Link
@@ -193,7 +193,6 @@ export default async function BuildPage({
                             submitLabel="Save shift"
                             trigger={{ label: "Edit", variant: "ghost" }}
                             timeZoneLabel={zoneLabel}
-                            filled={shift.filled}
                             defaults={{
                               date: toDateInput(shift.startsAt, zone),
                               startTime: toTimeInput(shift.startsAt, zone),
@@ -213,7 +212,7 @@ export default async function BuildPage({
                           ) : (
                             <RemoveShiftButton
                               shiftId={shift.id}
-                              signupCount={shift.signupCount}
+                              chosenCount={shift.chosenCount}
                             />
                           ))}
                       </div>
@@ -304,12 +303,12 @@ function DayFormLink({
 
 function RemoveShiftButton({
   shiftId,
-  signupCount,
+  chosenCount,
 }: {
   shiftId: string;
-  signupCount: number;
+  chosenCount: number;
 }) {
-  const hasSignups = signupCount > 0;
+  const hasSignups = chosenCount > 0;
   return (
     <ActionButton
       action={removeShift.bind(null, shiftId)}
@@ -320,12 +319,12 @@ function RemoveShiftButton({
           ? {
               title: "Cancel this shift?",
               description:
-                "Volunteers have signed up, so the shift will be marked cancelled and kept on record. Volunteers aren't notified automatically yet.",
+                "Volunteers chose this shift on the signup form, so it will be marked cancelled and kept on record. It's taken off the form, and volunteers aren't notified automatically yet.",
               confirmLabel: "Cancel shift",
             }
           : {
               title: "Delete this shift?",
-              description: "Nobody has signed up, so the shift will be permanently deleted.",
+              description: "No volunteer has chosen this shift, so it will be permanently deleted.",
               confirmLabel: "Delete shift",
             }
       }

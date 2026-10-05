@@ -98,7 +98,7 @@ export default async function BuildsPage({
                   </span>
                 </div>
                 {build.shiftCount > 0 && (
-                  <SpotsMeter filled={build.filled} capacity={build.capacity} className="w-48" />
+                  <SpotsMeter willing={build.willing} capacity={build.capacity} className="w-48" />
                 )}
               </Link>
             </li>

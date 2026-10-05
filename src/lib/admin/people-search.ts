@@ -1,5 +1,5 @@
-import type { Role, Sex, TShirtSize } from "@/generated/prisma/enums";
-import { SEX_OPTIONS, T_SHIRT_SIZES } from "@/lib/volunteers";
+import type { TShirtSize } from "@/generated/prisma/enums";
+import { T_SHIRT_SIZES } from "@/lib/volunteers";
 
 // The admin People page's search and filters. They live in the URL, so a
 // search survives a refresh and the CSV download exports exactly what's on
@@ -14,38 +14,21 @@ export const SEARCH_FIELDS = [
   { value: "lastName", label: "Last name" },
   { value: "email", label: "Email" },
   { value: "phone", label: "Phone" },
-  { value: "address", label: "Address" },
 ] as const;
 
 export type SearchField = (typeof SEARCH_FIELDS)[number]["value"];
-
-// "none" matches people who haven't given one, including people with no
-// saved details at all.
-export type SexFilter = Sex | "none";
-export type SizeFilter = TShirtSize | "none";
 export type YesNo = "yes" | "no";
 
-export const SEX_FILTERS: { value: SexFilter; label: string }[] = [
-  ...SEX_OPTIONS,
-  { value: "none", label: "Not given" },
-];
-
-export const SIZE_FILTERS: { value: SizeFilter; label: string }[] = [
-  ...T_SHIRT_SIZES,
-  { value: "none", label: "Not given" },
-];
-
-export const ROLE_FILTERS: { value: Role; label: string }[] = [
-  { value: "VOLUNTEER", label: "Volunteers" },
-  { value: "ADMIN", label: "Admins" },
-];
+export const SIZE_FILTERS = T_SHIRT_SIZES;
 
 // The either/or filters, each shown as Any / yes / no.
 export const YES_NO_FILTERS = {
-  details: { label: "Saved details", yes: "Has details", no: "Signed in only" },
-  texts: { label: "Texts", yes: "Opted in", no: "Not opted in" },
   license: { label: "Driver's license", yes: "Has license", no: "No license" },
-  shifts: { label: "Upcoming shifts", yes: "Has shifts", no: "No shifts" },
+  upcoming: {
+    label: "Upcoming build days",
+    yes: "Signed up for one",
+    no: "Not signed up for any",
+  },
 } as const;
 
 export type YesNoFilter = keyof typeof YES_NO_FILTERS;
@@ -55,16 +38,14 @@ export const MAX_AGE = 120;
 export type PeopleSearch = {
   by: SearchField;
   q: string;
-  sex: SexFilter[];
-  size: SizeFilter[];
+  size: TShirtSize[];
   ageMin: number | null;
   ageMax: number | null;
-  role: Role | null;
-  details: YesNo | null;
-  texts: YesNo | null;
   license: YesNo | null;
-  shifts: YesNo | null;
-  // "2026-09-25", in the admin time zone.
+  upcoming: YesNo | null;
+  // A signup form's ID: people signed up through it (not cancelled).
+  form: string | null;
+  // When they first signed up, "2026-09-25", in the admin time zone.
   joinedFrom: string | null;
   joinedTo: string | null;
   page: number;
@@ -73,15 +54,12 @@ export type PeopleSearch = {
 export const EMPTY_SEARCH: PeopleSearch = {
   by: "any",
   q: "",
-  sex: [],
   size: [],
   ageMin: null,
   ageMax: null,
-  role: null,
-  details: null,
-  texts: null,
   license: null,
-  shifts: null,
+  upcoming: null,
+  form: null,
   joinedFrom: null,
   joinedTo: null,
   page: 1,
@@ -123,15 +101,12 @@ export function parsePeopleSearch(params: Params): PeopleSearch {
   return {
     by: pick("by", SEARCH_FIELDS.map((f) => f.value)) ?? "any",
     q: one("q").slice(0, 100),
-    sex: pickAll("sex", SEX_FILTERS.map((f) => f.value)),
     size: pickAll("size", SIZE_FILTERS.map((f) => f.value)),
     ageMin,
     ageMax,
-    role: pick("role", ROLE_FILTERS.map((f) => f.value)),
-    details: yesNo("details"),
-    texts: yesNo("texts"),
     license: yesNo("license"),
-    shifts: yesNo("shifts"),
+    upcoming: yesNo("upcoming"),
+    form: /^[a-z0-9]{1,40}$/.test(one("form")) ? one("form") : null,
     joinedFrom,
     joinedTo,
     page: Number.isInteger(page) && page > 1 ? page : 1,
@@ -144,15 +119,12 @@ export function toQueryString(search: PeopleSearch) {
   const params = new URLSearchParams();
   if (search.by !== "any") params.set("by", search.by);
   if (search.q) params.set("q", search.q);
-  for (const sex of search.sex) params.append("sex", sex);
   for (const size of search.size) params.append("size", size);
   if (search.ageMin !== null) params.set("ageMin", String(search.ageMin));
   if (search.ageMax !== null) params.set("ageMax", String(search.ageMax));
-  if (search.role) params.set("role", search.role);
-  if (search.details) params.set("details", search.details);
-  if (search.texts) params.set("texts", search.texts);
   if (search.license) params.set("license", search.license);
-  if (search.shifts) params.set("shifts", search.shifts);
+  if (search.upcoming) params.set("upcoming", search.upcoming);
+  if (search.form) params.set("form", search.form);
   if (search.joinedFrom) params.set("joinedFrom", search.joinedFrom);
   if (search.joinedTo) params.set("joinedTo", search.joinedTo);
   if (search.page > 1) params.set("page", String(search.page));
@@ -169,18 +141,13 @@ export function withoutFilters(search: PeopleSearch): PeopleSearch {
   return { ...EMPTY_SEARCH, by: search.by, q: search.q };
 }
 
-// Each active filter as a removable chip: its label, and the search without it.
-export function activeFilters(search: PeopleSearch) {
+// Each active filter as a removable chip: its label, and the search without
+// it. formLabels names each signup form by its day.
+export function activeFilters(search: PeopleSearch, formLabels: Map<string, string>) {
   const chips: { label: string; without: Partial<PeopleSearch> }[] = [];
   const labelOf = <T extends string>(options: { value: T; label: string }[], value: T) =>
     options.find((option) => option.value === value)?.label ?? value;
 
-  if (search.sex.length > 0) {
-    chips.push({
-      label: `Sex: ${search.sex.map((s) => labelOf(SEX_FILTERS, s)).join(", ")}`,
-      without: { sex: [] },
-    });
-  }
   if (search.size.length > 0) {
     chips.push({
       label: `T-shirt: ${search.size.map((s) => labelOf(SIZE_FILTERS, s)).join(", ")}`,
@@ -201,22 +168,25 @@ export function activeFilters(search: PeopleSearch) {
       without: { ageMin: null, ageMax: null },
     });
   }
-  if (search.role) {
-    chips.push({ label: labelOf(ROLE_FILTERS, search.role), without: { role: null } });
-  }
   for (const key of Object.keys(YES_NO_FILTERS) as YesNoFilter[]) {
     const value = search[key];
     if (value) chips.push({ label: YES_NO_FILTERS[key][value], without: { [key]: null } });
+  }
+  if (search.form) {
+    chips.push({
+      label: `Signed up for ${formLabels.get(search.form) ?? "a removed form"}`,
+      without: { form: null },
+    });
   }
   if (search.joinedFrom || search.joinedTo) {
     const { joinedFrom, joinedTo } = search;
     chips.push({
       label:
         joinedFrom && joinedTo
-          ? `Joined ${shortDay(joinedFrom)} – ${shortDay(joinedTo)}`
+          ? `First signed up ${shortDay(joinedFrom)} – ${shortDay(joinedTo)}`
           : joinedFrom
-            ? `Joined on or after ${shortDay(joinedFrom)}`
-            : `Joined on or before ${shortDay(joinedTo!)}`,
+            ? `First signed up on or after ${shortDay(joinedFrom)}`
+            : `First signed up on or before ${shortDay(joinedTo!)}`,
       without: { joinedFrom: null, joinedTo: null },
     });
   }

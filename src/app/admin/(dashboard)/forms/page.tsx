@@ -105,7 +105,7 @@ export default async function SignupFormsPage({
                       <>
                         {form.shiftCount} {form.shiftCount === 1 ? "shift" : "shifts"}
                         {" · "}
-                        {form.spots} {form.spots === 1 ? "spot" : "spots"}
+                        {form.signupCount} of {form.spots} signed up
                       </>
                     )}
                   </span>
