@@ -33,6 +33,10 @@ export type VolunteerRow = {
   createdAt: Date;
   // Shifts to list for them, such as "Maple Street Home, 8:00 AM – 12:00 PM".
   shifts: string[];
+  // Friends they asked to be placed with, or who asked for them, such as
+  // { label: "Alice Smith", note: "together" }. The column only shows when
+  // someone has one.
+  friends?: { label: string; note: string }[];
 };
 
 // Volunteers who signed up for a build day, with the details from their
@@ -52,6 +56,7 @@ export function VolunteerTable({
   brief?: boolean;
   scrollable?: boolean;
 }) {
+  const showFriends = rows.some((row) => row.friends && row.friends.length > 0);
   return (
     <div
       className={cn(
@@ -77,6 +82,7 @@ export function VolunteerTable({
             <TableHead>Driver</TableHead>
             <TableHead>Getting there</TableHead>
             <TableHead>{shiftsHeading}</TableHead>
+            {showFriends && <TableHead>Friends</TableHead>}
             {!brief && <TableHead>Signed up</TableHead>}
           </TableRow>
         </TableHeader>
@@ -126,6 +132,22 @@ export function VolunteerTable({
                   </ul>
                 )}
               </TableCell>
+              {showFriends && (
+                <TableCell className="text-sm">
+                  {row.friends?.length ? (
+                    <ul className="flex flex-col gap-0.5">
+                      {row.friends.map((friend) => (
+                        <li key={friend.label} className="whitespace-nowrap">
+                          {friend.label}{" "}
+                          <span className="text-xs text-muted-foreground">· {friend.note}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+              )}
               {!brief && (
                 <TableCell className="whitespace-nowrap">
                   {formatDate(row.createdAt, DEFAULT_TIME_ZONE)}

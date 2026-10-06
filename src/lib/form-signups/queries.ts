@@ -34,6 +34,7 @@ export async function getMySignup(formId: string, email: string) {
           transportation: true,
           cancelledAt: true,
           preferences: { select: { shiftId: true } },
+          groupRequests: { select: { email: true }, orderBy: { email: "asc" } },
         },
       },
     },
@@ -61,12 +62,31 @@ export async function getMySignup(formId: string, email: string) {
           cancelledAt: signup.cancelledAt,
           shiftIds: signup.preferences.map((p) => p.shiftId),
           transportation: signup.transportation,
+          groupEmails: signup.groupRequests.map((request) => request.email),
         }
       : null,
   };
 }
 
 export type MySignup = NonNullable<Awaited<ReturnType<typeof getMySignup>>>;
+
+// Volunteers signed up for this form who asked to be placed with this
+// email. One request is enough, so they don't need to be asked for back.
+export async function getAskedToGroupWith(formId: string, email: string) {
+  const requests = await prisma.groupRequest.findMany({
+    where: { email, signup: { formId, cancelledAt: null } },
+    select: {
+      signup: { select: { firstName: true, lastName: true, volunteer: { select: { email: true } } } },
+    },
+    orderBy: [{ signup: { firstName: "asc" } }, { signup: { lastName: "asc" } }],
+  });
+  return requests.map(({ signup }) => ({
+    name: `${signup.firstName} ${signup.lastName}`,
+    email: signup.volunteer.email,
+  }));
+}
+
+export type AskedToGroupWith = Awaited<ReturnType<typeof getAskedToGroupWith>>;
 
 // Volunteers can cancel until the day's first shift starts, even after the
 // form closes. With no shifts, until the day ends.

@@ -8,8 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import type { FormStatus } from "@/generated/prisma/enums";
 import { requireAdmin } from "@/lib/auth/dal";
 import { getFormRoster, type RosterSignup } from "@/lib/form-signups/rosters";
-import { planForRoster, travelRosterFor } from "@/lib/placement/load";
-import { placedAt, type BuildPlan } from "@/lib/placement/solver";
+import { planForRoster, requestedPairs, travelRosterFor } from "@/lib/placement/load";
+import { placedAt, type BuildPlan, type Placement } from "@/lib/placement/solver";
 import { prisma } from "@/lib/prisma";
 import { deleteSignupForm, setSignupFormStatus } from "@/lib/signup-forms/actions";
 import { formPhase } from "@/lib/signup-forms/phase";
@@ -104,6 +104,7 @@ export default async function SignupFormPage({
                 active={active}
                 cancelled={cancelled}
                 labels={labels}
+                placement={plan.placement}
               />
             </VolunteersDialog>
             {active.length > 0 && <TravelRosterDialog text={travel.text} warnings={rosterWarnings} />}
@@ -193,7 +194,7 @@ export default async function SignupFormPage({
 // "T-shirts: S 2 · M 5 · L 3" and "3 need a ride · 2 can drive (1 approved,
 // 1 pending), 9 seats", for ordering shirts and planning rides. A driver
 // declined or revoked after signing up counts as no longer approved.
-function Totals({ signups }: { signups: RosterSignup[] }) {
+function Totals({ signups, placement }: { signups: RosterSignup[]; placement: Placement }) {
   const count = (test: (signup: RosterSignup) => boolean) => signups.filter(test).length;
   const sizes = T_SHIRT_SIZES.flatMap((size) => {
     const n = count((signup) => signup.tShirtSize === size.value);
@@ -203,6 +204,8 @@ function Totals({ signups }: { signups: RosterSignup[] }) {
   const approved = drivers.filter((signup) => signup.driver.status === "approved").length;
   const pending = drivers.filter((signup) => signup.driver.status === "pending").length;
   const seats = drivers.reduce((sum, signup) => sum + (signup.carSeats ?? 0), 0);
+  const pairs = requestedPairs(signups);
+  const together = pairs.filter(([a, b]) => placement.has(a) && placement.get(a) === placement.get(b));
   return (
     <div className="flex flex-col gap-0.5 text-sm text-muted-foreground">
       <p>T-shirts: {sizes.join(" · ")}</p>
@@ -215,13 +218,44 @@ function Totals({ signups }: { signups: RosterSignup[] }) {
         {seats} {seats === 1 ? "seat" : "seats"} · {count((s) => s.transportation === "OWN_WAY")} getting
         there on their own
       </p>
+      {pairs.length > 0 && (
+        <p>
+          Friends: {together.length} of {plural(pairs.length, "pair", "pairs")} together in the likely
+          placement
+        </p>
+      )}
     </div>
   );
 }
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
-const names = (signups: RosterSignup[]) =>
-  signups.map((signup) => `${signup.firstName} ${signup.lastName}`).join(", ");
+const name = (signup: RosterSignup) => `${signup.firstName} ${signup.lastName}`;
+const names = (signups: RosterSignup[]) => signups.map(name).join(", ");
+
+// Each volunteer's friends (by signup ID): who they asked to be placed
+// with, and who asked for them, noting whether the likely placement keeps
+// them together. One request is enough, so a friend is listed on both.
+function friendsOf(active: RosterSignup[], placement: Placement) {
+  const byEmail = new Map(active.map((signup) => [signup.email, signup]));
+  const friends = new Map(active.map((signup) => [signup.id, [] as { label: string; note: string }[]]));
+  const link = (signup: RosterSignup, other: RosterSignup) => {
+    const list = friends.get(signup.id)!;
+    if (list.some((friend) => friend.label === name(other))) return;
+    const where = placement.get(signup.id);
+    list.push({ label: name(other), note: where && where === placement.get(other.id) ? "together" : "apart" });
+  };
+  for (const signup of active) {
+    for (const email of signup.groupEmails) {
+      const other = byEmail.get(email);
+      if (!other) friends.get(signup.id)!.push({ label: email, note: "not signed up" });
+      else if (other.id !== signup.id) {
+        link(signup, other);
+        link(other, signup);
+      }
+    }
+  }
+  return friends;
+}
 
 // What the "Volunteers" popup shows: totals, the CSV download, the table,
 // and anyone who cancelled.
@@ -231,18 +265,22 @@ function Volunteers({
   active,
   cancelled,
   labels,
+  placement,
 }: {
   formId: string;
   day: string;
   active: RosterSignup[];
   cancelled: RosterSignup[];
   labels: Map<string, string>;
+  // The likely placement, to say whether friends are together.
+  placement: Placement;
 }) {
+  const friends = friendsOf(active, placement);
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
       {(active.length > 0 || cancelled.length > 0) && (
         <div className="flex flex-wrap items-start justify-between gap-4">
-          {active.length > 0 ? <Totals signups={active} /> : <span />}
+          {active.length > 0 ? <Totals signups={active} placement={placement} /> : <span />}
           {/* A plain link, not <Link>: it downloads a file. */}
           <a
             href={`/admin/forms/${formId}/export`}
@@ -270,6 +308,7 @@ function Volunteers({
           rows={active.map((signup) => ({
             ...signup,
             shifts: signup.shiftIds.flatMap((id) => labels.get(id) ?? []),
+            friends: friends.get(signup.id),
           }))}
         />
       )}

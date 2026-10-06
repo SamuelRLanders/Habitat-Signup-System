@@ -338,7 +338,8 @@ model FormSignup {
   volunteerId String
   volunteer   Volunteer @relation(fields: [volunteerId], references: [id], onDelete: Restrict)
 
-  preferences ShiftPreference[]
+  preferences   ShiftPreference[]
+  groupRequests GroupRequest[]
 
   @@unique([formId, volunteerId])
   @@index([volunteerId])
@@ -357,6 +358,21 @@ model ShiftPreference {
 
   @@id([signupId, shiftId])
   @@index([shiftId])
+}
+
+// Someone a volunteer asked, on their signup, to be placed with that day:
+// at the same build, and in the same car if they can be. The other person
+// is named by their Purdue email, so they can be asked for before they sign
+// up, and one request is enough to group them. It's the lowest priority
+// when placing volunteers, after everyone having a spot and a ride.
+model GroupRequest {
+  signupId String
+  signup   FormSignup @relation(fields: [signupId], references: [id], onDelete: Cascade)
+
+  email String // lowercased
+
+  @@id([signupId, email])
+  @@index([email])
 }
 
 // ─── Volunteer email verification ────────────────────────────────────────────

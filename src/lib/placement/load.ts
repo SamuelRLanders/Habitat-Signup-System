@@ -106,13 +106,33 @@ export async function loadPlacementDay(
   );
 }
 
+// Pairs of signups (by ID) who asked to be placed together: one asked for
+// the other's email. One request is enough, so each pair is listed once.
+export function requestedPairs(
+  signups: { id: string; email: string; groupEmails: string[] }[],
+): [string, string][] {
+  const byEmail = new Map(signups.map((signup) => [signup.email, signup.id]));
+  const pairs = new Map<string, [string, string]>();
+  for (const signup of signups) {
+    for (const email of signup.groupEmails) {
+      const other = byEmail.get(email);
+      if (!other || other === signup.id) continue;
+      const pair: [string, string] = signup.id < other ? [signup.id, other] : [other, signup.id];
+      pairs.set(pair.join(), pair);
+    }
+  }
+  return [...pairs.values()];
+}
+
 // A likely plan for a form's active signups, for admins, with who's left
-// out and how many placed drivers are still waiting for approval.
+// out and how many placed drivers are still waiting for approval. Friends
+// who asked to be together are kept together where they can be.
 export function planForRoster(shifts: { id: string; capacity: number }[], signups: RosterSignup[]) {
   const day = placementDay(
     shifts,
     signups.map((signup) => ({ ...signup, canDriveOthers: signup.driver.status !== "none" })),
   );
+  day.together = requestedPairs(signups);
   const plan = planDay(day);
 
   const byId = new Map(signups.map((signup) => [signup.id, signup]));
@@ -157,5 +177,6 @@ export function travelRosterFor(
       driverStatus: signup.driver.status,
     })),
     placement,
+    together: requestedPairs(signups),
   });
 }

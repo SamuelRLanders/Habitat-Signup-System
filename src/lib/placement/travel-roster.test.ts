@@ -33,6 +33,22 @@ describe("fillCars", () => {
     );
     assert.deepEqual(withoutRide.map((rider) => rider.name), ["G"]);
   });
+
+  it("puts friends in the same car without leaving anyone else without a ride", () => {
+    const big = person("Big", "driver", { carSeats: 4 }); // 3 passengers
+    const small = person("Small", "driver", { carSeats: 3 }); // 2 passengers
+    const riders = ["A", "B", "C", "D", "E", "F"].map((name) => person(name, "rider"));
+    const { cars, withoutRide } = fillCars([big, small], riders, [
+      ["E", "Small"], // E rides with Small
+      ["B", "D"], // B and D (and F, through D) ride together
+      ["F", "D"],
+    ]);
+    assert.deepEqual(
+      cars.map((car) => car.riders.map((rider) => rider.name)),
+      [["B", "D", "F"], ["E", "A"]],
+    );
+    assert.deepEqual(withoutRide.map((rider) => rider.name), ["C"]);
+  });
 });
 
 describe("travelRoster", () => {

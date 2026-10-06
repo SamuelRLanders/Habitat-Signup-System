@@ -23,6 +23,7 @@ const HEADER = [
   "driverApprovedUntil",
   "transportation",
   "carSeats",
+  "groupWith", // the Purdue emails they asked to be placed with
   "status",
   "signedUpAt",
   "updatedAt",
@@ -57,6 +58,7 @@ export async function GET(
     signup.driver.status === "approved" ? signup.driver.until : "",
     signup.transportation,
     signup.carSeats,
+    signup.groupEmails.join("; "),
     signup.cancelledAt ? "cancelled" : "signed up",
     signup.createdAt,
     signup.updatedAt,

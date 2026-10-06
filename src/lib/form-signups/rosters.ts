@@ -28,20 +28,22 @@ const rosterSelect = {
 } as const;
 
 // Everyone who has signed up through a form, cancelled or not, by last
-// name. shiftIds only has the shifts the form still offers.
+// name. shiftIds only has the shifts the form still offers; groupEmails are
+// the people they asked to be placed with.
 export async function getFormRoster(formId: string, shifts: OfferedShift[]) {
   const offered = new Set(shifts.map((shift) => shift.id));
   const signups = await prisma.formSignup.findMany({
     where: { formId },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
-    select: rosterSelect,
+    select: { ...rosterSelect, groupRequests: { select: { email: true } } },
   });
   const drivers = await driverStatuses(signups.map((s) => s.volunteer.id));
-  return signups.map(({ volunteer, preferences, ...signup }) => ({
+  return signups.map(({ volunteer, preferences, groupRequests, ...signup }) => ({
     ...signup,
     email: volunteer.email,
     driver: drivers.get(volunteer.id)!,
     shiftIds: preferences.map((p) => p.shiftId).filter((id) => offered.has(id)),
+    groupEmails: groupRequests.map((request) => request.email),
   }));
 }
 

@@ -1,6 +1,12 @@
 import * as z from "zod";
 import { normalizeUsPhone } from "@/lib/phone";
-import { MAX_CAR_SEATS, MIN_CAR_SEATS, MINIMUM_AGE } from "@/lib/volunteers";
+import {
+  isVolunteerEmail,
+  MAX_CAR_SEATS,
+  MIN_CAR_SEATS,
+  MINIMUM_AGE,
+  PURDUE_EMAIL_DOMAIN,
+} from "@/lib/volunteers";
 
 // The details a signup form asks for. The email isn't here: it's the one
 // the volunteer confirmed with a code.
@@ -44,8 +50,15 @@ export const detailsSchema = z.object({
 export type DetailsField = keyof z.input<typeof detailsSchema>;
 // The other questions: the builds, the driver approval form (only for
 // volunteers with a license who aren't approved or pending), how they're
-// getting there, and their car's seats (only if they'll drive others).
-export type SignupField = DetailsField | "shifts" | "driverForm" | "transportation" | "carSeats";
+// getting there, their car's seats (only if they'll drive others), and the
+// friends they'd like to be placed with (only on days with several builds).
+export type SignupField =
+  | DetailsField
+  | "shifts"
+  | "driverForm"
+  | "transportation"
+  | "carSeats"
+  | "groupEmails";
 
 export const transportationSchema = z.enum(
   ["NEEDS_RIDE", "OWN_WAY", "CAN_DRIVE"],
@@ -67,6 +80,15 @@ export const carSeatsSchema = z
     `To drive others, your car needs at least ${MIN_CAR_SEATS} seats, counting yours.`,
   )
   .refine((seats) => seats <= MAX_CAR_SEATS, `Enter at most ${MAX_CAR_SEATS} seats.`);
+
+// A friend to be placed with, by their Purdue email, lowercased so it
+// matches the email they sign up with.
+export const groupEmailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.email(`Enter a valid email, like name${PURDUE_EMAIL_DOMAIN}.`).max(254))
+  .refine(isVolunteerEmail, `Enter their ${PURDUE_EMAIL_DOMAIN} email.`);
 
 // Whether someone born on dateOfBirth ("2008-10-11") is old enough on day
 // ("2026-10-10"). Dates are compared as YYYY-MM-DD strings, which sort the

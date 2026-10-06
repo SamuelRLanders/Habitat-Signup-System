@@ -15,6 +15,7 @@ import { cancelDeadline } from "@/lib/form-signups/queries";
 import { formPhase } from "@/lib/signup-forms/phase";
 import { offeredShifts } from "@/lib/signup-forms/queries";
 import { formatDay, toDay } from "@/lib/time";
+import { isVolunteerEmail, PURDUE_EMAIL_DOMAIN } from "@/lib/volunteers";
 import {
   checkCode,
   CODE_MINUTES,
@@ -23,10 +24,12 @@ import {
   startSession,
 } from "./session";
 
-// Volunteers confirming their email address on a signup form. Anyone can
-// call these, so codes are only sent while a form is open, or after it
-// closes for cancelling until the day's first shift. The same rate limits
-// as admin sign-in apply.
+// Volunteers confirming their email address on a signup form. Only Purdue
+// emails can be used. Anyone can call these, so codes are only sent while a
+// form is open, or after it closes for cancelling until the day's first
+// shift. The same rate limits as admin sign-in apply.
+
+const NOT_PURDUE = `Use your Purdue email, ending in ${PURDUE_EMAIL_DOMAIN}.`;
 
 export async function sendSignupCode(
   formId: string,
@@ -38,6 +41,7 @@ export async function sendSignupCode(
     return { status: "error", message: "Enter a valid email address." };
   }
   const email = parsed.data;
+  if (!isVolunteerEmail(email)) return { status: "error", message: NOT_PURDUE };
 
   const form = await prisma.signupForm.findUnique({
     where: { id: formId, status: "PUBLISHED" },
@@ -96,6 +100,7 @@ export async function verifySignupCode(
   const email = emailSchema.safeParse(formData.get("email"));
   const code = parseCode(formData.get("code"));
   if (!email.success) return { error: "Start again with your email address." };
+  if (!isVolunteerEmail(email.data)) return { error: NOT_PURDUE };
   if (!code) return { error: "Enter the 6-digit code." };
 
   const result = await checkCode(email.data, code);

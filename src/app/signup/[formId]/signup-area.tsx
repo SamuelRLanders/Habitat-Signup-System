@@ -10,7 +10,13 @@ import {
 } from "@/lib/email-verification/actions";
 import { getVerifiedEmail } from "@/lib/email-verification/session";
 import { cancelSignup, submitSignup } from "@/lib/form-signups/actions";
-import { cancelDeadline, getMySignup, type MySignup } from "@/lib/form-signups/queries";
+import {
+  cancelDeadline,
+  getAskedToGroupWith,
+  getMySignup,
+  type AskedToGroupWith,
+  type MySignup,
+} from "@/lib/form-signups/queries";
 import { formatPhone } from "@/lib/phone";
 import { loadPlacementDay } from "@/lib/placement/load";
 import type { BuildRoom } from "@/lib/placement/room";
@@ -60,11 +66,11 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
           verifyAction={verifySignupCode}
           verifyLabels={{ idle: "Continue", pending: "Checking…" }}
           restartHref={`/signup/${form.id}`}
-          emailLabel={open ? "Purdue email" : "Email"}
+          emailLabel="Purdue email"
           emailHint={
             open
               ? "Use your @purdue.edu email. It's how we match you to Purdue's records, such as its approved driver list."
-              : "Use the email you signed up with."
+              : "Use the @purdue.edu email you signed up with."
           }
         />
       </Panel>
@@ -73,6 +79,10 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
 
   const mine = await getMySignup(form.id, email);
   const active = mine?.signup && !mine.signup.cancelledAt ? mine.signup : null;
+  // On a day with more than one build, volunteers can ask to be placed with
+  // friends (src/lib/placement). Who has already asked for them:
+  const grouping = form.shifts.length > 1;
+  const askedBy = grouping ? await getAskedToGroupWith(form.id, email) : [];
 
   let content;
   if (active) {
@@ -85,6 +95,8 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
           chosen={active.shiftIds}
           transportation={active.transportation}
           carSeats={mine!.carSeats}
+          groupEmails={grouping ? active.groupEmails : []}
+          askedBy={askedBy}
         />
         {open && (
           <p className="text-sm text-muted-foreground">
@@ -143,6 +155,7 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
             defaults={mine ? toDefaults(mine.details) : null}
             driver={mine?.driver ?? { status: "none" }}
             savedCarSeats={mine?.carSeats ?? null}
+            grouping={grouping ? { askedBy: askedBy.map((asker) => asker.name) } : null}
           />
         </>
       );
@@ -200,6 +213,8 @@ function Summary({
   chosen,
   transportation,
   carSeats,
+  groupEmails,
+  askedBy,
 }: {
   email: string;
   details: MySignup["details"];
@@ -207,11 +222,15 @@ function Summary({
   chosen: string[];
   transportation: Transportation | null;
   carSeats: number | null;
+  groupEmails: string[];
+  askedBy: AskedToGroupWith;
 }) {
   const getting = TRANSPORTATION_OPTIONS.find((option) => option.value === transportation)?.label;
   // Only shifts still offered: a cancelled shift no longer counts.
   const chosenShifts = shifts.filter((shift) => chosen.includes(shift.id));
   const shirt = shirtLabel(details.tShirtSize);
+  // Friends who asked for them and they asked for too are listed once.
+  const alsoAskedBy = askedBy.filter((asker) => !groupEmails.includes(asker.email));
   const birthday = fromDay(details.dateOfBirth).toLocaleDateString("en-US", {
     timeZone: "UTC",
     month: "long",
@@ -270,6 +289,26 @@ function Summary({
           </ul>
         )}
       </div>
+
+      {(groupEmails.length > 0 || alsoAskedBy.length > 0) && (
+        <div className="flex flex-col gap-2 text-sm">
+          <p className="font-medium">Friends to work with</p>
+          <ul className="flex flex-col gap-1">
+            {groupEmails.map((friend) => (
+              <li key={friend}>{friend}</li>
+            ))}
+            {alsoAskedBy.map((asker) => (
+              <li key={asker.email}>
+                {asker.name} <span className="text-muted-foreground">(asked for you)</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-muted-foreground">
+            We&apos;ll try to place you together, but making sure everyone has a
+            spot and a ride comes first.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

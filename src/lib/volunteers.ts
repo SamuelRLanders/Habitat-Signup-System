@@ -47,6 +47,22 @@ export const TRANSPORTATION_OPTIONS = [
 export const MIN_CAR_SEATS = 3;
 export const MAX_CAR_SEATS = 15;
 
+// Volunteers can ask to be placed with up to this many friends on a day,
+// by their Purdue email, when the day has more than one build.
+export const MAX_GROUP_REQUESTS = 5;
+
+// Volunteers sign in, and name friends, with their Purdue email. Outside
+// production the test data's @example.org addresses work too
+// (scripts/seed-test-data.mts). Takes a lowercased email.
+export const PURDUE_EMAIL_DOMAIN = "@purdue.edu";
+const TEST_EMAIL_DOMAIN = "@example.org";
+export function isVolunteerEmail(email: string) {
+  return (
+    email.endsWith(PURDUE_EMAIL_DOMAIN) ||
+    (process.env.NODE_ENV !== "production" && email.endsWith(TEST_EMAIL_DOMAIN))
+  );
+}
+
 // "Needs a ride", for admin lists.
 export const TRANSPORTATION_SHORT = {
   NEEDS_RIDE: "Needs a ride",

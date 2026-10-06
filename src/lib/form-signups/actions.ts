@@ -11,10 +11,12 @@ import { prisma } from "@/lib/prisma";
 import { formPhase } from "@/lib/signup-forms/phase";
 import { offeredShifts } from "@/lib/signup-forms/queries";
 import { fromDay, toDay } from "@/lib/time";
+import { MAX_GROUP_REQUESTS } from "@/lib/volunteers";
 import {
   carSeatsSchema,
   detailsSchema,
   driverFormSchema,
+  groupEmailSchema,
   oldEnoughOn,
   TOO_YOUNG,
   transportationSchema,
@@ -107,6 +109,22 @@ export async function submitSignup(
   const carSeats = drives ? carSeatsSchema.safeParse(values.carSeats) : null;
   if (carSeats && !carSeats.success) errors.carSeats = carSeats.error.issues[0].message;
 
+  // Friends they'd like to be placed with, by Purdue email. Only asked when
+  // the day has more than one build; with one, everyone's together anyway.
+  const groupEmails = new Set<string>();
+  if (form.shifts.length > 1) {
+    for (const value of formData.getAll("groupEmail").map(String)) {
+      if (!value.trim()) continue;
+      const friend = groupEmailSchema.safeParse(value);
+      if (!friend.success) errors.groupEmails = friend.error.issues[0].message;
+      else if (friend.data === email) errors.groupEmails = "Enter your friends' emails, not your own.";
+      else groupEmails.add(friend.data);
+    }
+    if (groupEmails.size > MAX_GROUP_REQUESTS) {
+      errors.groupEmails = `You can ask to be placed with up to ${MAX_GROUP_REQUESTS} people.`;
+    }
+  }
+
   if (!parsed.success || !transportation.success || Object.keys(errors).length > 0) {
     return { errors };
   }
@@ -169,10 +187,15 @@ export async function submitSignup(
           update: { ...answers, cancelledAt: null },
         });
 
-        // Signing up again replaces every choice from the cancelled signup.
+        // Signing up again replaces every choice (and friend) from the
+        // cancelled signup.
         await tx.shiftPreference.deleteMany({ where: { signupId: signup.id } });
         await tx.shiftPreference.createMany({
           data: shiftIds.map((shiftId) => ({ signupId: signup.id, shiftId })),
+        });
+        await tx.groupRequest.deleteMany({ where: { signupId: signup.id } });
+        await tx.groupRequest.createMany({
+          data: [...groupEmails].map((friend) => ({ signupId: signup.id, email: friend })),
         });
 
         return { outcome: "saved" as const };

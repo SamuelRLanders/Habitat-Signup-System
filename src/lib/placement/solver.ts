@@ -46,6 +46,11 @@ import type { BuildRoom } from "./room";
 //   held spot) of their own: 7 + 2 + 1 + 1 = 11. An own-way volunteer or
 //   another driver could.
 //
+// Volunteers can also ask to be placed with friends. That's only a wish, not
+// a rule: it never decides whether someone can sign up or be placed. Among
+// the plans that place the most volunteers with the fewest held spots, the
+// plan for admins keeps as many of those pairs together as it can.
+//
 // A day can take a new signup if there's still a plan that places everyone,
 // the new volunteer included. A build can take one if there's a plan that
 // places them there. Because volunteers can be moved around, that depends on
@@ -96,6 +101,9 @@ export type PlacementVolunteer = {
 export type Day = {
   builds: PlacementBuild[];
   volunteers: PlacementVolunteer[];
+  // Pairs of volunteers (by ID) who asked to be placed together. Only the
+  // plan for admins looks at these (see planDay()).
+  together?: [string, string][];
 };
 
 // Where each volunteer is placed: volunteer ID → build ID. Volunteers who
@@ -180,7 +188,8 @@ export function checkPlacement(day: Day, placement: Placement): Map<string, Buil
 //   "most":     a plan that places as many volunteers as possible.
 //   "best":     as many as possible and, among those plans, the one that
 //               holds the fewest spots for drivers (so the fewest drivers
-//               still needed).
+//               still needed), then keeps the most pairs who asked to be
+//               together at the same build.
 type Goal = "everyone" | "most" | "best";
 
 type Search =
@@ -197,6 +206,8 @@ const DEFAULT_TIME_LIMIT_MS = 2000;
 // go. So rather than deciding about each person, the solver decides how
 // many from each group go to each build. That's much faster: it doesn't
 // waste time trying to swap two people who are, for the rules, the same.
+// Someone who asked to be with a friend isn't interchangeable with anyone,
+// so when that counts, they're a group of their own (the separate IDs).
 type Group = {
   travel: Travel;
   carSeats: number;
@@ -204,13 +215,18 @@ type Group = {
   memberIds: string[];
 };
 
-function groupInterchangeable(day: Day): Group[] {
+function groupInterchangeable(day: Day, separate = new Set<string>()): Group[] {
   const offered = new Set(day.builds.map((build) => build.id));
   const groups = new Map<string, Group>();
   for (const volunteer of day.volunteers) {
     const buildIds = [...new Set(volunteer.buildIds)].filter((id) => offered.has(id)).sort();
     const carSeats = volunteer.travel === "driver" ? volunteer.carSeats : 0;
-    const key = JSON.stringify([volunteer.travel, carSeats, buildIds]);
+    const key = JSON.stringify([
+      volunteer.travel,
+      carSeats,
+      buildIds,
+      separate.has(volunteer.id) ? volunteer.id : null,
+    ]);
     const group = groups.get(key) ?? { travel: volunteer.travel, carSeats, buildIds, memberIds: [] };
     group.memberIds.push(volunteer.id);
     groups.set(key, group);
@@ -218,12 +234,34 @@ function groupInterchangeable(day: Day): Group[] {
   return [...groups.values()];
 }
 
+// The pairs who asked to be together that the plan can keep together, as
+// the indexes of their groups (each a group of their own). Pairs with
+// someone who isn't on the day, or asked twice, are left out.
+function togetherPairs(day: Day, groups: Group[]): [number, number][] {
+  const groupOf = new Map<string, number>();
+  groups.forEach((group, index) => {
+    if (group.memberIds.length === 1) groupOf.set(group.memberIds[0], index);
+  });
+  const pairs = new Map<string, [number, number]>();
+  for (const [a, b] of day.together ?? []) {
+    const first = groupOf.get(a);
+    const second = groupOf.get(b);
+    if (first === undefined || second === undefined || first === second) continue;
+    const pair: [number, number] = first < second ? [first, second] : [second, first];
+    pairs.set(pair.join(), pair);
+  }
+  return [...pairs.values()];
+}
+
 // The solver's unknowns, all whole numbers of 0 or more:
-//   place: how many volunteers from a group go to a build (one of theirs).
-//   hold:  how many spots are held for drivers at a build.
+//   place:    how many volunteers from a group go to a build (one of theirs).
+//   hold:     how many spots are held for drivers at a build.
+//   together: 1 if a pair who asked to be together are both placed at a
+//             build ("best" only).
 type Unknown =
   | { kind: "place"; group: Group; buildId: string }
-  | { kind: "hold"; buildId: string };
+  | { kind: "hold"; buildId: string }
+  | { kind: "together"; pair: number; buildId: string };
 
 // Writes the rules as sums the solver can work with. Each rule is a
 // "constraint": a named total that has to stay within a limit, with each
@@ -231,13 +269,37 @@ type Unknown =
 function writeModel(day: Day, groups: Group[], goal: Goal): Model<Unknown, string> {
   const constraints = new Map<string, { max?: number; equal?: number }>();
   const unknowns: [Unknown, Record<string, number>][] = [];
+  const pairs = goal === "best" ? togetherPairs(day, groups) : [];
 
-  // For "best", placing one more volunteer has to beat any number of held
-  // spots, so a placed volunteer scores more than the most spots a day can
-  // hold (all of them, plus one).
+  // For "best", each goal has to beat everything after it: placing one more
+  // volunteer beats any number of held spots and pairs kept together, and
+  // holding one spot fewer beats any number of pairs. So a pair together
+  // scores 1, a held spot costs one more than all the pairs, and a placed
+  // volunteer scores more than the most spots a day can hold (all of them)
+  // plus all the pairs.
   const totalSpots = day.builds.reduce((sum, build) => sum + build.capacity, 0);
-  const placedScore = goal === "most" ? 1 : totalSpots + 1;
-  const heldScore = goal === "best" ? -1 : 0;
+  const heldCost = pairs.length + 1;
+  const placedScore = goal === "most" ? 1 : (totalSpots + 1) * heldCost;
+  const heldScore = goal === "best" ? -heldCost : 0;
+
+  // Together: (pair together at a build) − (each of them placed there) ≤ 0,
+  // so a pair only counts as together where both of them are. Each place
+  // unknown takes part in the constraints of the pairs its group is in.
+  const pairLinks = new Map<string, string[]>(); // "group index at build ID" → constraints
+  pairs.forEach(([first, second], pair) => {
+    for (const buildId of groups[first].buildIds) {
+      if (!groups[second].buildIds.includes(buildId)) continue;
+      const links: Record<string, number> = { score: 1 };
+      for (const member of [first, second]) {
+        const name = `pair ${pair} at ${buildId}: group ${member}`;
+        constraints.set(name, { max: 0 });
+        links[name] = 1;
+        const key = `${member} at ${buildId}`;
+        pairLinks.set(key, [...(pairLinks.get(key) ?? []), name]);
+      }
+      unknowns.push([{ kind: "together", pair, buildId }, links]);
+    }
+  });
 
   for (const build of day.builds) {
     // Rule 1, room: (volunteers placed here) + (held spots) ≤ spots.
@@ -270,6 +332,7 @@ function writeModel(day: Day, groups: Group[], goal: Goal): Model<Unknown, strin
       // (driver).
       const seats =
         group.travel === "rider" ? 1 : group.travel === "driver" ? -Math.max(0, group.carSeats - 1) : 0;
+      const links = pairLinks.get(`${index} at ${buildId}`) ?? [];
       unknowns.push([
         { kind: "place", group, buildId },
         {
@@ -277,6 +340,7 @@ function writeModel(day: Day, groups: Group[], goal: Goal): Model<Unknown, strin
           [`room at ${buildId}`]: 1,
           [`rides at ${buildId}`]: seats,
           score: placedScore,
+          ...Object.fromEntries(links.map((name) => [name, -1])),
         },
       ]);
     }
@@ -295,7 +359,9 @@ function writeModel(day: Day, groups: Group[], goal: Goal): Model<Unknown, strin
 
 // Asks the solver for a plan, then double-checks it against the rules.
 function search(day: Day, goal: Goal, timeLimitMs = DEFAULT_TIME_LIMIT_MS): Search {
-  const groups = groupInterchangeable(day);
+  // Only "best" keeps pairs together, so only then are they groups of their own.
+  const separate = new Set(goal === "best" ? (day.together ?? []).flat() : []);
+  const groups = groupInterchangeable(day, separate);
   // Someone with no builds left to choose from (their builds were all
   // cancelled) can't be placed anywhere.
   if (goal === "everyone" && groups.some((group) => group.buildIds.length === 0)) {

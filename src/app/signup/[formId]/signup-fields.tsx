@@ -20,8 +20,11 @@ import { submitForm } from "@/lib/submit-form";
 import { formatDay } from "@/lib/time";
 import {
   DRIVER_APPROVAL_URL,
+  isVolunteerEmail,
   MAX_CAR_SEATS,
+  MAX_GROUP_REQUESTS,
   MIN_CAR_SEATS,
+  PURDUE_EMAIL_DOMAIN,
   seatsLabel,
   T_SHIRT_SIZES,
   TRANSPORTATION_OPTIONS,
@@ -68,6 +71,10 @@ type SignupFieldsProps = {
   // given them before.
   driver: DriverStatus;
   savedCarSeats: number | null;
+  // On a day with more than one build, volunteers can ask to be placed with
+  // friends; askedBy are the names of those who already asked for them.
+  // Null on a day with one build.
+  grouping: { askedBy: string[] } | null;
 };
 
 type Errors = Partial<Record<SignupField | "form", string>>;
@@ -88,12 +95,14 @@ const ERROR_STEPS: [SignupField, string][] = [
   ["driverForm", "driver"],
   ["transportation", "transport"],
   ["carSeats", "car"],
+  ["groupEmails", "group"],
 ];
 
 // The signup form, shown once the volunteer has signed in with their email,
 // as steps: their information, driver approval (if they have a license),
 // how they're getting there, their car (if they'll drive others), the
-// builds they could work at, then each waiver. How they're getting there
+// builds they could work at, friends to be placed with (on a day with more
+// than one build), then each waiver. How they're getting there
 // comes before the builds because it decides which builds have room for
 // them (src/lib/placement). One step is open at a time; finished steps can
 // be reopened, and a step unlocks once every step before it is done. Every
@@ -106,6 +115,7 @@ export function SignupFields({
   defaults,
   driver,
   savedCarSeats,
+  grouping,
 }: SignupFieldsProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const [license, setLicense] = useState(defaults?.hasDriversLicense ?? null);
@@ -119,6 +129,8 @@ export function SignupFields({
   const [editingSeats, setEditingSeats] = useState(seats === null);
   const [name, setName] = useState(defaults ? `${defaults.firstName} ${defaults.lastName}` : "");
   const [chosen, setChosen] = useState<Set<string>>(() => new Set());
+  // Friends' emails, as typed. There's always at least one box.
+  const [friends, setFriends] = useState([""]);
   // Who each build has room for (by shift ID). The server sends new ones if
   // the builds they chose fill up before they submit.
   const [rooms, setRooms] = useState<Record<string, BuildRoom>>(() =>
@@ -147,6 +159,7 @@ export function SignupFields({
     { id: "transport", title: "Getting to the site" },
     ...(transportChoice === "CAN_DRIVE" ? [{ id: "car", title: "Your car" }] : []),
     { id: "builds", title: "Builds you could work at" },
+    ...(grouping ? [{ id: "group", title: "Friends to work with" }] : []),
     ...sections.map((section) => ({ id: `waiver-${section.id}`, title: section.title })),
   ];
   const lastId = steps[steps.length - 1].id;
@@ -209,6 +222,13 @@ export function SignupFields({
       problems.carSeats = `To drive others, your car needs at least ${MIN_CAR_SEATS} seats, counting yours.`;
     } else if (active === "builds" && chosenWithRoom.length === 0) {
       problems.shifts = "Choose at least one build you could work at.";
+    } else if (active === "group") {
+      const typed = friends.map((friend) => friend.trim().toLowerCase()).filter(Boolean);
+      if (typed.some((friend) => !/^[^\s@]+@[^\s@]+$/.test(friend))) {
+        problems.groupEmails = `Enter a valid email, like name${PURDUE_EMAIL_DOMAIN}.`;
+      } else if (!typed.every(isVolunteerEmail)) {
+        problems.groupEmails = `Enter their ${PURDUE_EMAIL_DOMAIN} email.`;
+      }
     }
 
     setStepErrors(problems);
@@ -240,6 +260,7 @@ export function SignupFields({
             : "Not filled out yet",
     transport: TRANSPORTATION_OPTIONS.find((o) => o.value === transportChoice)?.label ?? "",
     car: seats === null ? "" : seatsLabel(seats),
+    group: friends.filter((friend) => friend.trim()).join(", ") || "No one added",
   };
 
   const text = (
@@ -509,6 +530,73 @@ export function SignupFields({
         </>,
       )}
 
+      {grouping &&
+        step(
+          "group",
+          "Want to work with friends? Add their Purdue emails and we'll try to place you at the same build, and in the same car if you're riding together.",
+          <>
+            {grouping.askedBy.length > 0 && (
+              <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">
+                {listNames(grouping.askedBy)} already asked to be placed with you, so you
+                don&apos;t need to add {grouping.askedBy.length === 1 ? "them" : "anyone"} back.
+              </p>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Talk with them first, so you all choose the same builds. Only one of
+              you needs to add the other. We can&apos;t promise you&apos;ll be
+              together: making sure everyone has a spot and a ride comes first.
+              Optional; up to {MAX_GROUP_REQUESTS} people.
+            </p>
+            {error("groupEmails")}
+            <div className="flex flex-col gap-2">
+              {friends.map((friend, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <Input
+                    name="groupEmail"
+                    // Not type="email": the browser would quietly refuse to
+                    // submit a bad one from a closed step. We check it instead.
+                    inputMode="email"
+                    value={friend}
+                    onChange={(event) =>
+                      setFriends((current) => current.map((value, i) => (i === index ? event.target.value : value)))
+                    }
+                    placeholder={`name${PURDUE_EMAIL_DOMAIN}`}
+                    autoComplete="off"
+                    aria-label={`Friend ${index + 1}'s Purdue email`}
+                    aria-invalid={errors.groupEmails ? true : undefined}
+                    aria-describedby={errors.groupEmails ? "groupEmails-error" : undefined}
+                  />
+                  {(friends.length > 1 || friend) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setFriends((current) =>
+                          current.length > 1 ? current.filter((_, i) => i !== index) : [""],
+                        )
+                      }
+                    >
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {friends.length < MAX_GROUP_REQUESTS && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                onClick={() => setFriends((current) => [...current, ""])}
+              >
+                Add another friend
+              </Button>
+            )}
+          </>,
+        )}
+
       {sections.map((section) =>
         step(
           `waiver-${section.id}`,
@@ -520,6 +608,11 @@ export function SignupFields({
       )}
     </form>
   );
+}
+
+// "Bob", "Bob and Alice", or "Bob, Alice and Carol".
+function listNames(names: string[]) {
+  return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
 // Why a build is full for a volunteer getting there this way. Spots can be
