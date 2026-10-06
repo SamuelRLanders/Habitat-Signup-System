@@ -45,7 +45,7 @@ enum TShirtSize {
 enum Transportation {
   NEEDS_RIDE // needs help getting there
   OWN_WAY // getting there on their own
-  CAN_DRIVE // can drive others (only offered to pending or approved drivers)
+  CAN_DRIVE // has a car and can drive others (only offered to pending or approved drivers)
 }
 
 // An admin's decision on a volunteer's Purdue driver approval.
@@ -270,8 +270,8 @@ model Volunteer {
   // approval form. Set while their approval is pending; cleared when an
   // admin approves or declines it.
   driverRequestedAt DateTime?
-  // Seats in their car, counting the driver's; 0 if they don't have one.
-  // Null until they offer to drive others.
+  // Seats in their car, counting the driver's: at least 3. Null until they
+  // offer to drive others. (Before cars needed 3 seats, 0 meant no car.)
   carSeats          Int?
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt

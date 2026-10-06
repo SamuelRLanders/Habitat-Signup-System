@@ -14,10 +14,14 @@ import type { Transportation, TShirtSize } from "@/generated/prisma/enums";
 import type { SignupFormState } from "@/lib/form-signups/actions";
 import type { DetailsField, SignupField } from "@/lib/form-signups/details";
 import { normalizeUsPhone } from "@/lib/phone";
+import { hasRoomFor, type BuildRoom } from "@/lib/placement/room";
+import type { Travel } from "@/lib/placement/solver";
 import { submitForm } from "@/lib/submit-form";
 import { formatDay } from "@/lib/time";
 import {
   DRIVER_APPROVAL_URL,
+  MAX_CAR_SEATS,
+  MIN_CAR_SEATS,
   seatsLabel,
   T_SHIRT_SIZES,
   TRANSPORTATION_OPTIONS,
@@ -41,6 +45,17 @@ export type BuildChoice = {
   address: string;
   time: string; // "8:00 AM – 12:00 PM"
   notes: string | null;
+  // Who the build has room for, given everyone already signed up.
+  room: BuildRoom;
+};
+
+// How each answer to "Getting to the site" counts when placing volunteers.
+// Only drivers who are approved or waiting for approval are offered
+// CAN_DRIVE, so it always means a driver.
+const TRAVEL: Record<Transportation, Travel> = {
+  NEEDS_RIDE: "rider",
+  OWN_WAY: "ownWay",
+  CAN_DRIVE: "driver",
 };
 
 type SignupFieldsProps = {
@@ -76,13 +91,14 @@ const ERROR_STEPS: [SignupField, string][] = [
 ];
 
 // The signup form, shown once the volunteer has signed in with their email,
-// as steps: their information, the builds they could work at, driver
-// approval (if they have a license), how they're getting there, their car
-// (if they'll drive others), then each waiver. One step is open at a time;
-// finished steps can be reopened, and a step unlocks once every step before
-// it is done. Every step's fields stay in the one form, so the last step's
-// button submits them all. The server checks everything again
-// (src/lib/form-signups).
+// as steps: their information, driver approval (if they have a license),
+// how they're getting there, their car (if they'll drive others), the
+// builds they could work at, then each waiver. How they're getting there
+// comes before the builds because it decides which builds have room for
+// them (src/lib/placement). One step is open at a time; finished steps can
+// be reopened, and a step unlocks once every step before it is done. Every
+// step's fields stay in the one form, so the last step's button submits them
+// all. The server checks everything again (src/lib/form-signups).
 export function SignupFields({
   action,
   sections,
@@ -95,34 +111,60 @@ export function SignupFields({
   const [license, setLicense] = useState(defaults?.hasDriversLicense ?? null);
   const [driverForm, setDriverForm] = useState<"done" | "not-done" | null>(null);
   const [transport, setTransport] = useState<Transportation | null>(null);
-  const [seats, setSeats] = useState(savedCarSeats);
-  const [editingSeats, setEditingSeats] = useState(savedCarSeats === null);
+  // Cars need at least MIN_CAR_SEATS, so ask again about a smaller one
+  // given before that rule.
+  const [seats, setSeats] = useState(
+    savedCarSeats !== null && savedCarSeats >= MIN_CAR_SEATS ? savedCarSeats : null,
+  );
+  const [editingSeats, setEditingSeats] = useState(seats === null);
   const [name, setName] = useState(defaults ? `${defaults.firstName} ${defaults.lastName}` : "");
   const [chosen, setChosen] = useState<Set<string>>(() => new Set());
+  // Who each build has room for (by shift ID). The server sends new ones if
+  // the builds they chose fill up before they submit.
+  const [rooms, setRooms] = useState<Record<string, BuildRoom>>(() =>
+    Object.fromEntries(builds.map((build) => [build.id, build.room])),
+  );
 
   // Only drivers who are approved or waiting for approval (counting a
   // "yes" just now) can offer to drive others.
   const canDrive = license === true && (driver.status !== "none" || driverForm === "done");
-  const transportChoice = transport === "CAN_DRIVE" && !canDrive ? null : transport;
+  // Ways of getting there that some build still has room for.
+  const travelHasRoom: Record<Transportation, boolean> = {
+    NEEDS_RIDE: builds.some((build) => rooms[build.id].rider),
+    OWN_WAY: builds.some((build) => rooms[build.id].ownWay),
+    CAN_DRIVE: canDrive && builds.some((build) => rooms[build.id].driverMinSeats !== null),
+  };
+  const transportChoice = transport && travelHasRoom[transport] ? transport : null;
+  const travel = transportChoice && TRAVEL[transportChoice];
+  // Whether a build has room for them, given how they're getting there.
+  const hasRoom = (build: BuildChoice) =>
+    travel !== null && hasRoomFor(rooms[build.id], travel, seats);
+  const chosenWithRoom = builds.filter((build) => chosen.has(build.id) && hasRoom(build));
 
   const steps = [
     { id: "info", title: "Your information" },
-    { id: "builds", title: "Builds you could work at" },
     ...(license ? [{ id: "driver", title: "Driver approval" }] : []),
     { id: "transport", title: "Getting to the site" },
     ...(transportChoice === "CAN_DRIVE" ? [{ id: "car", title: "Your car" }] : []),
+    { id: "builds", title: "Builds you could work at" },
     ...sections.map((section) => ({ id: `waiver-${section.id}`, title: section.title })),
   ];
   const lastId = steps[steps.length - 1].id;
 
   const [active, setActive] = useState("info");
   const [done, setDone] = useState<Set<string>>(() => new Set());
+  // A finished step stays finished, except that the builds step needs a
+  // chosen build with room: changing how they're getting there, or a build
+  // filling up, can take that away.
+  const isDone = (id: string) =>
+    done.has(id) && (id !== "builds" || chosenWithRoom.length > 0);
   // Problems found before submitting; after submitting, the server's.
   const [stepErrors, setStepErrors] = useState<Errors | null>(null);
 
   const [state, formAction, pending] = useActionState(
     async (prev: SignupFormState, formData: FormData) => {
       const result = await action(prev, formData);
+      if (result.rooms) setRooms(result.rooms);
       // Open the step with the first problem.
       const errors = result.errors ?? {};
       const step = ERROR_STEPS.find(([field]) => errors[field])?.[1];
@@ -157,14 +199,16 @@ export function SignupFields({
         problems.hasDriversLicense = "Tell us whether you have a driver's license.";
       }
       setName(`${value("firstName")} ${value("lastName")}`);
-    } else if (active === "builds" && chosen.size === 0) {
-      problems.shifts = "Choose at least one build you could work at.";
     } else if (active === "driver" && driver.status === "none" && !driverForm) {
       problems.driverForm = "Tell us whether you've filled out the driver approval form.";
     } else if (active === "transport" && !transportChoice) {
       problems.transportation = "Tell us how you're getting to the build site.";
     } else if (active === "car" && seats === null) {
       problems.carSeats = "Tell us how many seats your car has.";
+    } else if (active === "car" && seats !== null && seats < MIN_CAR_SEATS) {
+      problems.carSeats = `To drive others, your car needs at least ${MIN_CAR_SEATS} seats, counting yours.`;
+    } else if (active === "builds" && chosenWithRoom.length === 0) {
+      problems.shifts = "Choose at least one build you could work at.";
     }
 
     setStepErrors(problems);
@@ -185,10 +229,7 @@ export function SignupFields({
 
   const summaries: Record<string, string> = {
     info: name,
-    builds: builds
-      .filter((build) => chosen.has(build.id))
-      .map((build) => build.buildName)
-      .join(", "),
+    builds: chosenWithRoom.map((build) => build.buildName).join(", "),
     driver:
       driver.status === "approved"
         ? `Approved through ${formatDay(driver.until, "short")}`
@@ -228,7 +269,7 @@ export function SignupFields({
   const step = (id: string, description: React.ReactNode, children: React.ReactNode) => {
     const index = steps.findIndex((s) => s.id === id);
     if (index === -1) return null;
-    const unlocked = steps.slice(0, index).every((s) => done.has(s.id));
+    const unlocked = steps.slice(0, index).every((s) => isDone(s.id));
     return (
       <Step
         key={id}
@@ -237,7 +278,7 @@ export function SignupFields({
         title={steps[index].title}
         description={description}
         summary={summaries[id]}
-        status={id === active ? "active" : unlocked && done.has(id) ? "done" : "locked"}
+        status={id === active ? "active" : unlocked && isDone(id) ? "done" : "locked"}
         onOpen={() => open(id)}
       >
         {children}
@@ -321,30 +362,6 @@ export function SignupFields({
       )}
 
       {step(
-        "builds",
-        "Choose every build you'd be able to work at. We'll place you at one of them and let you know.",
-        <>
-          {error("shifts")}
-          <div role="group" aria-label="Builds" className="flex flex-col gap-2">
-            {builds.map((build) => (
-              <ChoicePill
-                key={build.id}
-                role="checkbox"
-                checked={chosen.has(build.id)}
-                onClick={() => toggle(build.id)}
-                describedBy={errors.shifts ? "shifts-error" : undefined}
-                title={build.buildName}
-                lines={[`${build.time} · ${build.address}`, build.notes]}
-              />
-            ))}
-          </div>
-          {[...chosen].map((id) => (
-            <input key={id} type="hidden" name="shiftId" value={id} />
-          ))}
-        </>,
-      )}
-
-      {step(
         "driver",
         "Drivers have to be approved by Purdue to help us drive.",
         driver.status === "approved" ? (
@@ -414,6 +431,10 @@ export function SignupFields({
                   checked={transportChoice === option.value}
                   onClick={() => setTransport(option.value)}
                   title={option.label}
+                  // Full when no build has room for one more volunteer
+                  // getting there this way.
+                  disabled={!travelHasRoom[option.value]}
+                  lines={travelHasRoom[option.value] ? [] : ["Full right now"]}
                 />
               ),
             )}
@@ -429,38 +450,62 @@ export function SignupFields({
           {error("carSeats")}
           {!editingSeats && seats !== null ? (
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-              <p>
-                {seats === 0
-                  ? "You told us you don't have a car of your own."
-                  : `You're registered with a car with ${seats} ${seats === 1 ? "seat" : "seats"}.`}
-              </p>
+              <p>You&apos;re registered with a car with {seats} seats.</p>
               <Button type="button" variant="outline" size="sm" onClick={() => setEditingSeats(true)}>
                 Edit
               </Button>
             </div>
           ) : (
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="carSeats">How many seats does your car have, counting yours?</Label>
-                <NumberField
-                  id="carSeats"
-                  value={seats && seats > 0 ? seats : null}
-                  onValueChange={(value) => setSeats(value)}
-                  min={1}
-                  max={15}
-                  aria-invalid={errors.carSeats ? true : undefined}
-                  aria-describedby={errors.carSeats ? "carSeats-error" : undefined}
-                />
-              </div>
-              <ChoicePill
-                role="checkbox"
-                checked={seats === 0}
-                onClick={() => setSeats(seats === 0 ? null : 0)}
-                title="I don't have a car of my own"
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="carSeats">How many seats does your car have, counting yours?</Label>
+              <p className="text-sm text-muted-foreground">
+                At least {MIN_CAR_SEATS}, so you can drive at least {MIN_CAR_SEATS - 1} other
+                volunteers.
+              </p>
+              <NumberField
+                id="carSeats"
+                value={seats}
+                onValueChange={(value) => setSeats(value)}
+                min={MIN_CAR_SEATS}
+                max={MAX_CAR_SEATS}
+                aria-invalid={errors.carSeats ? true : undefined}
+                aria-describedby={errors.carSeats ? "carSeats-error" : undefined}
               />
             </div>
           )}
           {seats !== null && <input type="hidden" name="carSeats" value={seats} />}
+        </>,
+      )}
+
+      {step(
+        "builds",
+        "Choose every build you'd be able to work at. We'll place you at one of them and let you know.",
+        <>
+          {error("shifts")}
+          <div role="group" aria-label="Builds" className="flex flex-col gap-2">
+            {builds.map((build) => {
+              const full = !hasRoom(build);
+              return (
+                <ChoicePill
+                  key={build.id}
+                  role="checkbox"
+                  checked={chosen.has(build.id) && !full}
+                  onClick={() => toggle(build.id)}
+                  describedBy={errors.shifts ? "shifts-error" : undefined}
+                  title={build.buildName}
+                  disabled={full}
+                  lines={[
+                    `${build.time} · ${build.address}`,
+                    build.notes,
+                    full ? fullNote(rooms[build.id], travel) : null,
+                  ]}
+                />
+              );
+            })}
+          </div>
+          {chosenWithRoom.map((build) => (
+            <input key={build.id} type="hidden" name="shiftId" value={build.id} />
+          ))}
         </>,
       )}
 
@@ -477,8 +522,18 @@ export function SignupFields({
   );
 }
 
+// Why a build is full for a volunteer getting there this way. Spots can be
+// held for drivers, so a build can be full for some volunteers and not
+// others (src/lib/placement/solver.ts).
+function fullNote(room: BuildRoom, travel: Travel | null) {
+  if (room.driverMinSeats === null) return "Full";
+  if (travel === "driver") return `Full for cars with fewer than ${room.driverMinSeats} seats`;
+  if (travel === "rider" && room.ownWay) return "Full for volunteers who need a ride";
+  return "Full: the spots left are held for drivers";
+}
+
 // A pill-shaped choice that fills in when picked, as a checkbox or one of a
-// set of radio buttons.
+// set of radio buttons. A disabled one is greyed out.
 function ChoicePill({
   role,
   checked,
@@ -486,6 +541,7 @@ function ChoicePill({
   title,
   lines = [],
   describedBy,
+  disabled = false,
 }: {
   role: "checkbox" | "radio";
   checked: boolean;
@@ -493,6 +549,7 @@ function ChoicePill({
   title: string;
   lines?: (string | null)[];
   describedBy?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -501,9 +558,14 @@ function ChoicePill({
       aria-checked={checked}
       aria-describedby={describedBy}
       onClick={onClick}
+      disabled={disabled}
       className={cn(
-        "flex items-center gap-3 hover-gold rounded-full border px-4 py-2.5 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
-        checked ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted/50",
+        "flex items-center gap-3 rounded-full border px-4 py-2.5 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        disabled
+          ? "cursor-not-allowed border-border opacity-60"
+          : checked
+            ? "hover-gold border-primary bg-primary text-primary-foreground"
+            : "hover-gold border-border hover:bg-muted/50",
       )}
     >
       <span

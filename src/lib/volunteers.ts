@@ -39,8 +39,13 @@ export const DRIVER_APPROVAL_URL =
 export const TRANSPORTATION_OPTIONS = [
   { value: "NEEDS_RIDE", label: "I need a ride to the site" },
   { value: "OWN_WAY", label: "I can get to the site on my own" },
-  { value: "CAN_DRIVE", label: "I can help drive other volunteers" },
+  { value: "CAN_DRIVE", label: "I have a car and am willing to help drive other volunteers" },
 ] as const;
+
+// Seats a driver's car can have, counting the driver's. A car needs room
+// for at least 2 passengers to count toward driving others.
+export const MIN_CAR_SEATS = 3;
+export const MAX_CAR_SEATS = 15;
 
 // "Needs a ride", for admin lists.
 export const TRANSPORTATION_SHORT = {
@@ -56,7 +61,8 @@ export type DriverStatus =
   | { status: "pending" }
   | { status: "approved"; until: string };
 
-// "4 seats", or "No car" for 0.
+// "4 seats", or "No car" for 0 (only on signups from before cars needed at
+// least MIN_CAR_SEATS).
 export function seatsLabel(seats: number) {
   if (seats === 0) return "No car";
   return `${seats} ${seats === 1 ? "seat" : "seats"}`;

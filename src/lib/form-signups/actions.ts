@@ -4,9 +4,12 @@ import { revalidatePath } from "next/cache";
 import { driverStatuses } from "@/lib/drivers/status";
 import { getVerifiedEmail } from "@/lib/email-verification/session";
 import { firstErrors, formValues, type ActionState } from "@/lib/forms";
+import { loadPlacementDay, travelOf } from "@/lib/placement/load";
+import type { BuildRoom } from "@/lib/placement/room";
+import { buildRoom, signupChecker } from "@/lib/placement/solver";
 import { prisma } from "@/lib/prisma";
 import { formPhase } from "@/lib/signup-forms/phase";
-import { offeredShifts, totalSpots } from "@/lib/signup-forms/queries";
+import { offeredShifts } from "@/lib/signup-forms/queries";
 import { fromDay, toDay } from "@/lib/time";
 import {
   carSeatsSchema,
@@ -30,6 +33,9 @@ import { cancelDeadline } from "./queries";
 export type SignupFormState = {
   errors?: Partial<Record<SignupField | "form", string>>;
   success?: boolean;
+  // Who each build has room for now (by shift ID), when the builds the
+  // volunteer chose filled up while they were filling out the form.
+  rooms?: Record<string, BuildRoom>;
 };
 
 const SESSION_EXPIRED =
@@ -116,7 +122,11 @@ export async function submitSignup(
   }
 
   const details = { ...parsed.data, dateOfBirth: fromDay(parsed.data.dateOfBirth) };
-  const capacity = totalSpots(form.shifts);
+  // How they count when placing volunteers (src/lib/placement).
+  const newcomer = {
+    ...travelOf(transportation.data, seats, hasLicense && (driver.status !== "none" || !!nowPending)),
+    buildIds: shiftIds,
+  };
 
   // ── Save, making sure a new signup still fits.
   let result;
@@ -132,8 +142,13 @@ export async function submitSignup(
           select: { id: true },
         });
         if (active) return { outcome: "already" as const };
-        const taken = await tx.formSignup.count({ where: { formId, cancelledAt: null } });
-        if (taken >= capacity) return { outcome: "full" as const };
+
+        // There has to be a way to place everyone at a build they chose,
+        // them included, with a ride for everyone who needs one.
+        const day = await loadPlacementDay(tx, formId, form.shifts);
+        if (!signupChecker(day)(newcomer)) {
+          return { outcome: "full" as const, rooms: Object.fromEntries(buildRoom(day)) };
+        }
 
         // Their latest details, for the next form they fill out. Saying
         // they've filled out the driver form makes their approval pending.
@@ -179,7 +194,13 @@ export async function submitSignup(
   }
   if (result.outcome === "full") {
     revalidateSignup(formId);
-    return { errors: { form: "Sorry, this build day just filled up." } };
+    return {
+      errors: {
+        shifts:
+          "Sorry, the builds you chose just filled up. We've updated which builds still have room: choose another, or check the home page for other days.",
+      },
+      rooms: result.rooms,
+    };
   }
 
   // The signup is saved, so a failed email doesn't undo it.

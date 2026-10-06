@@ -10,13 +10,12 @@ import {
 } from "@/lib/email-verification/actions";
 import { getVerifiedEmail } from "@/lib/email-verification/session";
 import { cancelSignup, submitSignup } from "@/lib/form-signups/actions";
-import {
-  cancelDeadline,
-  countActiveSignups,
-  getMySignup,
-  type MySignup,
-} from "@/lib/form-signups/queries";
+import { cancelDeadline, getMySignup, type MySignup } from "@/lib/form-signups/queries";
 import { formatPhone } from "@/lib/phone";
+import { loadPlacementDay } from "@/lib/placement/load";
+import type { BuildRoom } from "@/lib/placement/room";
+import { buildRoom } from "@/lib/placement/solver";
+import { prisma } from "@/lib/prisma";
 import type { FormPhase } from "@/lib/signup-forms/phase";
 import { shiftLabel, shiftTime, type OfferedShift } from "@/lib/signup-forms/queries";
 import { formatDay, fromDay } from "@/lib/time";
@@ -115,12 +114,14 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
       </Panel>
     );
   } else {
+    // Who each build has room for, given everyone already signed up.
+    const rooms = buildRoom(await loadPlacementDay(prisma, form.id, form.shifts));
     const capacity = form.shifts.reduce((sum, shift) => sum + shift.capacity, 0);
-    const taken = await countActiveSignups(form.id);
+    const full = [...rooms.values()].every((room) => room.driverMinSeats === null);
     content =
       capacity === 0 ? (
         <Message>No builds are scheduled for this day right now, so there&apos;s nothing to sign up for yet.</Message>
-      ) : taken >= capacity ? (
+      ) : full ? (
         <Message>This build day is full. Thanks for your interest! Check the home page for other days.</Message>
       ) : (
         <>
@@ -132,7 +133,7 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
           <SignupFields
             action={submitSignup.bind(null, form.id)}
             sections={form.sections}
-            builds={form.shifts.map(toChoice)}
+            builds={form.shifts.map((shift) => toChoice(shift, rooms.get(shift.id)!))}
             defaults={mine ? toDefaults(mine.details) : null}
             driver={mine?.driver ?? { status: "none" }}
             savedCarSeats={mine?.carSeats ?? null}
@@ -267,13 +268,14 @@ function Summary({
   );
 }
 
-function toChoice(shift: OfferedShift): BuildChoice {
+function toChoice(shift: OfferedShift, room: BuildRoom): BuildChoice {
   return {
     id: shift.id,
     buildName: shift.build.name,
     address: shift.build.address,
     time: shiftTime(shift),
     notes: shift.notes,
+    room,
   };
 }
 

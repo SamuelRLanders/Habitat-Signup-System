@@ -9,6 +9,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import type { FormStatus } from "@/generated/prisma/enums";
 import { requireAdmin } from "@/lib/auth/dal";
 import { getFormRoster, type RosterSignup } from "@/lib/form-signups/rosters";
+import { planForRoster, travelRosterFor } from "@/lib/placement/load";
+import { placedAt, type BuildPlan } from "@/lib/placement/solver";
 import { prisma } from "@/lib/prisma";
 import { deleteSignupForm, setSignupFormStatus } from "@/lib/signup-forms/actions";
 import { formPhase } from "@/lib/signup-forms/phase";
@@ -26,6 +28,7 @@ import { BackLink, SpotsMeter } from "../../builds/build-parts";
 import { VolunteerTable } from "../../volunteer-table";
 import { PhaseBadge, phaseNote } from "../form-parts";
 import { ShareDialog } from "../share-dialog";
+import { TravelRosterDialog } from "../travel-roster-dialog";
 
 export async function generateMetadata({
   params,
@@ -52,6 +55,20 @@ export default async function SignupFormPage({
   const roster = await getFormRoster(form.id, form.shifts);
   const active = roster.filter((signup) => !signup.cancelledAt);
   const cancelled = roster.filter((signup) => signup.cancelledAt);
+  // A likely placement of everyone signed up (src/lib/placement).
+  const plan = planForRoster(form.shifts, active);
+  // Purdue's travel roster, following that placement, and what to check
+  // before sending it.
+  const travel = travelRosterFor(form.day, form.shifts, active, plan.placement);
+  const pendingDrivers = [...plan.pendingDrivers.values()].reduce((sum, n) => sum + n, 0);
+  const rosterWarnings = [
+    plan.leftOut.length > 0 &&
+      `Not on the roster because they can't be placed right now: ${names(plan.leftOut)}.`,
+    travel.withoutRide > 0 &&
+      `${plural(travel.withoutRide, "rider doesn't", "riders don't")} have a driver yet (marked "No ride yet").`,
+    pendingDrivers > 0 &&
+      `${plural(pendingDrivers, "driver is", "drivers are")} still waiting for Purdue approval (marked "approval pending").`,
+  ].filter((warning) => typeof warning === "string");
   const labels = new Map(form.shifts.map((shift) => [shift.id, shiftLabel(shift)]));
   // How many active signups chose each shift.
   const willing = new Map<string, number>();
@@ -82,6 +99,7 @@ export default async function SignupFormPage({
 
           <div className="flex flex-wrap items-start gap-2">
             {form.status === "PUBLISHED" && <ShareDialog path={`/signup/${form.id}`} />}
+            {active.length > 0 && <TravelRosterDialog text={travel.text} warnings={rosterWarnings} />}
             <Link
               href={`/admin/forms/${form.id}/edit`}
               className={buttonVariants({ variant: "outline", size: "sm" })}
@@ -106,11 +124,14 @@ export default async function SignupFormPage({
           </h2>
           <p className="text-sm text-muted-foreground">
             Every shift on this day, at every build. Volunteers say which
-            ones they could work.
-            {spots > 0 &&
-              ` Up to ${spots} ${spots === 1 ? "volunteer" : "volunteers"} can sign up, the total spots on these shifts.`}
+            ones they could work, and can sign up as long as everyone can
+            still be placed at one of theirs, with a ride if they need one.
+            Spots are held for drivers when riders need more cars. Each
+            shift shows a likely placement; it isn&apos;t final.
           </p>
         </div>
+
+        {active.length > 0 && builds.length > 0 && <PlacementNote plan={plan} />}
 
         {builds.length === 0 ? (
           <Card>
@@ -159,6 +180,10 @@ export default async function SignupFormPage({
                             {shift.notes}
                           </p>
                         )}
+                        <ShiftPlan
+                          build={plan.builds.get(shift.id)!}
+                          pendingDrivers={plan.pendingDrivers.get(shift.id) ?? 0}
+                        />
                       </div>
                       <SpotsMeter willing={willing.get(shift.id) ?? 0} capacity={shift.capacity} />
                     </li>
@@ -281,6 +306,92 @@ function Totals({ signups }: { signups: RosterSignup[] }) {
         there on their own
       </p>
     </div>
+  );
+}
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+const names = (signups: RosterSignup[]) =>
+  signups.map((signup) => `${signup.firstName} ${signup.lastName}`).join(", ");
+
+// Whether everyone signed up has a spot and a ride, and if not, why. A day
+// can end up short when a driver cancels or is declined, or a shift's spots
+// are reduced; nobody is removed automatically.
+function PlacementNote({ plan }: { plan: ReturnType<typeof planForRoster> }) {
+  const { leftOut, driversNeeded, withoutShifts, proven } = plan;
+  const pending = [...plan.pendingDrivers.values()].reduce((sum, n) => sum + n, 0);
+  const problem = leftOut.length > 0 || driversNeeded > 0 || withoutShifts.length > 0;
+
+  return (
+    <div
+      role="status"
+      className={
+        problem
+          ? "flex flex-col gap-1 rounded-2xl border-l-4 border-gold bg-gold/15 px-4 py-3 text-sm"
+          : "text-sm"
+      }
+    >
+      {leftOut.length > 0 ? (
+        <p>
+          <span className="font-medium">
+            {plural(leftOut.length, "volunteer can't", "volunteers can't")} be placed right now:
+          </span>{" "}
+          {names(leftOut)}. More drivers or more spots on their shifts would make room.
+        </p>
+      ) : (
+        <p className="font-medium">
+          Everyone who signed up has a spot{driversNeeded === 0 && " and a ride"}.
+        </p>
+      )}
+      {driversNeeded > 0 && (
+        <p>
+          {plural(driversNeeded, "more driver is", "more drivers are")} needed so everyone who
+          needs a ride has one. A spot is held for each, and only drivers can sign up for it.
+        </p>
+      )}
+      {pending > 0 && (
+        <p className={problem ? undefined : "text-muted-foreground"}>
+          This counts {plural(pending, "driver", "drivers")} still waiting for approval.
+        </p>
+      )}
+      {withoutShifts.length > 0 && (
+        <p>
+          {names(withoutShifts)} chose only shifts that have since been cancelled, so they
+          aren&apos;t placed anywhere.
+        </p>
+      )}
+      {!proven && (
+        <p className="text-muted-foreground">
+          This placement was worked out quickly and might not be the best one.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// "Likely here: 4 need a ride · 1 driver, 4 seats for riders · 2 on their
+// own · 1 spot held for a driver"
+function ShiftPlan({ build, pendingDrivers }: { build: BuildPlan; pendingDrivers: number }) {
+  if (placedAt(build) === 0) {
+    return <p className="text-sm text-muted-foreground">Nobody placed here yet.</p>;
+  }
+  const parts = [
+    build.riders > 0 && `${build.riders} need${build.riders === 1 ? "s" : ""} a ride`,
+    build.drivers > 0 &&
+      `${plural(build.drivers, "driver", "drivers")}${pendingDrivers > 0 ? ` (${pendingDrivers} pending)` : ""}, ${plural(build.passengerSeats, "seat", "seats")} for riders`,
+    build.ownWay > 0 && `${build.ownWay} on their own`,
+  ].filter(Boolean);
+
+  return (
+    <p className="text-sm text-muted-foreground">
+      <span className="text-foreground">Likely here:</span> {parts.join(" · ")}
+      {build.heldDriverSpots > 0 && (
+        <span className="font-medium text-foreground">
+          {" "}
+          · {plural(build.heldDriverSpots, "spot", "spots")} held for{" "}
+          {build.heldDriverSpots === 1 ? "a driver" : "drivers"}
+        </span>
+      )}
+    </p>
   );
 }
 

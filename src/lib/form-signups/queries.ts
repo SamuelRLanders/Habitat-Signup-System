@@ -68,12 +68,6 @@ export async function getMySignup(formId: string, email: string) {
 
 export type MySignup = NonNullable<Awaited<ReturnType<typeof getMySignup>>>;
 
-// Signups that haven't been cancelled. A form takes at most as many as the
-// total spots on its shifts.
-export function countActiveSignups(formId: string) {
-  return prisma.formSignup.count({ where: { formId, cancelledAt: null } });
-}
-
 // Volunteers can cancel until the day's first shift starts, even after the
 // form closes. With no shifts, until the day ends.
 export function cancelDeadline(day: string, shifts: { startsAt: Date }[]) {

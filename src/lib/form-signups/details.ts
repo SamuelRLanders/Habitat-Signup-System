@@ -1,6 +1,6 @@
 import * as z from "zod";
 import { normalizeUsPhone } from "@/lib/phone";
-import { MINIMUM_AGE } from "@/lib/volunteers";
+import { MAX_CAR_SEATS, MIN_CAR_SEATS, MINIMUM_AGE } from "@/lib/volunteers";
 
 // The details a signup form asks for. The email isn't here: it's the one
 // the volunteer confirmed with a code.
@@ -57,13 +57,15 @@ export const driverFormSchema = z.enum(
   "Tell us whether you've filled out the driver approval form.",
 );
 
-export const MAX_CAR_SEATS = 15;
-
-// Seats in their car, counting the driver's; 0 means no car.
+// Seats in their car, counting the driver's.
 export const carSeatsSchema = z
   .string("Tell us how many seats your car has.")
   .regex(/^\d{1,2}$/, "Tell us how many seats your car has.")
   .transform(Number)
+  .refine(
+    (seats) => seats >= MIN_CAR_SEATS,
+    `To drive others, your car needs at least ${MIN_CAR_SEATS} seats, counting yours.`,
+  )
   .refine((seats) => seats <= MAX_CAR_SEATS, `Enter at most ${MAX_CAR_SEATS} seats.`);
 
 // Whether someone born on dateOfBirth ("2008-10-11") is old enough on day

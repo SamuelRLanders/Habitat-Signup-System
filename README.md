@@ -8,8 +8,8 @@ A web app for the Purdue Habitat for Humanity chapter. Volunteer organization le
 - See published build days on the home page, each with its shifts, builds and addresses
 - Before a form opens, look over the day; after it closes, see that it's closed
 - Confirm an email address with an emailed 6-digit code, remembered on that browser for 2 hours
-- Fill out the form in steps: name, phone, birthday, T-shirt size and driver's license; every build that day they could work at; Purdue driver approval (if they have a license); how they're getting there; their car's seats (if they'll drive others); then each waiver.
-- Licensed volunteers are asked to fill out Purdue's driver approval form. Saying they did makes their approval pending, and only pending or approved drivers can offer to drive others.
+- Fill out the form in steps: name, phone, birthday, T-shirt size and driver's license; Purdue driver approval (if they have a license); how they're getting there; their car's seats (if they'll drive others); every build that day they could work at; then each waiver. Builds without room for them, given how they're getting there, are marked full.
+- Licensed volunteers are asked to fill out Purdue's driver approval form. Saying they did makes their approval pending, and only pending or approved drivers with a car of at least 3 seats can offer to drive others.
 - Volunteers must be 18 or older on the build day
 - Details are filled in from their last signup
 - Cancel their signup until the day's first shift starts, with an email each time. Signups can't be changed: to change one, volunteers cancel and sign up again while the form is open
@@ -17,9 +17,10 @@ A web app for the Purdue Habitat for Humanity chapter. Volunteer organization le
 **For admins (sign in with an emailed code)**
 - Create builds (name, address, time zone) and add shifts to them (date, time, spots, notes)
 - Create one signup form per build day, with open and close times, a description and sections. A form offers every shift on its day, at every build, that isn't cancelled.
-- Publish and share a form's link. A day takes at most as many signups as its shifts have spots.
+- Publish and share a form's link. A day takes a signup only while everyone can still be placed at a build they chose, with a ride if they need one (see Placing volunteers below).
 - See each form's volunteers, the shifts each could work, how many are willing to work each shift, and T-shirt and driver's license totals. Download them as a CSV with a column per shift.
-- See who's willing to work each shift
+- See who's willing to work each shift, a likely placement for each, how many more drivers are needed, and anyone who can't be placed
+- Copy Purdue's travel roster for a build day: who's going to each build, who's driving whom, and phone numbers, following the likely placement
 - Search and filter every volunteer on the People page, and download them as a CSV
 - Approve pending drivers through an end date (suggested a year after they asked), decline them, or revoke an approval on the Drivers page. Each decision records the admin's name, and approved drivers are emailed.
 - Check drivers against Purdue's approved driver list: download ApprovedDrivers.xlsx from Purdue's SharePoint, upload it on the Drivers page, and approve the matches (by email, or by name to double-check) with their Purdue end dates. Approved drivers Purdue has renewed can be extended. The file isn't kept.
@@ -57,7 +58,7 @@ A web app for the Purdue Habitat for Humanity chapter. Volunteer organization le
 ## Key Considerations
 
 - **Waivers**: signed outside the app. Admins add a section to each form linking each waiver, with instructions for filling it out. The app doesn't track who has signed them.
-- **Placing volunteers**: volunteers say which shifts they could work; admins place them. Placing is done outside the app for now (the form's CSV has a column per shift), and an assignment tool is planned.
+- **Placing volunteers**: volunteers say which shifts they could work (one per build that day); admins place them later, so until then volunteers can be moved between their choices. A signup is taken only if there's a way to place everyone at one of their builds where every rider has a seat in a car going there. Riders can sign up before there are enough drivers: for every 3 riders without a seat, a spot is held for a driver (assuming a 4-seat car), and only a driver can take it. Pending drivers count. Finding a placement is a small integer program, solved with [yalps](https://github.com/IanManske/YALPS); see `src/lib/placement/solver.ts` for the rules and how it works. Admins still place volunteers outside the app (the form's CSV has a column per shift).
 - **Groups**: everyone signs up on their own through the same link. A way to pair up groups is planned.
 - **Privacy**: volunteer data is personal information. Keep it in the admin area only, use HTTPS everywhere, and don't collect more than you need.
 - **Spam protection**: emailed codes are rate limited per email and per IP address, and each code allows 5 wrong guesses. Consider a CAPTCHA such as [Cloudflare Turnstile](https://www.cloudflare.com/products/turnstile/) if the forms are abused.
@@ -83,6 +84,7 @@ npm run dev                # http://localhost:3000
 | `npm run dev` | Start the dev server |
 | `npm run build` | Production build |
 | `npm run lint` | Run ESLint |
+| `npm test` | Run the tests (the placement solver's) |
 | `npm run db:migrate` | Apply schema changes to the database (`prisma migrate dev`) |
 | `npm run db:studio` | Browse and edit data in Prisma Studio |
 | `npm run admin:add -- <email> "<name>"` | Add an admin |
@@ -101,6 +103,7 @@ npm run dev                # http://localhost:3000
 - `src/lib/builds/`: build and shift queries and Server Actions
 - `src/lib/admin/`: the People page's search and queries
 - `src/lib/drivers/`: driver approval status, the Drivers page's queries, and approve/decline/revoke
+- `src/lib/placement/`: placing volunteers at builds: the solver, which decides whether a day can take a signup and who each build has room for, and loading a form's signups for it
 - `src/lib/auth/`: admin sign-in (Better Auth config, `requireAdmin()`, the sign-in Server Actions, and code rate limits)
 - `src/lib/time.ts`: time zone conversion and date formatting (shift times are stored in UTC)
 - `src/proxy.ts`: redirects signed-out visitors away from `/admin`
@@ -112,7 +115,7 @@ npm run dev                # http://localhost:3000
 ## Roadmap
 
 1. Set up Resend so codes and confirmations are emailed
-2. Placing volunteers on shifts from their choices
+2. Confirming placements in the app and emailing volunteers where they'll work
 3. Pairing up groups that want to work together
 4. More questions on the signup form
 5. Messaging volunteers, such as when a build or shift is cancelled
