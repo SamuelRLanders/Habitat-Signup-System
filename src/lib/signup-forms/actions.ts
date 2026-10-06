@@ -39,7 +39,7 @@ function revalidateForms() {
 const time = (message: string) => z.iso.time({ precision: -1, error: message });
 
 const signupFormSchema = z.object({
-  date: z.iso.date("Choose the build day."),
+  date: z.iso.date("Choose the event day."),
   opensDate: z.iso.date("Choose the day the form opens."),
   opensTime: time("Choose the time the form opens."),
   closesDate: z.iso.date("Choose the day the form closes."),
@@ -80,7 +80,7 @@ function parseSignupForm(formData: FormData, previousDay?: string) {
     if (closesAt <= opensAt) {
       errors.closesTime = "The form has to close after it opens.";
     } else if (closesAt > dayEnds) {
-      errors.closesDate = "The form has to close by the end of the build day.";
+      errors.closesDate = "The form has to close by the end of the event day.";
     }
     values = { date: fromDay(date), opensAt, closesAt, description };
   }
@@ -107,7 +107,7 @@ async function dateTaken(date: Date, exceptFormId?: string) {
 }
 
 function takenMessage(date: Date) {
-  return `${formatDay(toDay(date), "short")} already has a signup form. There's one form per build day.`;
+  return `${formatDay(toDay(date), "short")} already has a signup form. There's one form per event.`;
 }
 
 function isDateConflict(error: unknown) {
@@ -223,7 +223,7 @@ export async function setSignupFormStatus(
     const day = toDay(form.date);
     const shifts = (await offeredShifts([day])).get(day) ?? [];
     if (shifts.length === 0) {
-      return { error: "There are no shifts on this day. Add some to a build before publishing." };
+      return { error: "There are no builds on this day. Add one to a project before publishing." };
     }
   }
 

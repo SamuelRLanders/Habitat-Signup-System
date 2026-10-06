@@ -36,7 +36,7 @@ export async function generateMetadata({
     where: { id: buildId },
     select: { name: true },
   });
-  return { title: build?.name ?? "Build" };
+  return { title: build?.name ?? "Project" };
 }
 
 export default async function BuildPage({
@@ -65,7 +65,7 @@ export default async function BuildPage({
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-8">
       <div className="flex flex-col gap-4">
-        <BackLink href="/admin/builds">Back to builds</BackLink>
+        <BackLink href="/admin/builds">Back to projects</BackLink>
 
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 flex-col gap-1">
@@ -100,7 +100,7 @@ export default async function BuildPage({
 
         {cancelled && (
           <p className="text-sm text-muted-foreground">
-            This build was cancelled. Its shifts aren&apos;t offered to
+            This project was cancelled. Its builds aren&apos;t offered to
             volunteers.
           </p>
         )}
@@ -114,7 +114,7 @@ export default async function BuildPage({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 id="shifts-heading" className="text-lg font-semibold">
-              Shifts
+              Builds
             </h2>
             <p className="text-sm text-muted-foreground">
               Times are in {zoneLabel} time.
@@ -124,9 +124,9 @@ export default async function BuildPage({
             <ShiftDialog
               action={createShifts.bind(null, build.id)}
               mode="add"
-              title="Add shifts"
-              submitLabel="Add shift"
-              trigger={{ label: "Add shifts" }}
+              title="Add builds"
+              submitLabel="Add build"
+              trigger={{ label: "Add builds" }}
               timeZoneLabel={zoneLabel}
               takenDays={[...days.keys()]}
             />
@@ -136,7 +136,7 @@ export default async function BuildPage({
         {build.shifts.length === 0 ? (
           <Card>
             <CardContent className="py-6 text-center text-muted-foreground">
-              No shifts yet. Add shifts so volunteers have something to sign
+              No builds yet. Add builds so volunteers have something to sign
               up for.
             </CardContent>
           </Card>
@@ -190,8 +190,8 @@ export default async function BuildPage({
                           <ShiftDialog
                             action={updateShift.bind(null, shift.id)}
                             mode="edit"
-                            title="Edit shift"
-                            submitLabel="Save shift"
+                            title="Edit build"
+                            submitLabel="Save build"
                             trigger={{ label: "Edit", variant: "ghost" }}
                             timeZoneLabel={zoneLabel}
                             takenDays={[...days.keys()]}
@@ -244,7 +244,7 @@ function StatusActions({
   const setStatus = (next: BuildStatus) => setBuildStatus.bind(null, buildId, next);
 
   if (status === "CANCELLED") {
-    return <ActionButton action={setStatus("ACTIVE")} label="Restore build" />;
+    return <ActionButton action={setStatus("ACTIVE")} label="Restore project" />;
   }
   return (
     <>
@@ -254,21 +254,21 @@ function StatusActions({
           label="Delete"
           variant="ghost"
           confirm={{
-            title: "Delete this build?",
-            description: "The build and its shifts will be permanently deleted.",
-            confirmLabel: "Delete build",
+            title: "Delete this project?",
+            description: "The project and its builds will be permanently deleted.",
+            confirmLabel: "Delete project",
           }}
         />
       )}
       <ActionButton
         action={setStatus("CANCELLED")}
-        label="Cancel build"
+        label="Cancel project"
         variant="destructive"
         confirm={{
-          title: "Cancel this build?",
+          title: "Cancel this project?",
           description:
-            "Its shifts won't be offered to volunteers. Existing signups are kept on record, but volunteers aren't notified automatically yet.",
-          confirmLabel: "Cancel build",
+            "Its builds won't be offered to volunteers. Existing signups are kept on record, but volunteers aren't notified automatically yet.",
+          confirmLabel: "Cancel project",
         }}
       />
     </>
@@ -319,15 +319,15 @@ function RemoveShiftButton({
       confirm={
         hasSignups
           ? {
-              title: "Cancel this shift?",
+              title: "Cancel this build?",
               description:
-                "Volunteers chose this shift on the signup form, so it will be marked cancelled and kept on record. It's taken off the form, and volunteers aren't notified automatically yet.",
-              confirmLabel: "Cancel shift",
+                "Volunteers chose this build on the signup form, so it will be marked cancelled and kept on record. It's taken off the form, and volunteers aren't notified automatically yet.",
+              confirmLabel: "Cancel build",
             }
           : {
-              title: "Delete this shift?",
-              description: "No volunteer has chosen this shift, so it will be permanently deleted.",
-              confirmLabel: "Delete shift",
+              title: "Delete this build?",
+              description: "No volunteer has chosen this build, so it will be permanently deleted.",
+              confirmLabel: "Delete build",
             }
       }
     />

@@ -7,7 +7,7 @@ import { formatDate } from "@/lib/time";
 import { BuildForm } from "../../build-form";
 import { BackLink } from "../../build-parts";
 
-export const metadata: Metadata = { title: "Edit build" };
+export const metadata: Metadata = { title: "Edit project" };
 
 export default async function EditBuildPage({
   params,
@@ -26,9 +26,9 @@ export default async function EditBuildPage({
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <BackLink href={buildHref}>Back to build</BackLink>
+        <BackLink href={buildHref}>Back to project</BackLink>
         <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-semibold">Edit build</h1>
+          <h1 className="text-2xl font-semibold">Edit project</h1>
           <p className="text-sm text-muted-foreground">
             Created by {build.createdByName || "an admin"} on{" "}
             {formatDate(build.createdAt, build.timeZone)}

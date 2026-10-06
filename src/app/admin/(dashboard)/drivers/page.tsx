@@ -44,18 +44,20 @@ export default async function DriversPage() {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold">Drivers</h1>
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-2xl font-semibold">Drivers</h1>
+          <PurdueListCheck listUrl={PURDUE_APPROVED_DRIVERS_URL} />
+        </div>
         <p className="text-sm text-muted-foreground">
           Volunteers ask to drive by filling out{" "}
           <a href={DRIVER_APPROVAL_URL} target="_blank" rel="noreferrer" className="underline underline-offset-4">
             Purdue&apos;s driver approval form
           </a>{" "}
           and telling us on a signup form. Check them against Purdue&apos;s
-          approved driver list, then record their approval here.
+          approved driver list, then record their approval here, or use
+          Auto approve to check the whole list at once.
         </p>
       </div>
-
-      <PurdueListCheck listUrl={PURDUE_APPROVED_DRIVERS_URL} />
 
       <Section title={`Pending approval (${pending.length})`} empty="Nobody is waiting for approval.">
         {pending.length > 0 && (

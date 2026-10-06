@@ -95,7 +95,7 @@ export async function updateBuild(
     where: { id: buildId },
     include: { shifts: true },
   });
-  if (!build) return { errors: { form: "This build no longer exists." } };
+  if (!build) return { errors: { form: "This project no longer exists." } };
 
   const { timeZone } = parsed.build;
   await prisma.$transaction([
@@ -140,7 +140,7 @@ export async function setBuildStatus(
     where: { id: buildId },
     data: { status: next.data },
   });
-  if (count === 0) return { error: "This build no longer exists." };
+  if (count === 0) return { error: "This project no longer exists." };
 
   revalidateAdmin();
   return {};
@@ -156,7 +156,7 @@ export async function deleteBuild(
   const chosen = await prisma.shiftPreference.count({ where: { shift: { buildId } } });
   if (chosen > 0) {
     return {
-      error: "Volunteers have signed up for this build. Cancel it instead.",
+      error: "Volunteers have signed up for this project. Cancel it instead.",
     };
   }
 
@@ -178,8 +178,8 @@ const shiftDetailsSchema = z
     capacity: z.coerce
       .number<string>("Enter the number of spots.")
       .int("Enter a whole number.")
-      .min(1, "A shift needs at least 1 spot.")
-      .max(500, "A shift can have at most 500 spots."),
+      .min(1, "A build needs at least 1 spot.")
+      .max(500, "A build can have at most 500 spots."),
     notes: z
       .string()
       .trim()
@@ -187,7 +187,7 @@ const shiftDetailsSchema = z
       .transform((value) => value || null),
   })
   .refine((shift) => shift.endTime > shift.startTime, {
-    message: "The shift must end after it starts.",
+    message: "The build must end after it starts.",
     path: ["endTime"],
   });
 
@@ -196,7 +196,7 @@ const dateSchema = z.iso.date("Choose a valid date.");
 const newShiftDatesSchema = z
   .array(dateSchema)
   .min(1, "Choose at least one date.")
-  .max(MAX_NEW_SHIFTS, `Add at most ${MAX_NEW_SHIFTS} shifts at a time.`)
+  .max(MAX_NEW_SHIFTS, `Add at most ${MAX_NEW_SHIFTS} builds at a time.`)
   .transform((dates) => [...new Set(dates)].sort());
 
 const editedShiftDateSchema = z.array(dateSchema).length(1, "Choose a date.");
@@ -244,9 +244,9 @@ export async function createShifts(
     where: { id: buildId },
     include: { shifts: { select: { id: true, startsAt: true } } },
   });
-  if (!build) return { errors: { form: "This build no longer exists." } };
+  if (!build) return { errors: { form: "This project no longer exists." } };
   if (build.status === "CANCELLED") {
-    return { errors: { form: "Shifts can't be added to a cancelled build." } };
+    return { errors: { form: "Builds can't be added to a cancelled project." } };
   }
 
   const parsed = parseShifts(formData, newShiftDatesSchema, build.timeZone);
@@ -288,7 +288,7 @@ export async function updateShift(
     where: { id: shiftId },
     include: { build: { include: { shifts: { select: { id: true, startsAt: true } } } } },
   });
-  if (!existing) return { errors: { form: "This shift no longer exists." } };
+  if (!existing) return { errors: { form: "This build no longer exists." } };
 
   const zone = existing.build.timeZone;
   const parsed = parseShifts(formData, editedShiftDateSchema, zone);
@@ -313,7 +313,7 @@ function takenDays(shifts: { startsAt: Date }[], timeZone: string) {
 
 function oneShiftPerDay(clashes: { startsAt: Date }[], timeZone: string) {
   const days = clashes.map((s) => formatDate(s.startsAt, timeZone)).join("; ");
-  return `This build already has a shift on ${days}. Each build has one shift per day, so edit or restore that one instead.`;
+  return `This project already has a build on ${days}. Each project has one build per day, so edit or restore that one instead.`;
 }
 
 // Deletes a shift nobody has signed up for or chosen on a signup form.

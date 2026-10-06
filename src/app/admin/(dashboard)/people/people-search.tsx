@@ -249,14 +249,14 @@ function FiltersForm({
         <legend className="mb-2 text-sm font-medium">Signed up for</legend>
         <Select
           name="form"
-          items={[{ value: "", label: "Any build day" }, ...forms]}
+          items={[{ value: "", label: "Any event" }, ...forms]}
           defaultValue={search.form ?? ""}
         >
           <SelectTrigger aria-label="Signed up for" className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="max-h-72">
-            <SelectItem value="">Any build day</SelectItem>
+            <SelectItem value="">Any event</SelectItem>
             {forms.map((form) => (
               <SelectItem key={form.value} value={form.value}>
                 {form.label}

@@ -15,12 +15,20 @@ type EmailCodeFormProps = {
   restartHref: string;
   // Sent along with the code, such as where to go afterwards.
   hiddenFields?: Record<string, string>;
+  // The email field's label (default "Email") and a hint under it.
+  emailLabel?: string;
+  emailHint?: string;
 };
 
 const initialState: SendCodeState = { status: "idle" };
 
 // Two steps: enter an email, then the 6-digit code sent to it.
-export function EmailCodeForm({ sendAction, ...props }: EmailCodeFormProps) {
+export function EmailCodeForm({
+  sendAction,
+  emailLabel = "Email",
+  emailHint,
+  ...props
+}: EmailCodeFormProps) {
   const [state, send, sending] = useActionState(sendAction, initialState);
 
   if (state.status === "sent") {
@@ -37,11 +45,12 @@ export function EmailCodeForm({ sendAction, ...props }: EmailCodeFormProps) {
   }
 
   const error = state.status === "error" ? state.message : undefined;
+  const describedBy = [emailHint && "email-hint", error && "email-error"].filter(Boolean).join(" ");
 
   return (
     <form action={send} className="flex flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{emailLabel}</Label>
         <Input
           id="email"
           name="email"
@@ -49,8 +58,13 @@ export function EmailCodeForm({ sendAction, ...props }: EmailCodeFormProps) {
           autoComplete="email"
           required
           aria-invalid={error ? true : undefined}
-          aria-describedby={error ? "email-error" : undefined}
+          aria-describedby={describedBy || undefined}
         />
+        {emailHint && (
+          <p id="email-hint" className="text-sm text-muted-foreground">
+            {emailHint}
+          </p>
+        )}
         {error && (
           <p id="email-error" className="text-sm text-destructive">
             {error}

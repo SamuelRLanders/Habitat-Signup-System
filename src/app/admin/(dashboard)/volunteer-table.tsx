@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import type { Transportation, TShirtSize } from "@/generated/prisma/enums";
 import {
   Table,
@@ -35,30 +36,48 @@ export type VolunteerRow = {
 };
 
 // Volunteers who signed up for a build day, with the details from their
-// signup. Ages are on the build day.
+// signup. Ages are on the build day. Brief leaves out ages and when they
+// signed up. Scrollable fills the space it's given and scrolls inside it,
+// keeping the header in view, as in a popup.
 export function VolunteerTable({
   rows,
   day,
   shiftsHeading,
+  brief = false,
+  scrollable = false,
 }: {
   rows: VolunteerRow[];
   day: string;
   shiftsHeading: string;
+  brief?: boolean;
+  scrollable?: boolean;
 }) {
   return (
-    <div className="hover-gold rounded-xl ring-1 ring-foreground/10">
-      <Table>
-        <TableHeader>
+    <div
+      className={cn(
+        "hover-gold rounded-xl ring-1 ring-foreground/10",
+        scrollable && "flex min-h-0 flex-col overflow-hidden",
+      )}
+    >
+      <Table containerClassName={cn(scrollable && "min-h-0 flex-1 overflow-auto")}>
+        <TableHeader
+          className={cn(
+            // The row's border scrolls away with a sticky header, so each
+            // heading draws it as a shadow.
+            scrollable &&
+              "sticky top-0 z-10 [&_th]:bg-popover [&_th]:shadow-[inset_0_-1px_0_var(--border)] [&_tr]:border-b-0",
+          )}
+        >
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Phone</TableHead>
-            <TableHead className="text-right">Age</TableHead>
+            {!brief && <TableHead className="text-right">Age</TableHead>}
             <TableHead>T-shirt</TableHead>
             <TableHead>Driver</TableHead>
             <TableHead>Getting there</TableHead>
             <TableHead>{shiftsHeading}</TableHead>
-            <TableHead>Signed up</TableHead>
+            {!brief && <TableHead>Signed up</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -73,7 +92,9 @@ export function VolunteerTable({
                 </a>
               </TableCell>
               <TableCell className="whitespace-nowrap">{formatPhone(row.phone)}</TableCell>
-              <TableCell className="text-right tabular-nums">{ageOn(row.dateOfBirth, day)}</TableCell>
+              {!brief && (
+                <TableCell className="text-right tabular-nums">{ageOn(row.dateOfBirth, day)}</TableCell>
+              )}
               <TableCell>{shirtLabel(row.tShirtSize)}</TableCell>
               <TableCell className="whitespace-nowrap">
                 <DriverCell license={row.hasDriversLicense} driver={row.driver} />
@@ -105,9 +126,11 @@ export function VolunteerTable({
                   </ul>
                 )}
               </TableCell>
-              <TableCell className="whitespace-nowrap">
-                {formatDate(row.createdAt, DEFAULT_TIME_ZONE)}
-              </TableCell>
+              {!brief && (
+                <TableCell className="whitespace-nowrap">
+                  {formatDate(row.createdAt, DEFAULT_TIME_ZONE)}
+                </TableCell>
+              )}
             </TableRow>
           ))}
         </TableBody>

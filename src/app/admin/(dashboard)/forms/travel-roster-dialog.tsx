@@ -49,7 +49,7 @@ export function TravelRosterDialog({ text, warnings }: { text: string; warnings:
           </DialogDescription>
         </DialogHeader>
         {warnings.length > 0 && (
-          <ul className="flex list-disc flex-col gap-1 rounded-2xl border-l-4 border-gold bg-gold/15 py-3 pr-5 pl-10 text-sm">
+          <ul className="flex flex-col gap-1 rounded-2xl border-l-4 border-gold bg-gold/15 px-4 py-3 text-sm">
             {warnings.map((warning) => (
               <li key={warning}>{warning}</li>
             ))}

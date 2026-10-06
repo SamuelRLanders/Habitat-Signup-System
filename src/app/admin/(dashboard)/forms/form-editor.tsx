@@ -42,7 +42,7 @@ export function FormEditor({
   return (
     <form onSubmit={submitForm(formAction)} className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <Label htmlFor="date">Build day</Label>
+        <Label htmlFor="date">Event day</Label>
         <DatePicker
           id="date"
           name="date"
@@ -51,8 +51,8 @@ export function FormEditor({
           {...aria("date")}
         />
         <p className="text-sm text-muted-foreground">
-          The form offers every shift on this day, at every build. Each day
-          can have one form.
+          The form offers every build on this day. Each event has one
+          form.
         </p>
         <FieldError field="date" error={errors.date} />
       </div>
@@ -78,7 +78,7 @@ export function FormEditor({
         <p className="text-sm text-muted-foreground">
           Times are in Eastern (Indiana) time. Once the form is published,
           volunteers can see it right away, but can only fill it out while
-          it&apos;s open. It has to close by the end of the build day.
+          it&apos;s open. It has to close by the end of the event day.
         </p>
       </fieldset>
 

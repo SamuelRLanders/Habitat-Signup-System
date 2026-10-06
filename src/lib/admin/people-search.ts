@@ -25,7 +25,7 @@ export const SIZE_FILTERS = T_SHIRT_SIZES;
 export const YES_NO_FILTERS = {
   license: { label: "Driver's license", yes: "Has license", no: "No license" },
   upcoming: {
-    label: "Upcoming build days",
+    label: "Upcoming events",
     yes: "Signed up for one",
     no: "Not signed up for any",
   },

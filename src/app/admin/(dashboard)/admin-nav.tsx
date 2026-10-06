@@ -7,13 +7,13 @@ import { cn } from "cn";
 
 const tabs = [
   { href: "/admin/forms", label: "Forms", icon: ClipboardListIcon },
-  { href: "/admin/builds", label: "Builds", icon: HammerIcon },
+  { href: "/admin/builds", label: "Projects", icon: HammerIcon },
   { href: "/admin/people", label: "People", icon: UsersIcon },
   { href: "/admin/drivers", label: "Drivers", icon: CarIcon },
 ];
 
 // The admin sections. A tab stays highlighted on the pages beneath it, so
-// "Builds" is active on /admin/builds/123/edit too.
+// "Projects" is active on /admin/builds/123/edit too.
 export function AdminNav() {
   const pathname = usePathname();
 

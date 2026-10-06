@@ -48,7 +48,7 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
   if (!email) {
     return (
       <Panel
-        title={open ? "Sign in with your email" : "Already signed up?"}
+        title={open ? "Sign in with your Purdue email" : "Already signed up?"}
         description={
           open
             ? "We'll send you a 6-digit code to confirm it's you. You don't need an account."
@@ -60,6 +60,12 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
           verifyAction={verifySignupCode}
           verifyLabels={{ idle: "Continue", pending: "Checking…" }}
           restartHref={`/signup/${form.id}`}
+          emailLabel={open ? "Purdue email" : "Email"}
+          emailHint={
+            open
+              ? "Use your @purdue.edu email. It's how we match you to Purdue's records, such as its approved driver list."
+              : "Use the email you signed up with."
+          }
         />
       </Panel>
     );

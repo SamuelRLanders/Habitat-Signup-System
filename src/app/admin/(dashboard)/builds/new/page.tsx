@@ -4,7 +4,7 @@ import { createBuild } from "@/lib/builds/actions";
 import { BuildForm } from "../build-form";
 import { BackLink } from "../build-parts";
 
-export const metadata: Metadata = { title: "New build" };
+export const metadata: Metadata = { title: "New project" };
 
 export default async function NewBuildPage() {
   await requireAdmin();
@@ -12,13 +12,13 @@ export default async function NewBuildPage() {
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-6">
       <div className="flex flex-col gap-3">
-        <BackLink href="/admin/builds">Back to builds</BackLink>
-        <h1 className="text-2xl font-semibold">New build</h1>
+        <BackLink href="/admin/builds">Back to projects</BackLink>
+        <h1 className="text-2xl font-semibold">New project</h1>
         <p className="text-muted-foreground">
-          Only admins see builds. You&apos;ll add shifts next.
+          Only admins see projects. You&apos;ll add builds next.
         </p>
       </div>
-      <BuildForm action={createBuild} submitLabel="Create build" cancelHref="/admin/builds" />
+      <BuildForm action={createBuild} submitLabel="Create project" cancelHref="/admin/builds" />
     </div>
   );
 }

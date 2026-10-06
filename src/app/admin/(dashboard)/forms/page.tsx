@@ -16,7 +16,7 @@ import { PhaseBadge, phaseNote } from "./form-parts";
 export const metadata: Metadata = { title: "Signup forms" };
 
 const tabs: Record<FormListTab, { label: string; empty: string }> = {
-  upcoming: { label: "Upcoming", empty: "No signup forms for upcoming build days." },
+  upcoming: { label: "Upcoming", empty: "No signup forms for upcoming events." },
   past: { label: "Past", empty: "No past signup forms." },
 };
 
@@ -42,8 +42,8 @@ export default async function SignupFormsPage({
           </Link>
         </div>
         <p className="text-sm text-muted-foreground">
-          One form per build day. Volunteers sign up through its link and say
-          which of the day&apos;s shifts they could work.
+          One form per event, the day&apos;s builds. Volunteers sign up through
+          its link and say which builds they could work at.
         </p>
       </div>
 
@@ -100,10 +100,10 @@ export default async function SignupFormsPage({
                   </div>
                   <span className="text-sm text-muted-foreground tabular-nums">
                     {form.shiftCount === 0 ? (
-                      <span className="text-destructive">No shifts on this day</span>
+                      <span className="text-destructive">No builds on this day</span>
                     ) : (
                       <>
-                        {form.shiftCount} {form.shiftCount === 1 ? "shift" : "shifts"}
+                        {form.shiftCount} {form.shiftCount === 1 ? "build" : "builds"}
                         {" · "}
                         {form.signupCount} of {form.spots} signed up
                       </>

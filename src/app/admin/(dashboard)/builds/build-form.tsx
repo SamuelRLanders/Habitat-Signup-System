@@ -78,7 +78,7 @@ export function BuildForm({
           {...fieldProps("description")}
           defaultValue={value("description")}
           rows={4}
-          placeholder="Anything volunteers should know about this build."
+          placeholder="Anything volunteers should know about this project."
         />
         <FieldError field="description" error={errors.description} />
       </div>
@@ -107,9 +107,9 @@ export function BuildForm({
           </SelectContent>
         </Select>
         <p className="text-sm text-muted-foreground">
-          Shift times are entered and shown in this time zone.
+          Build times are entered and shown in this time zone.
           {hasShifts &&
-            " If you change it, existing shifts keep their clock times."}
+            " If you change it, existing builds keep their clock times."}
         </p>
         <FieldError field="timeZone" error={errors.timeZone} />
       </div>

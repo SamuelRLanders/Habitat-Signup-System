@@ -110,9 +110,9 @@ function ShiftForm({
               onChange={(dates) => setDateCount(dates.length)}
             />
             <p className="text-sm text-muted-foreground">
-              Each date gets its own copy of this shift, which you can edit
-              separately later. Days that already have a shift are greyed
-              out: each build has one shift per day.
+              Each date gets its own build, which you can edit separately
+              later. Days that already have a build are greyed out: each
+              project has one build per day.
             </p>
           </>
         ) : (
@@ -178,7 +178,7 @@ function ShiftForm({
           {pending
             ? "Saving…"
             : mode === "add" && dateCount > 1
-              ? `Add ${dateCount} shifts`
+              ? `Add ${dateCount} builds`
               : submitLabel}
         </Button>
       </DialogFooter>

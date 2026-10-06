@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionButton } from "@/components/action-button";
-import { FormSections } from "@/components/form-sections";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { FormStatus } from "@/generated/prisma/enums";
@@ -14,7 +13,7 @@ import { placedAt, type BuildPlan } from "@/lib/placement/solver";
 import { prisma } from "@/lib/prisma";
 import { deleteSignupForm, setSignupFormStatus } from "@/lib/signup-forms/actions";
 import { formPhase } from "@/lib/signup-forms/phase";
-import { getSignupForm, shiftLabel, totalSpots } from "@/lib/signup-forms/queries";
+import { getSignupForm, totalSpots } from "@/lib/signup-forms/queries";
 import {
   DEFAULT_TIME_ZONE,
   formatDate,
@@ -29,6 +28,7 @@ import { VolunteerTable } from "../../volunteer-table";
 import { PhaseBadge, phaseNote } from "../form-parts";
 import { ShareDialog } from "../share-dialog";
 import { TravelRosterDialog } from "../travel-roster-dialog";
+import { VolunteersDialog } from "../volunteers-dialog";
 
 export async function generateMetadata({
   params,
@@ -69,15 +69,13 @@ export default async function SignupFormPage({
     pendingDrivers > 0 &&
       `${plural(pendingDrivers, "driver is", "drivers are")} still waiting for Purdue approval (marked "approval pending").`,
   ].filter((warning) => typeof warning === "string");
-  const labels = new Map(form.shifts.map((shift) => [shift.id, shiftLabel(shift)]));
+  // Each build has one shift a day, so its name is enough to tell them apart.
+  const labels = new Map(form.shifts.map((shift) => [shift.id, shift.build.name]));
   // How many active signups chose each shift.
   const willing = new Map<string, number>();
   for (const signup of active) {
     for (const id of signup.shiftIds) willing.set(id, (willing.get(id) ?? 0) + 1);
   }
-  // The day's shifts under a heading for each build, in order of each
-  // build's first shift.
-  const builds = [...Map.groupBy(form.shifts, (shift) => shift.build.id).values()];
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8">
@@ -99,6 +97,15 @@ export default async function SignupFormPage({
 
           <div className="flex flex-wrap items-start gap-2">
             {form.status === "PUBLISHED" && <ShareDialog path={`/signup/${form.id}`} />}
+            <VolunteersDialog count={active.length}>
+              <Volunteers
+                formId={form.id}
+                day={form.day}
+                active={active}
+                cancelled={cancelled}
+                labels={labels}
+              />
+            </VolunteersDialog>
             {active.length > 0 && <TravelRosterDialog text={travel.text} warnings={rosterWarnings} />}
             <Link
               href={`/admin/forms/${form.id}/edit`}
@@ -117,163 +124,66 @@ export default async function SignupFormPage({
         {form.description && <p className="whitespace-pre-line">{form.description}</p>}
       </div>
 
-      <section className="flex flex-col gap-4" aria-labelledby="shifts-heading">
+      <section className="flex flex-col gap-4" aria-labelledby="sites-heading">
         <div>
-          <h2 id="shifts-heading" className="text-lg font-semibold">
-            Shifts
+          <h2 id="sites-heading" className="text-lg font-semibold">
+            Builds
           </h2>
           <p className="text-sm text-muted-foreground">
-            Every shift on this day, at every build. Volunteers say which
-            ones they could work, and can sign up as long as everyone can
-            still be placed at one of theirs, with a ride if they need one.
-            Spots are held for drivers when riders need more cars. Each
-            shift shows a likely placement; it isn&apos;t final.
+            Volunteers say which builds they could work at. Each build shows a
+            likely placement; it isn&apos;t final.
           </p>
         </div>
 
-        {active.length > 0 && builds.length > 0 && <PlacementNote plan={plan} />}
-
-        {builds.length === 0 ? (
+        {form.shifts.length === 0 ? (
           <Card>
             <CardContent className="py-6 text-center text-muted-foreground">
-              No shifts on this day yet. Add shifts for{" "}
-              {formatDay(form.day, "short")} to a build and they&apos;ll show
-              up here. Cancelled shifts and builds aren&apos;t offered.
+              No builds on this day yet. Add builds for{" "}
+              {formatDay(form.day, "short")} to a project and they&apos;ll show
+              up here. Cancelled builds and projects aren&apos;t offered.
             </CardContent>
           </Card>
         ) : (
-          builds.map((shifts) => {
-            const { build } = shifts[0];
+          // A box for each build; a project has at most one a day.
+          form.shifts.map((shift) => {
+            const { build } = shift;
             const zone = build.timeZone;
             return (
-              <div key={build.id} className="flex flex-col gap-2">
-                <div className="flex flex-col">
+              <div
+                key={shift.id}
+                className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 hover-gold rounded-xl p-4 ring-1 ring-foreground/10"
+              >
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <Link
                     href={`/admin/builds/${build.id}`}
-                    className="font-medium hover:underline"
+                    className="font-semibold hover:underline"
                   >
                     {build.name}
                   </Link>
-                  <span className="text-sm text-muted-foreground">{build.address}</span>
-                </div>
-                <ul className="flex flex-col divide-y hover-gold rounded-xl ring-1 ring-foreground/10">
-                  {shifts.map((shift) => (
-                    <li
-                      key={shift.id}
-                      className="flex flex-wrap items-start justify-between gap-x-6 gap-y-1 p-4"
+                  <p className="text-sm text-muted-foreground">
+                    <Link
+                      href={`/admin/builds/${build.id}/shifts/${shift.id}`}
+                      className="font-medium text-foreground hover:underline"
                     >
-                      <div className="flex min-w-0 flex-1 flex-col gap-1">
-                        <Link
-                          href={`/admin/builds/${build.id}/shifts/${shift.id}`}
-                          className="font-medium hover:underline"
-                        >
-                          {formatTimeRange(shift.startsAt, shift.endsAt, zone)}
-                          {zone !== DEFAULT_TIME_ZONE && (
-                            <span className="font-normal text-muted-foreground">
-                              {" "}
-                              ({timeZoneLabel(zone)})
-                            </span>
-                          )}
-                        </Link>
-                        {shift.notes && (
-                          <p className="text-sm whitespace-pre-line text-muted-foreground">
-                            {shift.notes}
-                          </p>
-                        )}
-                        <ShiftPlan
-                          build={plan.builds.get(shift.id)!}
-                          pendingDrivers={plan.pendingDrivers.get(shift.id) ?? 0}
-                        />
-                      </div>
-                      <SpotsMeter willing={willing.get(shift.id) ?? 0} capacity={shift.capacity} />
-                    </li>
-                  ))}
-                </ul>
+                      {formatTimeRange(shift.startsAt, shift.endsAt, zone)}
+                      {zone !== DEFAULT_TIME_ZONE && ` (${timeZoneLabel(zone)})`}
+                    </Link>{" "}
+                    · {build.address}
+                  </p>
+                  {shift.notes && (
+                    <p className="text-sm whitespace-pre-line text-muted-foreground">
+                      {shift.notes}
+                    </p>
+                  )}
+                  <ShiftPlan
+                    build={plan.builds.get(shift.id)!}
+                    pendingDrivers={plan.pendingDrivers.get(shift.id) ?? 0}
+                  />
+                </div>
+                <SpotsMeter willing={willing.get(shift.id) ?? 0} capacity={shift.capacity} />
               </div>
             );
           })
-        )}
-      </section>
-
-      <section className="flex flex-col gap-4" aria-labelledby="volunteers-heading">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <h2 id="volunteers-heading" className="text-lg font-semibold">
-              Volunteers ({active.length})
-            </h2>
-            {active.length > 0 && <Totals signups={active} />}
-          </div>
-          {roster.length > 0 && (
-            // A plain link, not <Link>: it downloads a file.
-            <a
-              href={`/admin/forms/${form.id}/export`}
-              download
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              <DownloadIcon aria-hidden="true" />
-              Download CSV
-            </a>
-          )}
-        </div>
-
-        {active.length === 0 ? (
-          <Card>
-            <CardContent className="py-6 text-center text-muted-foreground">
-              Nobody has signed up yet.
-            </CardContent>
-          </Card>
-        ) : (
-          <VolunteerTable
-            day={form.day}
-            shiftsHeading="Could work"
-            rows={active.map((signup) => ({
-              ...signup,
-              shifts: signup.shiftIds.flatMap((id) => labels.get(id) ?? []),
-            }))}
-          />
-        )}
-
-        {cancelled.length > 0 && (
-          <details className="rounded-xl p-4 text-sm ring-1 ring-foreground/10">
-            <summary className="cursor-pointer font-medium">
-              Cancelled signups ({cancelled.length})
-            </summary>
-            <ul className="mt-3 flex flex-col gap-1">
-              {cancelled.map((signup) => (
-                <li key={signup.id}>
-                  {signup.firstName} {signup.lastName} ·{" "}
-                  <a href={`mailto:${signup.email}`} className="hover:underline">
-                    {signup.email}
-                  </a>{" "}
-                  <span className="text-muted-foreground">
-                    · cancelled {formatDate(signup.cancelledAt!, DEFAULT_TIME_ZONE)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
-      </section>
-
-      <section className="flex flex-col gap-4" aria-labelledby="sections-heading">
-        <div>
-          <h2 id="sections-heading" className="text-lg font-semibold">
-            Sections
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Shown to volunteers on the form, such as which waivers to sign.
-          </p>
-        </div>
-        {form.sections.length === 0 ? (
-          <Card>
-            <CardContent className="py-6 text-center text-muted-foreground">
-              No sections. Edit the form to add waiver links or instructions.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="flex flex-col gap-6 rounded-xl p-5 ring-1 ring-foreground/10">
-            <FormSections sections={form.sections} />
-          </div>
         )}
       </section>
     </div>
@@ -313,56 +223,76 @@ const plural = (count: number, one: string, many: string) => `${count} ${count =
 const names = (signups: RosterSignup[]) =>
   signups.map((signup) => `${signup.firstName} ${signup.lastName}`).join(", ");
 
-// Whether everyone signed up has a spot and a ride, and if not, why. A day
-// can end up short when a driver cancels or is declined, or a shift's spots
-// are reduced; nobody is removed automatically.
-function PlacementNote({ plan }: { plan: ReturnType<typeof planForRoster> }) {
-  const { leftOut, driversNeeded, withoutShifts, proven } = plan;
-  const pending = [...plan.pendingDrivers.values()].reduce((sum, n) => sum + n, 0);
-  const problem = leftOut.length > 0 || driversNeeded > 0 || withoutShifts.length > 0;
-
+// What the "Volunteers" popup shows: totals, the CSV download, the table,
+// and anyone who cancelled.
+function Volunteers({
+  formId,
+  day,
+  active,
+  cancelled,
+  labels,
+}: {
+  formId: string;
+  day: string;
+  active: RosterSignup[];
+  cancelled: RosterSignup[];
+  labels: Map<string, string>;
+}) {
   return (
-    <div
-      role="status"
-      className={
-        problem
-          ? "flex flex-col gap-1 rounded-2xl border-l-4 border-gold bg-gold/15 px-4 py-3 text-sm"
-          : "text-sm"
-      }
-    >
-      {leftOut.length > 0 ? (
-        <p>
-          <span className="font-medium">
-            {plural(leftOut.length, "volunteer can't", "volunteers can't")} be placed right now:
-          </span>{" "}
-          {names(leftOut)}. More drivers or more spots on their shifts would make room.
-        </p>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+      {(active.length > 0 || cancelled.length > 0) && (
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          {active.length > 0 ? <Totals signups={active} /> : <span />}
+          {/* A plain link, not <Link>: it downloads a file. */}
+          <a
+            href={`/admin/forms/${formId}/export`}
+            download
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <DownloadIcon aria-hidden="true" />
+            Download CSV
+          </a>
+        </div>
+      )}
+
+      {active.length === 0 ? (
+        <Card>
+          <CardContent className="py-6 text-center text-muted-foreground">
+            Nobody has signed up yet.
+          </CardContent>
+        </Card>
       ) : (
-        <p className="font-medium">
-          Everyone who signed up has a spot{driversNeeded === 0 && " and a ride"}.
-        </p>
+        <VolunteerTable
+          day={day}
+          shiftsHeading="Could work"
+          brief
+          scrollable
+          rows={active.map((signup) => ({
+            ...signup,
+            shifts: signup.shiftIds.flatMap((id) => labels.get(id) ?? []),
+          }))}
+        />
       )}
-      {driversNeeded > 0 && (
-        <p>
-          {plural(driversNeeded, "more driver is", "more drivers are")} needed so everyone who
-          needs a ride has one. A spot is held for each, and only drivers can sign up for it.
-        </p>
-      )}
-      {pending > 0 && (
-        <p className={problem ? undefined : "text-muted-foreground"}>
-          This counts {plural(pending, "driver", "drivers")} still waiting for approval.
-        </p>
-      )}
-      {withoutShifts.length > 0 && (
-        <p>
-          {names(withoutShifts)} chose only shifts that have since been cancelled, so they
-          aren&apos;t placed anywhere.
-        </p>
-      )}
-      {!proven && (
-        <p className="text-muted-foreground">
-          This placement was worked out quickly and might not be the best one.
-        </p>
+
+      {cancelled.length > 0 && (
+        <details className="rounded-xl p-4 text-sm ring-1 ring-foreground/10">
+          <summary className="cursor-pointer font-medium">
+            Cancelled signups ({cancelled.length})
+          </summary>
+          <ul className="mt-3 flex flex-col gap-1">
+            {cancelled.map((signup) => (
+              <li key={signup.id}>
+                {signup.firstName} {signup.lastName} ·{" "}
+                <a href={`mailto:${signup.email}`} className="hover:underline">
+                  {signup.email}
+                </a>{" "}
+                <span className="text-muted-foreground">
+                  · cancelled {formatDate(signup.cancelledAt!, DEFAULT_TIME_ZONE)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </div>
   );
@@ -433,7 +363,7 @@ function StatusActions({
         variant="ghost"
         confirm={{
           title: "Delete this form?",
-          description: "The form and its sections will be permanently deleted. Builds and shifts aren't affected.",
+          description: "The form and its sections will be permanently deleted. Projects and builds aren't affected.",
           confirmLabel: "Delete form",
         }}
       />

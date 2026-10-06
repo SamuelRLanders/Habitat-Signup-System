@@ -12,11 +12,11 @@ import {
 import { formatDateRange } from "@/lib/time";
 import { SpotsMeter, StatusBadge } from "./build-parts";
 
-export const metadata: Metadata = { title: "Builds" };
+export const metadata: Metadata = { title: "Projects" };
 
 const tabs: Record<BuildListTab, { label: string; empty: string }> = {
-  upcoming: { label: "Upcoming", empty: "No builds have upcoming shifts." },
-  past: { label: "Past", empty: "No past or cancelled builds." },
+  upcoming: { label: "Upcoming", empty: "No projects have upcoming builds." },
+  past: { label: "Past", empty: "No past or cancelled projects." },
 };
 
 export default async function BuildsPage({
@@ -33,14 +33,14 @@ export default async function BuildsPage({
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold">Builds</h1>
+        <h1 className="text-2xl font-semibold">Projects</h1>
         <Link href="/admin/builds/new" className={buttonVariants()}>
-          New build
+          New project
         </Link>
       </div>
 
       <nav
-        aria-label="Filter builds"
+        aria-label="Filter projects"
         className="flex w-fit gap-1 rounded-full bg-muted p-1"
       >
         {BUILD_LIST_TABS.map((t) => (
@@ -66,7 +66,7 @@ export default async function BuildsPage({
             <p>{tabs[tab].empty}</p>
             {tab === "upcoming" && (
               <Link href="/admin/builds/new" className={buttonVariants({ variant: "outline" })}>
-                Create a build
+                Create a project
               </Link>
             )}
           </CardContent>
@@ -90,10 +90,10 @@ export default async function BuildsPage({
                       <>
                         {formatDateRange(build.firstShiftAt, build.lastShiftAt, build.timeZone)}
                         {" · "}
-                        {build.shiftCount} {build.shiftCount === 1 ? "shift" : "shifts"}
+                        {build.shiftCount} {build.shiftCount === 1 ? "build" : "builds"}
                       </>
                     ) : (
-                      <span className="text-destructive">No shifts yet</span>
+                      <span className="text-destructive">No builds yet</span>
                     )}
                   </span>
                 </div>

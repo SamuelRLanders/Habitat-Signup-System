@@ -158,6 +158,10 @@ model LoginCodeRequest {
 }
 
 // ─── Builds & shifts ─────────────────────────────────────────────────────────
+//
+// The app calls these by other names. A Build is a "project" (a home, worked
+// on over many days), a Shift is a "build" (the group working on it on one
+// day), and a day of builds is an "event", with one SignupForm.
 
 // A home Habitat is building, and the shifts volunteers can work there.
 model Build {

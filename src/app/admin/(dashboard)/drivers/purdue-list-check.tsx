@@ -1,8 +1,16 @@
 "use client";
 
-import { CheckIcon, DownloadIcon } from "lucide-react";
+import { CheckIcon, DownloadIcon, UploadIcon, WandSparklesIcon } from "lucide-react";
 import { useActionState, useState, useTransition } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -19,49 +27,93 @@ import {
 import type { ListMatch } from "@/lib/drivers/purdue-match";
 import { formatDay } from "@/lib/time";
 
-// Checking drivers against Purdue's approved driver list. It needs a Purdue
-// sign-in, so the admin downloads it, then uploads it here. The app reads
-// it (without keeping it), matches it against pending and approved drivers,
-// and lists the matches to approve.
+// The "Auto approve" pill on the Drivers page: checking drivers against
+// Purdue's approved driver list. It needs a Purdue sign-in, so the admin
+// downloads it, then uploads it here. The app reads it (without keeping
+// it), matches it against pending and approved drivers, and lists the
+// matches to approve.
 export function PurdueListCheck({ listUrl }: { listUrl: string }) {
+  return (
+    <Dialog>
+      <DialogTrigger render={<Button size="sm" />}>
+        <WandSparklesIcon data-icon="inline-start" />
+        Auto approve
+      </DialogTrigger>
+      {/* The body scrolls on its own, so long results keep the box's shape. */}
+      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Auto approve drivers</DialogTitle>
+          <DialogDescription>
+            Check Purdue&apos;s approved driver list. Pending drivers on it are
+            matched with their approval&apos;s end date, ready to approve. The
+            file isn&apos;t kept.
+          </DialogDescription>
+        </DialogHeader>
+        {/* Mounted only while open, so each opening starts fresh. */}
+        <ListCheck listUrl={listUrl} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ListCheck({ listUrl }: { listUrl: string }) {
   const [state, check, checking] = useActionState<PurdueListState, FormData>(checkPurdueList, {});
+  // The chosen file's name. React resets the form after each check, which
+  // clears the file input, so this clears with it.
+  const [fileName, setFileName] = useState<string | null>(null);
 
   return (
-    <section className="flex flex-col gap-4 rounded-3xl p-5 ring-1 ring-foreground/10 sm:p-6">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold">Check Purdue&apos;s approved driver list</h2>
-        <p className="text-sm text-muted-foreground">
-          Download Purdue&apos;s list (you&apos;ll need to be signed in to
-          Purdue), then upload it here. Pending drivers on the list are matched
-          with their approval&apos;s end date, ready to approve. The file
-          isn&apos;t kept.
-        </p>
-      </div>
+    <div className="-mx-4 flex min-h-0 flex-col gap-4 overflow-y-auto px-4 pt-1 pb-1">
+      <form action={check} onReset={() => setFileName(null)}>
+        <ol className="flex flex-col gap-4">
+          <Step number={1} title="Download Purdue's list" hint="You'll need to be signed in to Purdue.">
+            <a
+              href={listUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm", className: "w-fit" })}
+            >
+              <DownloadIcon data-icon="inline-start" />
+              Download list
+            </a>
+          </Step>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <a
-          href={listUrl}
-          target="_blank"
-          rel="noreferrer"
-          className={buttonVariants({ variant: "outline", className: "w-fit" })}
-        >
-          <DownloadIcon data-icon="inline-start" />
-          1. Download Purdue&apos;s list
-        </a>
-        <form action={check} className="flex flex-wrap items-center gap-2">
-          <input
-            type="file"
-            name="file"
-            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            required
-            aria-label="Purdue's approved driver list (ApprovedDrivers.xlsx)"
-            className="max-w-full text-sm file:mr-3 file:rounded-full file:border file:border-border file:bg-transparent file:px-3 file:py-1 file:text-sm file:font-medium hover:file:bg-muted"
-          />
-          <Button type="submit" disabled={checking}>
-            {checking ? "Checking…" : "2. Check list"}
-          </Button>
-        </form>
-      </div>
+          <Step number={2} title="Upload it here" hint="The file is called ApprovedDrivers.xlsx.">
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                id="purdue-list-file"
+                type="file"
+                name="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                required
+                onChange={(event) => setFileName(event.currentTarget.files?.[0]?.name ?? null)}
+                className="peer sr-only"
+              />
+              <label
+                htmlFor="purdue-list-file"
+                className={buttonVariants({
+                  variant: "outline",
+                  size: "sm",
+                  className:
+                    "cursor-pointer peer-focus-visible:border-ring peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50",
+                })}
+              >
+                <UploadIcon data-icon="inline-start" />
+                Choose file
+              </label>
+              <span className="min-w-0 truncate text-sm text-muted-foreground">
+                {fileName ?? "No file chosen"}
+              </span>
+            </div>
+          </Step>
+
+          <Step number={3} title="Check the list" hint="Matches show up below, ready to approve.">
+            <Button type="submit" size="sm" className="w-fit" disabled={checking || !fileName}>
+              {checking ? "Checking…" : "Check list"}
+            </Button>
+          </Step>
+        </ol>
+      </form>
 
       {state.error && (
         <p role="alert" className="text-sm text-destructive">
@@ -70,7 +122,41 @@ export function PurdueListCheck({ listUrl }: { listUrl: string }) {
       )}
       {/* A new key for each check, so approvals from an earlier one reset. */}
       {state.check && <Results key={state.checkedAt} check={state.check} />}
-    </section>
+    </div>
+  );
+}
+
+// One numbered step, with its control under the title.
+function Step({
+  number,
+  title,
+  hint,
+  children,
+}: {
+  number: number;
+  title: string;
+  hint: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="flex gap-3">
+      <span
+        aria-hidden="true"
+        className="flex size-6 shrink-0 items-center justify-center rounded-full bg-gold text-xs font-semibold text-black"
+      >
+        {number}
+      </span>
+      <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex flex-col">
+          <span className="text-sm font-medium">
+            <span className="sr-only">Step {number}: </span>
+            {title}
+          </span>
+          <span className="text-sm text-muted-foreground">{hint}</span>
+        </div>
+        {children}
+      </div>
+    </li>
   );
 }
 

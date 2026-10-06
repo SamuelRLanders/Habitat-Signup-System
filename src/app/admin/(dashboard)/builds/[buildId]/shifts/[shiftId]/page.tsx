@@ -10,7 +10,7 @@ import { formatDate, formatTimeRange, timeZoneLabel } from "@/lib/time";
 import { VolunteerTable } from "../../../../volunteer-table";
 import { BackLink, SpotsMeter } from "../../../build-parts";
 
-export const metadata: Metadata = { title: "Shift volunteers" };
+export const metadata: Metadata = { title: "Build volunteers" };
 
 // The volunteers who said on the day's signup form that they could work
 // this shift, with the other shifts that day they'd also work.
@@ -30,7 +30,7 @@ export default async function ShiftRosterPage({
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8">
       <div className="flex flex-col gap-4">
-        <BackLink href={`/admin/builds/${shift.build.id}`}>Back to build</BackLink>
+        <BackLink href={`/admin/builds/${shift.build.id}`}>Back to project</BackLink>
 
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div className="flex flex-col gap-1">
@@ -60,26 +60,26 @@ export default async function ShiftRosterPage({
         {shift.notes && <p className="whitespace-pre-line">{shift.notes}</p>}
         {!offered && (
           <p className="text-sm text-muted-foreground">
-            This shift isn&apos;t offered on the signup form, because it or its
-            build is cancelled. Volunteers who chose it are still listed.
+            This build isn&apos;t offered on the signup form, because it or its
+            project is cancelled. Volunteers who chose it are still listed.
           </p>
         )}
       </div>
 
       <section className="flex flex-col gap-3" aria-labelledby="willing-heading">
         <h2 id="willing-heading" className="text-lg font-semibold">
-          Willing to work this shift ({shift.volunteers.length})
+          Could work at this build ({shift.volunteers.length})
         </h2>
         {shift.volunteers.length === 0 ? (
           <Card>
             <CardContent className="py-6 text-center text-muted-foreground">
-              No volunteers have chosen this shift yet.
+              No volunteers have chosen this build yet.
             </CardContent>
           </Card>
         ) : (
           <VolunteerTable
             day={shift.day}
-            shiftsHeading="Also willing to work"
+            shiftsHeading="Could also work at"
             rows={shift.volunteers.map((volunteer) => ({
               ...volunteer,
               // Other shifts still offered that day.
