@@ -1,19 +1,18 @@
 "use client";
 
-import { CarIcon, ClipboardListIcon, HammerIcon, UsersIcon } from "lucide-react";
+import { CarIcon, ClipboardListIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
 
 const tabs = [
   { href: "/admin/forms", label: "Forms", icon: ClipboardListIcon },
-  { href: "/admin/builds", label: "Projects", icon: HammerIcon },
   { href: "/admin/people", label: "People", icon: UsersIcon },
   { href: "/admin/drivers", label: "Drivers", icon: CarIcon },
 ];
 
 // The admin sections. A tab stays highlighted on the pages beneath it, so
-// "Projects" is active on /admin/builds/123/edit too.
+// "Forms" is active on /admin/forms/123/edit too.
 export function AdminNav() {
   const pathname = usePathname();
 

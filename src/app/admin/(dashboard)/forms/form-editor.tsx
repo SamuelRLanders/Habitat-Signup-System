@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { SignupFormField, SignupFormState } from "@/lib/signup-forms/actions";
 import { submitForm } from "@/lib/submit-form";
-import { FieldError } from "../builds/build-form";
+import { FieldError } from "@/components/field-error";
+import { BuildFields, NEW_BUILD, type BuildDefaults } from "./build-fields";
 import { SectionFields, type SectionDefaults } from "./section-fields";
 
 type AriaProps = { "aria-invalid"?: boolean; "aria-describedby"?: string };
@@ -17,22 +18,25 @@ type AriaProps = { "aria-invalid"?: boolean; "aria-describedby"?: string };
 type FormEditorProps = {
   action: (prev: SignupFormState, formData: FormData) => Promise<SignupFormState>;
   defaults?: Partial<Record<SignupFormField, string>>;
+  // Left out for a new form, which starts with one empty build.
+  builds?: BuildDefaults[];
   sections?: SectionDefaults[];
   submitLabel: string;
   cancelHref: string;
 };
 
-// Creating or editing a signup form: its day, when it's open, and what it
-// says. The shifts aren't chosen here: the form offers every shift on its day.
+// Creating or editing a signup form: its day, when it's open, what it says,
+// and the builds volunteers choose from.
 export function FormEditor({
   action,
   defaults = {},
+  builds = [NEW_BUILD],
   sections = [],
   submitLabel,
   cancelHref,
 }: FormEditorProps) {
   const [state, formAction, pending] = useActionState(action, {});
-  const { errors = {}, sectionErrors = {} } = state;
+  const { errors = {}, buildErrors = {}, sectionErrors = {} } = state;
 
   const aria = (field: SignupFormField): AriaProps => ({
     "aria-invalid": errors[field] ? true : undefined,
@@ -51,8 +55,7 @@ export function FormEditor({
           {...aria("date")}
         />
         <p className="text-sm text-muted-foreground">
-          The form offers every build on this day. Each event has one
-          form.
+          Each event has one form, with all of the day&apos;s builds.
         </p>
         <FieldError field="date" error={errors.date} />
       </div>
@@ -97,11 +100,14 @@ export function FormEditor({
         <FieldError field="description" error={errors.description} />
       </div>
 
+      <BuildFields defaults={builds} errors={buildErrors} />
+
       <SectionFields defaults={sections} errors={sectionErrors} />
 
-      {state.sectionErrors && !errors.form && (
+      {(state.buildErrors || state.sectionErrors) && !errors.form && (
         <p role="alert" className="text-sm text-destructive">
-          Some sections need another look. They&apos;re marked in red above.
+          Some {state.buildErrors && state.sectionErrors ? "builds and sections" : state.buildErrors ? "builds" : "sections"}{" "}
+          need another look. They&apos;re marked in red above.
         </p>
       )}
 

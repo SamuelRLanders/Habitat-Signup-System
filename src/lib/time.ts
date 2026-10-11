@@ -1,24 +1,8 @@
 import { TZDate } from "@date-fns/tz";
 
-// Shift times are stored in UTC and entered and shown in their build's time
-// zone. Lafayette, Indiana uses Eastern time.
+// Times are stored in UTC and entered and shown in Indiana time. Lafayette,
+// Indiana uses Eastern time.
 export const DEFAULT_TIME_ZONE = "America/Indiana/Indianapolis";
-
-export const TIME_ZONES = [
-  { value: "America/Indiana/Indianapolis", label: "Eastern (Indiana)" },
-  { value: "America/Chicago", label: "Central" },
-  { value: "America/Denver", label: "Mountain" },
-  { value: "America/Phoenix", label: "Mountain (Arizona)" },
-  { value: "America/Los_Angeles", label: "Pacific" },
-  { value: "America/Anchorage", label: "Alaska" },
-  { value: "Pacific/Honolulu", label: "Hawaii" },
-] as const;
-
-export type TimeZone = (typeof TIME_ZONES)[number]["value"];
-
-export function timeZoneLabel(timeZone: string) {
-  return TIME_ZONES.find((zone) => zone.value === timeZone)?.label ?? timeZone;
-}
 
 // "2026-10-04" + "08:00" in the given zone → the moment it happens.
 export function zonedDateTime(date: string, time: string, timeZone: string) {
@@ -65,17 +49,6 @@ export function formatTimeRange(start: Date, end: Date, timeZone: string) {
     timeZone,
     hour: "numeric",
     minute: "2-digit",
-  });
-  return format.formatRange(start, end);
-}
-
-// "Oct 4 – Nov 15, 2026"
-export function formatDateRange(start: Date, end: Date, timeZone: string) {
-  const format = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    month: "short",
-    day: "numeric",
-    year: "numeric",
   });
   return format.formatRange(start, end);
 }

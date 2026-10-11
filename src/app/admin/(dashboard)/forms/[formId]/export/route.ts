@@ -7,9 +7,9 @@ import { toDay } from "@/lib/time";
 import { ageOn } from "@/lib/volunteers";
 
 // Downloads everyone who signed up through a form, cancelled or not, as a
-// CSV for placing volunteers on shifts: their details from this signup,
-// then a column per shift the form offers, marked "yes" if they could work
-// it.
+// CSV for placing volunteers at builds: their details from this signup,
+// then a column per build the form offers, marked "yes" if they could work
+// at it.
 const HEADER = [
   "email",
   "firstName",

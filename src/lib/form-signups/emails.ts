@@ -1,5 +1,5 @@
 import "server-only";
-import { escapeHtml, sendEmail } from "@/lib/email";
+import { escapeHtml, sendEmail, sendEmails } from "@/lib/email";
 import { absoluteUrl } from "@/lib/request";
 import { shiftLabel, type OfferedShift } from "@/lib/signup-forms/queries";
 import { formatDay } from "@/lib/time";
@@ -58,4 +58,25 @@ export async function sendCancellation({ to, firstName, formId, day }: SignupEma
     text: `Hi ${firstName},\n\n${body}\n\nChanged your mind? While the form is open, you can sign up again at ${url}.`,
     html: `<p>Hi ${escapeHtml(firstName)},</p><p>${escapeHtml(body)}</p><p>Changed your mind? While the form is open, you can <a href="${url}">sign up again</a>.</p>`,
   });
+}
+
+// To everyone signed up for a day when an admin cancels its event, sent
+// together.
+export async function sendEventCancelled(
+  day: string,
+  volunteers: { to: string; firstName: string }[],
+) {
+  const date = formatDay(day);
+  const url = absoluteUrl("/");
+  const body = `The Purdue Habitat build day on ${date} has been cancelled, so your signup for it is cancelled too. You don't need to do anything.`;
+  const sorry = "We're sorry for the change of plans, and hope to see you at another build day.";
+
+  await sendEmails(
+    volunteers.map(({ to, firstName }) => ({
+      to,
+      subject: `The build day on ${formatDay(day, "short")} is cancelled`,
+      text: `Hi ${firstName},\n\n${body}\n\n${sorry} See upcoming build days at ${url}.`,
+      html: `<p>Hi ${escapeHtml(firstName)},</p><p>${escapeHtml(body)}</p><p>${escapeHtml(sorry)} <a href="${url}">See upcoming build days</a>.</p>`,
+    })),
+  );
 }

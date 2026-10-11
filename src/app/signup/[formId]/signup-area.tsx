@@ -44,7 +44,7 @@ type SignupAreaProps = {
 // the volunteer's signup, with Cancel). Signups can't be changed; to change
 // one, volunteers cancel and sign up again. While the form is open, anyone
 // can sign up. After it closes, volunteers who signed up can still cancel
-// until the day's first shift starts.
+// until the day's first build starts.
 export async function SignupArea({ form, phase }: SignupAreaProps) {
   const canCancel = new Date() < cancelDeadline(form.day, form.shifts);
   if (phase !== "open" && !(phase === "closed" && canCancel)) return null;
@@ -226,7 +226,7 @@ function Summary({
   askedBy: AskedToGroupWith;
 }) {
   const getting = TRANSPORTATION_OPTIONS.find((option) => option.value === transportation)?.label;
-  // Only shifts still offered: a cancelled shift no longer counts.
+  // Only builds still offered: a cancelled build no longer counts.
   const chosenShifts = shifts.filter((shift) => chosen.includes(shift.id));
   const shirt = shirtLabel(details.tShirtSize);
   // Friends who asked for them and they asked for too are listed once.
@@ -316,10 +316,10 @@ function Summary({
 function toChoice(shift: OfferedShift, room: BuildRoom): BuildChoice {
   return {
     id: shift.id,
-    buildName: shift.build.name,
-    address: shift.build.address,
+    buildName: shift.name,
+    address: shift.address,
     time: shiftTime(shift),
-    notes: shift.notes,
+    description: shift.description,
     room,
   };
 }

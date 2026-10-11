@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import * as z from "zod";
 import { requireAdmin } from "@/lib/auth/dal";
-import { escapeHtml, sendEmail } from "@/lib/email";
+import { emailsSentToday, escapeHtml, sendEmail } from "@/lib/email";
 import type { ActionState, FormState } from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
 import { formatDay, fromDay, toDay } from "@/lib/time";
@@ -92,7 +92,13 @@ async function recordApproval(
 
 const MAX_LIST_BYTES = 4 * 1024 * 1024;
 
-export type PurdueListState = { error?: string; check?: ListCheck; checkedAt?: number };
+export type PurdueListState = {
+  error?: string;
+  check?: ListCheck;
+  checkedAt?: number;
+  // Emails sent today, since approving sends more.
+  sentToday?: number;
+};
 
 // Reads an uploaded copy of Purdue's ApprovedDrivers.xlsx and matches it
 // against pending and approved drivers. Nothing is saved: the file is only
@@ -111,7 +117,7 @@ export async function checkPurdueList(
 
   try {
     const list = await readPurdueList(await file.arrayBuffer());
-    return { check: await matchPurdueList(list), checkedAt: Date.now() };
+    return { check: await matchPurdueList(list), checkedAt: Date.now(), sentToday: await emailsSentToday() };
   } catch (error) {
     if (error instanceof PurdueListError) return { error: error.message };
     console.error("Failed to read Purdue's driver list", error);

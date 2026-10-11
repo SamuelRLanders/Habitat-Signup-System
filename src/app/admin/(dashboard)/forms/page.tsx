@@ -42,8 +42,8 @@ export default async function SignupFormsPage({
           </Link>
         </div>
         <p className="text-sm text-muted-foreground">
-          One form per event, the day&apos;s builds. Volunteers sign up through
-          its link and say which builds they could work at.
+          One form per event, with the day&apos;s builds. Volunteers sign up
+          through its link and say which builds they could work at.
         </p>
       </div>
 
@@ -100,7 +100,7 @@ export default async function SignupFormsPage({
                   </div>
                   <span className="text-sm text-muted-foreground tabular-nums">
                     {form.shiftCount === 0 ? (
-                      <span className="text-destructive">No builds on this day</span>
+                      <span className="text-destructive">No builds yet</span>
                     ) : (
                       <>
                         {form.shiftCount} {form.shiftCount === 1 ? "build" : "builds"}

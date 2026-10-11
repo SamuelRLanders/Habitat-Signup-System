@@ -1,7 +1,7 @@
-// Fills the database with test builds, shifts, signup forms, volunteers and
-// their signups, for trying the app by hand. Everything it makes is marked
-// so it can be removed: builds are named "[Test] …", signup forms'
-// descriptions start with "[Test] ", and volunteers have @example.org
+// Fills the database with test signup forms and their builds, volunteers
+// and their signups, for trying the app by hand. Everything it makes is
+// marked so it can be removed: signup forms' descriptions start with
+// "[Test] " (their builds go with them), and volunteers have @example.org
 // emails. Running it again replaces the old test data. Real data is never
 // touched.
 //
@@ -46,14 +46,11 @@ async function clean() {
   });
   await prisma.driverApproval.deleteMany({ where: { volunteer: { email: testEmail } } });
   const volunteers = await prisma.volunteer.deleteMany({ where: { email: testEmail } });
-  const builds = await prisma.build.deleteMany({ where: { name: { startsWith: TEST_PREFIX } } });
   const forms = await prisma.signupForm.deleteMany({ where: testForm });
   await prisma.volunteerCode.deleteMany({ where: { email: testEmail } });
   await prisma.volunteerSession.deleteMany({ where: { email: testEmail } });
   await prisma.loginCodeRequest.deleteMany({ where: { email: testEmail } });
-  console.log(
-    `Removed ${builds.count} test builds, ${forms.count} test forms and ${volunteers.count} test volunteers.`,
-  );
+  console.log(`Removed ${forms.count} test forms and ${volunteers.count} test volunteers.`);
 }
 
 type Person = {
@@ -82,92 +79,34 @@ async function seed() {
     process.exit(1);
   }
 
-  // ── Builds and shifts (each build has one shift a day)
-  const shift = (date: string, start: number, end: number, capacity: number, notes?: string) => ({
-    startsAt: at(date, start),
-    endsAt: at(date, end),
-    capacity,
-    notes,
-  });
-  const createBuild = (data: {
+  // ── Signup forms, one per build day, each with its builds.
+  const maple = {
+    name: "Maple Street Home",
+    address: "412 Maple St, Lafayette, IN 47904",
+  };
+  const cedar = {
+    name: "Cedar Lane Home",
+    address: "2210 Cedar Ln, West Lafayette, IN 47906",
+  };
+  const waivers = [
+    { position: 0, title: "Purdue waiver", body: "Sign the Purdue volunteer waiver before your build: https://example.org/purdue-waiver\n\nUnder “Organization”, choose Habitat for Humanity." },
+    { position: 1, title: "Chapter waiver", body: "Also sign the chapter's waiver at https://example.org/chapter-waiver. Use your full legal name." },
+  ];
+  type TestBuild = {
     name: string;
     address: string;
     description?: string;
-    shifts: ReturnType<typeof shift>[];
-  }) =>
-    prisma.build.create({
-      data: {
-        name: TEST_PREFIX + data.name,
-        address: data.address,
-        description: data.description,
-        createdByName: admin.name,
-        createdById: admin.id,
-        shifts: { create: data.shifts },
-      },
-      include: { shifts: { orderBy: { startsAt: "asc" } } },
-    });
-
-  const maple = await createBuild({
-    name: "Maple Street Home",
-    address: "412 Maple St, Lafayette, IN 47904",
-    description: "A three-bedroom home for the Rivera family. We're framing walls and raising the roof trusses this month.\n\nWear closed-toe shoes. Lunch is provided on Saturdays.",
-    shifts: [
-      shift("2026-10-10", 8, 12, 12, "Framing. No experience needed."),
-      shift("2026-10-17", 8, 12, 10),
-      shift("2026-10-24", 8, 14, 15, "Roof trusses. Must be comfortable on ladders."),
-    ],
-  });
-  await createBuild({
-    name: "Riverside Duplex",
-    address: "88 Riverside Dr, West Lafayette, IN 47906",
-    description: "Interior finishing on a duplex: drywall, painting, and trim.",
-    shifts: [
-      shift("2026-11-07", 9, 13, 6),
-      shift("2026-11-14", 9, 15, 8, "Painting day. Wear clothes you don't mind getting paint on."),
-      shift("2026-11-21", 9, 13, 4),
-    ],
-  });
-  await createBuild({
-    name: "Oak Avenue Repair",
-    address: "1520 Oak Ave, Lafayette, IN 47905",
-    description: "Porch and ramp repair for a veteran's home. Still being planned.",
-    shifts: [shift("2026-12-05", 9, 13, 5), shift("2026-12-12", 9, 13, 5)],
-  });
-  const elm = await createBuild({
-    name: "Elm Court Landscaping",
-    address: "7 Elm Ct, Lafayette, IN 47909",
-    description: "Final landscaping before the family moves in.",
-    shifts: [shift("2026-10-31", 9, 12, 8)],
-  });
-  // Already happened, so it shows under past builds.
-  const summer = await createBuild({
-    name: "Summer Blitz Build",
-    address: "300 Harrison St, Lafayette, IN 47901",
-    shifts: [shift("2026-08-15", 8, 12, 20), shift("2026-08-22", 8, 12, 20)],
-  });
-  // Shares build days with Maple, so those days' forms span two builds.
-  const cedar = await createBuild({
-    name: "Cedar Lane Home",
-    address: "2210 Cedar Ln, West Lafayette, IN 47906",
-    description: "Exterior siding on a new home.",
-    shifts: [
-      shift("2026-10-10", 9, 15, 8, "Siding. We'll teach you to use the tools."),
-      shift("2026-10-17", 9, 15, 8),
-    ],
-  });
-
-  // ── Signup forms, one per build day. Days left without one show a
-  // "Create one" link on their build's page.
-  const waivers = [
-    { position: 0, title: "Purdue waiver", body: "Sign the Purdue volunteer waiver before your shift: https://example.org/purdue-waiver\n\nUnder “Organization”, choose Habitat for Humanity." },
-    { position: 1, title: "Chapter waiver", body: "Also sign the chapter's waiver at https://example.org/chapter-waiver. Use your full legal name." },
-  ];
+    hours: [number, number]; // in Indiana, on the form's day
+    capacity: number;
+    cancelled?: boolean;
+  };
   const createForm = async (data: {
     date: string;
     status: "DRAFT" | "PUBLISHED";
     opens: [string, number];
     closes: [string, number];
     description: string;
+    builds: TestBuild[];
     sections?: typeof waivers;
   }) => {
     // Forms are one per day, so leave a day alone if it has a real form.
@@ -184,8 +123,17 @@ async function seed() {
         description: TEST_PREFIX + data.description,
         createdByName: admin.name,
         createdById: admin.id,
+        shifts: {
+          create: data.builds.map(({ hours: [start, end], cancelled, ...build }) => ({
+            ...build,
+            startsAt: at(data.date, start),
+            endsAt: at(data.date, end),
+            cancelledAt: cancelled ? new Date() : null,
+          })),
+        },
         sections: { create: data.sections ?? [] },
       },
+      include: { shifts: true },
     });
   };
   const oct10 = await createForm({
@@ -193,7 +141,13 @@ async function seed() {
     status: "PUBLISHED",
     opens: ["2026-09-28", 9],
     closes: ["2026-10-08", 22],
-    description: "Two builds this Saturday. Meet at your build's address 15 minutes before your shift starts.",
+    description: "Two builds this Saturday. Meet at your build's address 15 minutes before it starts.",
+    builds: [
+      { ...maple, description: "Framing. No experience needed. Wear closed-toe shoes.", hours: [8, 12], capacity: 12 },
+      { ...cedar, description: "Siding. We'll teach you to use the tools.", hours: [9, 15], capacity: 8 },
+      // Cancelled after Ben chose it, so it can be restored.
+      { name: "Oak Avenue Repair", address: "1520 Oak Ave, Lafayette, IN 47905", description: "Porch and ramp repair for a veteran's home.", hours: [9, 13], capacity: 5, cancelled: true },
+    ],
     sections: waivers,
   });
   await createForm({
@@ -202,6 +156,10 @@ async function seed() {
     opens: ["2026-10-11", 9],
     closes: ["2026-10-15", 22],
     description: "Opens the Sunday before.",
+    builds: [
+      { ...maple, hours: [8, 12], capacity: 10 },
+      { ...cedar, hours: [9, 15], capacity: 8 },
+    ],
     sections: waivers,
   });
   await createForm({
@@ -210,6 +168,9 @@ async function seed() {
     opens: ["2026-10-20", 9],
     closes: ["2026-11-05", 22],
     description: "Still being planned.",
+    builds: [
+      { name: "Riverside Duplex", address: "88 Riverside Dr, West Lafayette, IN 47906", description: "Interior finishing: drywall, painting, and trim.", hours: [9, 13], capacity: 6 },
+    ],
   });
   const aug15 = await createForm({
     date: "2026-08-15",
@@ -217,20 +178,23 @@ async function seed() {
     opens: ["2026-08-01", 9],
     closes: ["2026-08-13", 22],
     description: "Summer blitz kickoff.",
+    builds: [{ name: "Summer Blitz Build", address: "300 Harrison St, Lafayette, IN 47901", hours: [8, 12], capacity: 20 }],
   });
 
   // ── Volunteers and their signups. Each signup copies the volunteer's
   // details, as the real form does.
   const volunteer = (email: string, person: Person) =>
     prisma.volunteer.create({ data: { email: email + TEST_DOMAIN, ...details(person) } });
+  // Builds are chosen by name.
   const signUp = async (
     who: Awaited<ReturnType<typeof volunteer>>,
-    form: { id: string } | null,
-    shifts: { id: string }[],
+    form: { id: string; shifts: { id: string; name: string }[] } | null,
+    builds: string[],
     transportation: "NEEDS_RIDE" | "OWN_WAY" | "CAN_DRIVE",
     cancelled = false,
   ) => {
     if (!form) return;
+    const shifts = builds.map((name) => form.shifts.find((shift) => shift.name === name)!);
     const { firstName, lastName, phone, dateOfBirth, tShirtSize, hasDriversLicense } = who;
     await prisma.formSignup.create({
       data: {
@@ -279,35 +243,32 @@ async function seed() {
   await prisma.volunteer.update({ where: { id: eli.id }, data: { driverRequestedAt: daysAgo(1) } });
   const withCar = async (who: { id: string }) => prisma.volunteer.findUniqueOrThrow({ where: { id: who.id } });
 
-  const [mapleOct10] = maple.shifts;
-  const [cedarOct10] = cedar.shifts;
-  await signUp(await withCar(alice), oct10, [mapleOct10, cedarOct10], "CAN_DRIVE");
-  await signUp(await withCar(ben), oct10, [mapleOct10], "CAN_DRIVE");
-  await signUp(carmen, oct10, [cedarOct10], "NEEDS_RIDE");
-  await signUp(await withCar(eli), oct10, [mapleOct10, cedarOct10], "OWN_WAY");
-  await signUp(dana, oct10, [mapleOct10], "NEEDS_RIDE", true);
-  await signUp(alice, aug15, [summer.shifts[0]], "OWN_WAY");
-  await signUp(carmen, aug15, [summer.shifts[0]], "NEEDS_RIDE");
+  const MAPLE = maple.name;
+  const CEDAR = cedar.name;
+  await signUp(await withCar(alice), oct10, [MAPLE, CEDAR], "CAN_DRIVE");
+  await signUp(await withCar(ben), oct10, [MAPLE, "Oak Avenue Repair"], "CAN_DRIVE");
+  await signUp(carmen, oct10, [CEDAR], "NEEDS_RIDE");
+  await signUp(await withCar(eli), oct10, [MAPLE, CEDAR], "OWN_WAY");
+  await signUp(dana, oct10, [MAPLE], "NEEDS_RIDE", true);
+  await signUp(alice, aug15, ["Summer Blitz Build"], "OWN_WAY");
+  await signUp(carmen, aug15, ["Summer Blitz Build"], "NEEDS_RIDE");
 
   // ── Two days for trying how drivers and riders are placed
   // (src/lib/placement/solver.ts). Every 3 riders without a seat hold a
   // spot that only a driver can take.
-  const birch = await createBuild({
-    name: "Birch Road Home",
-    address: "940 Birch Rd, Lafayette, IN 47905",
-    shifts: [shift("2026-10-24", 8, 14, 8, "Drywall.")],
-  });
-  const willow = await createBuild({
-    name: "Willow Park Rehab",
-    address: "15 Willow Park Dr, West Lafayette, IN 47906",
-    shifts: [shift("2026-10-24", 9, 13, 6, "Small crew: interior demolition.")],
-  });
+  const BIRCH = "Birch Road Home";
+  const WILLOW = "Willow Park Rehab";
   const oct24 = await createForm({
     date: "2026-10-24",
     status: "PUBLISHED",
     opens: ["2026-10-01", 9],
     closes: ["2026-10-22", 22],
     description: "Three builds, set up for trying how drivers and riders are placed.",
+    builds: [
+      { ...maple, description: "Roof trusses. Must be comfortable on ladders.", hours: [8, 14], capacity: 15 },
+      { name: BIRCH, address: "940 Birch Rd, Lafayette, IN 47905", description: "Drywall.", hours: [8, 14], capacity: 8 },
+      { name: WILLOW, address: "15 Willow Park Dr, West Lafayette, IN 47906", description: "Small crew: interior demolition.", hours: [9, 13], capacity: 6 },
+    ],
     sections: waivers,
   });
   const oct31 = await createForm({
@@ -316,6 +277,7 @@ async function seed() {
     opens: ["2026-10-01", 9],
     closes: ["2026-10-29", 22],
     description: "A day that's short a driver: the one with the big car cancelled.",
+    builds: [{ name: "Elm Court Landscaping", address: "7 Elm Ct, Lafayette, IN 47909", description: "Final landscaping before the family moves in.", hours: [9, 12], capacity: 8 }],
   });
 
   // Quick volunteers for these days. Drivers bring a car with this many
@@ -347,55 +309,51 @@ async function seed() {
     }
     return who;
   };
-  const signUpAll = async (names: string[], form: { id: string } | null, shifts: { id: string }[], transportation: "NEEDS_RIDE" | "OWN_WAY") => {
-    for (const name of names) await signUp(await person(name), form, shifts, transportation);
+  const signUpAll = async (names: string[], form: Parameters<typeof signUp>[1], builds: string[], transportation: "NEEDS_RIDE" | "OWN_WAY") => {
+    for (const name of names) await signUp(await person(name), form, builds, transportation);
   };
 
   // Sat, Oct 24: Maple (15 spots), Birch (8) and Willow (6).
-  const mapleOct24 = maple.shifts[2];
-  const [birchOct24] = birch.shifts;
-  const [willowOct24] = willow.shifts;
 
   // Willow: 4 riders and no driver hold 2 spots: 4 + 2 = 6, so it's full
   // except for drivers. Even a 3-seat car fits: it carries 2, and the other
   // 2 riders hold 1 spot (4 + 1 + 1 = 6).
-  await signUpAll(["Ines Park", "Jonah Weiss", "Kara Singh", "Liam Ortiz"], oct24, [willowOct24], "NEEDS_RIDE");
+  await signUpAll(["Ines Park", "Jonah Weiss", "Kara Singh", "Liam Ortiz"], oct24, [WILLOW], "NEEDS_RIDE");
 
   // Birch: 4 riders and 2 own-way volunteers. Frank's 5-seat car could go
   // to Birch or Maple, and is placed at Birch where its 4 seats cover the
   // riders: 4 + 2 + Frank = 7 of 8. The last spot can go to someone getting
   // there on their own or a driver, but not a rider (who'd need another car).
   // (The likely placement may put Uma or Vic there; they can move to Maple.)
-  await signUp(await person("Frank Hale", { seats: 5, status: "approved" }), oct24, [birchOct24, mapleOct24], "CAN_DRIVE");
-  await signUpAll(["Mona Reyes", "Nate Cole", "Opal Shah", "Pete Lund"], oct24, [birchOct24], "NEEDS_RIDE");
-  await signUpAll(["Quinn Abbott", "Rosa Lima"], oct24, [birchOct24], "OWN_WAY");
+  await signUp(await person("Frank Hale", { seats: 5, status: "approved" }), oct24, [BIRCH, MAPLE], "CAN_DRIVE");
+  await signUpAll(["Mona Reyes", "Nate Cole", "Opal Shah", "Pete Lund"], oct24, [BIRCH], "NEEDS_RIDE");
+  await signUpAll(["Quinn Abbott", "Rosa Lima"], oct24, [BIRCH], "OWN_WAY");
 
   // Maple: lots of room. Grace's 7-seat car is pending approval (it still
   // counts). Hugo offered to drive but was declined, so he counts as
   // getting there on his own. Sam could go to Maple or Willow, and rides
   // with Grace at Maple. Uma and Vic could go to Maple or Birch.
-  await signUp(await person("Grace Moss", { seats: 7, status: "pending" }), oct24, [mapleOct24], "CAN_DRIVE");
-  await signUp(await person("Hugo Brandt", { seats: 4, status: "declined" }), oct24, [mapleOct24], "CAN_DRIVE");
-  await signUpAll(["Tara Quinn", "Theo Grant", "Tess Novak"], oct24, [mapleOct24], "NEEDS_RIDE");
-  await signUpAll(["Sam Ellis"], oct24, [mapleOct24, willowOct24], "NEEDS_RIDE");
-  await signUpAll(["Uma Patel", "Vic Romero"], oct24, [mapleOct24, birchOct24], "OWN_WAY");
+  await signUp(await person("Grace Moss", { seats: 7, status: "pending" }), oct24, [MAPLE], "CAN_DRIVE");
+  await signUp(await person("Hugo Brandt", { seats: 4, status: "declined" }), oct24, [MAPLE], "CAN_DRIVE");
+  await signUpAll(["Tara Quinn", "Theo Grant", "Tess Novak"], oct24, [MAPLE], "NEEDS_RIDE");
+  await signUpAll(["Sam Ellis"], oct24, [MAPLE, WILLOW], "NEEDS_RIDE");
+  await signUpAll(["Uma Patel", "Vic Romero"], oct24, [MAPLE, BIRCH], "OWN_WAY");
 
   // Sat, Oct 31: Elm Court (8 spots). Ivy's 8-seat car carried 7 riders,
   // then she cancelled. 7 riders would now hold 3 spots (10 > 8), so at
   // most 6 riders and 2 held spots fit, and one rider can't be placed.
   // Riders and own-way volunteers are turned away; a driver with at least
   // a 4-seat car is taken (driver + 6 riders + 1 held spot = 8).
-  const [elmOct31] = elm.shifts;
-  await signUp(await person("Ivy Chen", { seats: 8, status: "approved" }), oct31, [elmOct31], "CAN_DRIVE", true);
-  await signUpAll(["Abe Moore", "Bea Long", "Cal Ruiz", "Dee Fox", "Eve Kim", "Fay Diaz", "Gus Hill"], oct31, [elmOct31], "NEEDS_RIDE");
+  await signUp(await person("Ivy Chen", { seats: 8, status: "approved" }), oct31, ["Elm Court Landscaping"], "CAN_DRIVE", true);
+  await signUpAll(["Abe Moore", "Bea Long", "Cal Ruiz", "Dee Fox", "Eve Kim", "Fay Diaz", "Gus Hill"], oct31, ["Elm Court Landscaping"], "NEEDS_RIDE");
 
   console.log(`
-Test data created. See it at ${SITE}/admin/forms, ${SITE}/admin/builds
-and ${SITE}/admin/people. Volunteers see published forms at ${SITE}/.
+Test data created. See it at ${SITE}/admin/forms and
+${SITE}/admin/people. Volunteers see published forms at ${SITE}/.
 
 Signup forms:
-  Sat, Oct 10   open; Maple and Cedar Lane shifts; waivers; 4 signups
-                and 1 cancelled
+  Sat, Oct 10   open; Maple and Cedar Lane, and Oak Avenue (cancelled,
+                chosen by Ben); waivers; 4 signups and 1 cancelled
   Sat, Oct 17   published, opens Oct 11
   Sat, Nov 7    draft
   Sat, Aug 15   past, 2 signups
@@ -404,11 +362,6 @@ Signup forms:
   Sat, Oct 31   open; Elm Court is short a driver after Ivy cancelled, so
                 one rider can't be placed and only drivers (4+ seats) can
                 sign up there
-
-Builds: Maple Street Home, Riverside Duplex, Oak Avenue Repair, Elm Court
-Landscaping, Summer Blitz Build (past), Cedar Lane Home (shares days
-with Maple), and Birch Road Home and Willow Park Rehab (Oct 24, with
-Maple).
 
 Volunteers: alice, ben, carmen, dana and eli @example.org. Open the Oct 10
 form with one of them to see or cancel their signup.

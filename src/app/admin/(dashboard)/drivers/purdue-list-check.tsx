@@ -2,11 +2,14 @@
 
 import { CheckIcon, DownloadIcon, UploadIcon, WandSparklesIcon } from "lucide-react";
 import { useActionState, useState, useTransition } from "react";
+import { EmailWarning } from "@/components/email-warning";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -25,6 +28,7 @@ import {
   type PurdueListState,
 } from "@/lib/drivers/actions";
 import type { ListMatch } from "@/lib/drivers/purdue-match";
+import { emailLimitNote } from "@/lib/email-limit";
 import { formatDay } from "@/lib/time";
 
 // The "Auto approve" pill on the Drivers page: checking drivers against
@@ -121,7 +125,7 @@ function ListCheck({ listUrl }: { listUrl: string }) {
         </p>
       )}
       {/* A new key for each check, so approvals from an earlier one reset. */}
-      {state.check && <Results key={state.checkedAt} check={state.check} />}
+      {state.check && <Results key={state.checkedAt} check={state.check} sentToday={state.sentToday ?? 0} />}
     </div>
   );
 }
@@ -160,13 +164,23 @@ function Step({
   );
 }
 
-function Results({ check }: { check: NonNullable<PurdueListState["check"]> }) {
+function Results({
+  check,
+  sentToday,
+}: {
+  check: NonNullable<PurdueListState["check"]>;
+  // Emails sent today when the list was checked.
+  sentToday: number;
+}) {
   const [approved, setApproved] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Approving emails each driver, so the admin confirms these first.
+  const [confirming, setConfirming] = useState<ListMatch[] | null>(null);
   const waiting = check.matches.filter((match) => !approved.has(match.volunteerId));
 
   function approve(matches: ListMatch[]) {
+    setConfirming(null);
     setError(null);
     startTransition(async () => {
       const result = await approveFromPurdueList(
@@ -191,7 +205,7 @@ function Results({ check }: { check: NonNullable<PurdueListState["check"]> }) {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-medium">Ready to approve</h3>
             {waiting.length > 1 && (
-              <Button size="sm" disabled={pending} onClick={() => approve(waiting)}>
+              <Button size="sm" disabled={pending} onClick={() => setConfirming(waiting)}>
                 {pending ? "Approving…" : `Approve all ${waiting.length}`}
               </Button>
             )}
@@ -240,7 +254,7 @@ function Results({ check }: { check: NonNullable<PurdueListState["check"]> }) {
                           {match.kind === "extend" ? "Extended" : "Approved"}
                         </span>
                       ) : (
-                        <Button size="sm" variant="outline" disabled={pending} onClick={() => approve([match])}>
+                        <Button size="sm" variant="outline" disabled={pending} onClick={() => setConfirming([match])}>
                           {match.kind === "extend" ? "Extend" : "Approve"}
                         </Button>
                       )}
@@ -255,6 +269,17 @@ function Results({ check }: { check: NonNullable<PurdueListState["check"]> }) {
               {error}
             </p>
           )}
+          <Dialog open={confirming !== null} onOpenChange={(open) => !open && setConfirming(null)}>
+            <DialogContent>
+              {confirming && (
+                <ConfirmApproval
+                  matches={confirming}
+                  limitNote={emailLimitNote(sentToday + approved.size, confirming.length)}
+                  onConfirm={() => approve(confirming)}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       )}
 
@@ -289,6 +314,49 @@ function Results({ check }: { check: NonNullable<PurdueListState["check"]> }) {
         </List>
       )}
     </div>
+  );
+}
+
+// What approving one match, or all of them, will do, with the email it sends.
+function ConfirmApproval({
+  matches,
+  limitNote,
+  onConfirm,
+}: {
+  matches: ListMatch[];
+  limitNote: string | null;
+  onConfirm: () => void;
+}) {
+  const [only] = matches;
+  const extend = matches.length === 1 && only.kind === "extend";
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>
+          {matches.length > 1
+            ? `Approve ${matches.length} drivers?`
+            : extend
+              ? `Extend ${only.name}'s approval?`
+              : `Approve ${only.name} as a driver?`}
+        </DialogTitle>
+        <DialogDescription>
+          {matches.length > 1
+            ? "Each is approved through the end date on Purdue's list."
+            : `They'll be approved through ${formatDay(only.until)}.`}
+        </DialogDescription>
+      </DialogHeader>
+      <EmailWarning limitNote={limitNote}>
+        {matches.length > 1
+          ? `This emails each of the ${matches.length} drivers to tell them they're approved.`
+          : `This emails ${only.name} to tell them they're an approved driver.`}
+      </EmailWarning>
+      <DialogFooter>
+        <DialogClose render={<Button variant="outline" />}>Never mind</DialogClose>
+        <Button onClick={onConfirm}>
+          {matches.length > 1 ? "Approve all and email" : extend ? "Extend and email" : "Approve and email"}
+        </Button>
+      </DialogFooter>
+    </>
   );
 }
 

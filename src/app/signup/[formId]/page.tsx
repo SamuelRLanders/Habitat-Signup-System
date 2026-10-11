@@ -20,8 +20,9 @@ export async function generateMetadata({
 // details (always shown), then signing in with an email, then the form.
 // Volunteers can look it over once it's published and sign up while it's
 // open. After it closes it says so, and those who signed up can still
-// cancel until the day's first shift. The day's builds and shifts are shown
-// once the volunteer has signed in, where they choose them.
+// cancel until the day's first shift. A cancelled event's form only says
+// so. The day's builds and shifts are shown once the volunteer has signed
+// in, where they choose them.
 export default async function SignupFormPage({
   params,
 }: PageProps<"/signup/[formId]">) {
@@ -40,15 +41,28 @@ export default async function SignupFormPage({
         <Panel>
           <div className="flex flex-col gap-1">
             <h1 className="text-3xl font-semibold">{formatDay(form.day)}</h1>
-            <p className="text-sm text-muted-foreground">
-              {phase === "not-open"
-                ? `Signups open ${at(form.opensAt)} and close ${at(form.closesAt)}.`
-                : phase === "open"
-                  ? `Signups are open until ${at(form.closesAt)}.`
-                  : `Signups closed ${at(form.closesAt)}.`}
-            </p>
+            {phase !== "cancelled" && (
+              <p className="text-sm text-muted-foreground">
+                {phase === "not-open"
+                  ? `Signups open ${at(form.opensAt)} and close ${at(form.closesAt)}.`
+                  : phase === "open"
+                    ? `Signups are open until ${at(form.closesAt)}.`
+                    : `Signups closed ${at(form.closesAt)}.`}
+              </p>
+            )}
           </div>
-          {form.description && <p className="whitespace-pre-line">{form.description}</p>}
+          {phase === "cancelled" ? (
+            <Notice>
+              This build day has been cancelled, along with everyone&apos;s
+              signups for it.{" "}
+              <Link href="/" className="underline underline-offset-4">
+                See other build days
+              </Link>
+              .
+            </Notice>
+          ) : (
+            form.description && <p className="whitespace-pre-line">{form.description}</p>
+          )}
 
           {phase === "not-open" && (
             <Notice>Come back once signups open to sign up.</Notice>

@@ -88,8 +88,8 @@ export async function getAskedToGroupWith(formId: string, email: string) {
 
 export type AskedToGroupWith = Awaited<ReturnType<typeof getAskedToGroupWith>>;
 
-// Volunteers can cancel until the day's first shift starts, even after the
-// form closes. With no shifts, until the day ends.
+// Volunteers can cancel until the day's first build starts, even after the
+// form closes. With no builds, until the day ends.
 export function cancelDeadline(day: string, shifts: { startsAt: Date }[]) {
   if (shifts.length > 0) {
     return new Date(Math.min(...shifts.map((shift) => shift.startsAt.getTime())));

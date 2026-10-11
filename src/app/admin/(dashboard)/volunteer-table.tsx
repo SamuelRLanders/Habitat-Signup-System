@@ -31,7 +31,7 @@ export type VolunteerRow = {
   carSeats: number | null;
   driver: DriverStatus;
   createdAt: Date;
-  // Shifts to list for them, such as "Maple Street Home, 8:00 AM – 12:00 PM".
+  // Builds to list for them, such as "Maple Street Home".
   shifts: string[];
   // Friends they asked to be placed with, or who asked for them, such as
   // { label: "Alice Smith", note: "together" }. The column only shows when

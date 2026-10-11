@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { EmailWarning } from "@/components/email-warning";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,7 +24,13 @@ type ActionButtonProps = {
   variant?: Variant;
   size?: "default" | "sm";
   // When set, asks for confirmation in a dialog before running the action.
-  confirm?: { title: string; description: string; confirmLabel: string };
+  // An action that sends email has to say who will get one.
+  confirm?: {
+    title: string;
+    description: string;
+    confirmLabel: string;
+    email?: { message: string; limitNote?: string | null };
+  };
 };
 
 // A button that runs a Server Action, such as "Publish" or "Cancel shift",
@@ -106,6 +113,9 @@ function ConfirmForm({
         <DialogTitle>{confirm.title}</DialogTitle>
         <DialogDescription>{confirm.description}</DialogDescription>
       </DialogHeader>
+      {confirm.email && (
+        <EmailWarning limitNote={confirm.email.limitNote}>{confirm.email.message}</EmailWarning>
+      )}
       {state.error && (
         <p role="alert" className="text-sm text-destructive">
           {state.error}

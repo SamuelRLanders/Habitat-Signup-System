@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
 import { updateSignupForm } from "@/lib/signup-forms/actions";
+import { offeredShifts } from "@/lib/signup-forms/queries";
 import {
   DEFAULT_TIME_ZONE,
   formatDate,
@@ -11,7 +12,7 @@ import {
   toDay,
   toTimeInput,
 } from "@/lib/time";
-import { BackLink } from "../../../builds/build-parts";
+import { BackLink } from "../../../admin-parts";
 import { FormEditor } from "../../form-editor";
 
 export const metadata: Metadata = { title: "Edit signup form" };
@@ -25,12 +26,18 @@ export default async function EditSignupFormPage({
   const form = await prisma.signupForm.findUnique({
     where: { id: formId },
     include: {
+      shifts: {
+        orderBy: offeredShifts.orderBy,
+        include: { _count: { select: { preferences: true } } },
+      },
       sections: { orderBy: { position: "asc" }, select: { title: true, body: true } },
     },
   });
   if (!form) notFound();
 
   const formHref = `/admin/forms/${form.id}`;
+  // A cancelled event's form is kept as it was.
+  if (form.status === "CANCELLED") redirect(formHref);
   const zone = DEFAULT_TIME_ZONE;
 
   return (
@@ -57,6 +64,19 @@ export default async function EditSignupFormPage({
           closesTime: toTimeInput(form.closesAt, zone),
           description: form.description ?? "",
         }}
+        builds={form.shifts.map((shift) => ({
+          id: shift.id,
+          name: shift.name,
+          address: shift.address,
+          startTime: toTimeInput(shift.startsAt, zone),
+          endTime: toTimeInput(shift.endsAt, zone),
+          capacity: String(shift.capacity),
+          description: shift.description ?? "",
+          cancelled: shift.cancelledAt !== null,
+          // Everyone who ever chose it, including cancelled signups, so the
+          // record is kept.
+          chosen: shift._count.preferences > 0,
+        }))}
         sections={form.sections}
         submitLabel="Save changes"
         cancelHref={formHref}

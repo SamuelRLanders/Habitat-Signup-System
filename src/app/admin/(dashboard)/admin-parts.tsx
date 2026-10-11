@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { cn } from "cn";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import type { BuildStatus } from "@/generated/prisma/enums";
 
 // A pill at the top of a page that goes up one level.
 export function BackLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -16,15 +14,9 @@ export function BackLink({ href, children }: { href: string; children: React.Rea
   );
 }
 
-// Only cancelled builds get a badge; active is the usual case.
-export function StatusBadge({ status }: { status: BuildStatus }) {
-  if (status !== "CANCELLED") return null;
-  return <Badge variant="destructive">Cancelled</Badge>;
-}
-
 // "6 willing · 10 spots" with a bar underneath. Willing means volunteers
-// who said on the day's signup form that they could work it; a volunteer
-// can be willing to work several shifts.
+// who said on the signup form that they could work at the build; a
+// volunteer can be willing to work at several.
 export function SpotsMeter({
   willing,
   capacity,

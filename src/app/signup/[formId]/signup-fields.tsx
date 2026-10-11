@@ -40,14 +40,13 @@ export type DetailsDefaults = {
   hasDriversLicense: boolean;
 };
 
-// A build working that day. Each build has one shift a day, so volunteers
-// choose builds; the ID is the shift's.
+// A build working that day, which volunteers can choose.
 export type BuildChoice = {
   id: string;
   buildName: string;
   address: string;
   time: string; // "8:00 AM – 12:00 PM"
-  notes: string | null;
+  description: string | null;
   // Who the build has room for, given everyone already signed up.
   room: BuildRoom;
 };
@@ -131,7 +130,7 @@ export function SignupFields({
   const [chosen, setChosen] = useState<Set<string>>(() => new Set());
   // Friends' emails, as typed. There's always at least one box.
   const [friends, setFriends] = useState([""]);
-  // Who each build has room for (by shift ID). The server sends new ones if
+  // Who each build has room for (by its ID). The server sends new ones if
   // the builds they chose fill up before they submit.
   const [rooms, setRooms] = useState<Record<string, BuildRoom>>(() =>
     Object.fromEntries(builds.map((build) => [build.id, build.room])),
@@ -517,7 +516,7 @@ export function SignupFields({
                   disabled={full}
                   lines={[
                     `${build.time} · ${build.address}`,
-                    build.notes,
+                    build.description,
                     full ? fullNote(rooms[build.id], travel) : null,
                   ]}
                 />

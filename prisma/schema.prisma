@@ -17,18 +17,12 @@ enum Role {
   ADMIN
 }
 
-// Builds are only ever seen by admins. Volunteers see shifts through each
-// date's signup form, which leaves out a cancelled build's shifts.
-enum BuildStatus {
-  ACTIVE
-  CANCELLED
-}
-
 // Whether volunteers can see a signup form. When they can fill it out is set
 // by its open and close times.
 enum FormStatus {
   DRAFT // admins only
   PUBLISHED // listed on the home page until it closes
+  CANCELLED // the event is off: volunteers are told on the form's page; final
 }
 
 enum TShirtSize {
@@ -86,7 +80,6 @@ model User {
   accounts Account[]
 
   // Admin activity.
-  buildsCreated   Build[]
   formsCreated    SignupForm[]
   driverDecisions DriverApproval[]
   messagesSent    Message[]
@@ -157,70 +150,13 @@ model LoginCodeRequest {
   @@index([ipAddress, createdAt])
 }
 
-// ─── Builds & shifts ─────────────────────────────────────────────────────────
-//
-// The app calls these by other names. A Build is a "project" (a home, worked
-// on over many days), a Shift is a "build" (the group working on it on one
-// day), and a day of builds is an "event", with one SignupForm.
-
-// A home Habitat is building, and the shifts volunteers can work there.
-model Build {
-  id          String      @id @default(cuid())
-  name        String
-  address     String
-  description String?     @db.Text
-  // IANA time zone the build's shift times are entered and shown in.
-  timeZone    String      @default("America/Indiana/Indianapolis")
-  status      BuildStatus @default(ACTIVE)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  // The admin who created the build. Their name is copied here when the
-  // build is created, so it stays the same if they're later renamed, lose
-  // admin access, or their account is deleted.
-  createdByName String
-  createdById   String?
-  createdBy     User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
-
-  shifts Shift[]
-
-  @@index([status])
-}
-
-// A block of time volunteers can work at a build. Volunteers don't sign up
-// for a shift directly: they say on the day's signup form which shifts they
-// could work.
-model Shift {
-  id          String    @id @default(cuid())
-  startsAt    DateTime
-  endsAt      DateTime
-  capacity    Int // volunteer spots
-  notes       String?   @db.Text
-  // Shifts volunteers have chosen are cancelled rather than deleted, to keep
-  // a record.
-  cancelledAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  buildId String
-  build   Build  @relation(fields: [buildId], references: [id], onDelete: Cascade)
-
-  preferences ShiftPreference[]
-  messages    Message[]
-
-  @@index([buildId, startsAt])
-}
-
 // ─── Signup forms ────────────────────────────────────────────────────────────
 
 // The signup form for one build day, shared with every group going out that
-// day. Its shifts aren't stored: they're every shift on its date, across all
-// builds, that isn't cancelled and whose build isn't cancelled. So there's at
-// most one form per date, and each shift is on at most one form.
+// day. Admins add the day's builds to it. There's at most one form per date.
 model SignupForm {
   id          String     @id @default(cuid())
-  // The build day, in the Indiana time zone. Each shift's day is in its
-  // build's time zone.
+  // The build day, in the Indiana time zone.
   date        DateTime   @unique @db.Date
   description String?    @db.Text
   status      FormStatus @default(DRAFT)
@@ -231,15 +167,53 @@ model SignupForm {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  // The admin who created the form, with their name copied as on Build.
+  // The admin who created the form. Their name is copied here when the form
+  // is created, so it stays the same if they're later renamed, lose admin
+  // access, or their account is deleted.
   createdByName String
   createdById   String?
   createdBy     User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
+  // When an admin cancelled the event, and their name, copied as above.
+  // Volunteers signed up then were emailed.
+  cancelledAt     DateTime?
+  cancelledByName String?
+
+  shifts   Shift[]
   sections FormSection[]
   signups  FormSignup[]
 
   @@index([status, date])
+}
+
+// One of the builds on a form's day: a group working at one address, which
+// volunteers can say they'd work at. The app calls it a "build"; the code
+// still calls it a shift. Volunteers don't sign up for one directly: they
+// say on the form which builds they could work at.
+model Shift {
+  id          String    @id @default(cuid())
+  name        String
+  address     String
+  description String?   @db.Text
+  // On the form's day, entered and shown in Indiana time.
+  startsAt    DateTime
+  endsAt      DateTime
+  capacity    Int // volunteer spots
+  // Builds volunteers have chosen are cancelled rather than deleted, to keep
+  // a record. A cancelled build isn't offered on its form.
+  cancelledAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Forms with signups can't be deleted, so this only removes builds nobody
+  // chose.
+  formId String
+  form   SignupForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  preferences ShiftPreference[]
+  messages    Message[]
+
+  @@index([formId, startsAt])
 }
 
 // A heading and text an admin adds to a signup form, such as instructions
@@ -300,7 +274,7 @@ model DriverApproval {
   revokedAt     DateTime?
   revokedByName String?
 
-  // The admin who decided, with their name copied as on Build.
+  // The admin who decided, with their name copied as on SignupForm.
   decidedByName String
   decidedById   String?
   decidedBy     User?   @relation(fields: [decidedById], references: [id], onDelete: SetNull)
@@ -345,10 +319,9 @@ model FormSignup {
   @@index([volunteerId])
 }
 
-// A shift a volunteer said they could work. Admins use these to place
-// volunteers. A preference for a shift that's since been cancelled, or
-// moved to another day, is ignored but kept, so it counts again if the
-// shift is restored.
+// A build a volunteer said they could work at. Admins use these to place
+// volunteers. A preference for a build that's since been cancelled is
+// ignored but kept, so it counts again if the build is restored.
 model ShiftPreference {
   signupId String
   signup   FormSignup @relation(fields: [signupId], references: [id], onDelete: Cascade)
@@ -409,7 +382,7 @@ model VolunteerSession {
 
 // ─── Messaging ───────────────────────────────────────────────────────────────
 
-// An email or text sent by an admin, usually to the volunteers on a shift.
+// An email or text sent by an admin, usually to the volunteers at a build.
 model Message {
   id        String         @id @default(cuid())
   channel   MessageChannel
@@ -443,4 +416,14 @@ model MessageRecipient {
 
   @@index([messageId])
   @@index([volunteerId])
+}
+
+// How many emails were sent through Resend each day, to warn the operations
+// lead before reaching Resend's daily limit. Days are UTC calendar days, as
+// Resend counts them.
+model EmailDay {
+  day      DateTime  @id @db.Date
+  sent     Int       @default(0)
+  // When the operations lead was warned that the limit is close. Once a day.
+  warnedAt DateTime?
 }

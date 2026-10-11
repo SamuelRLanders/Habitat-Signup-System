@@ -30,12 +30,12 @@ import { cancelDeadline } from "./queries";
 // to change it, they cancel and sign up again. Anyone can post to these,
 // so everything is checked here: the confirmed email comes from the
 // session cookie, never the form, and the form has to be open (or, to
-// cancel, its first shift not started).
+// cancel, its first build not started).
 
 export type SignupFormState = {
   errors?: Partial<Record<SignupField | "form", string>>;
   success?: boolean;
-  // Who each build has room for now (by shift ID), when the builds the
+  // Who each build has room for now (by its ID), when the builds the
   // volunteer chose filled up while they were filling out the form.
   rooms?: Record<string, BuildRoom>;
 };
@@ -48,16 +48,14 @@ function revalidateSignup(formId: string) {
   revalidatePath("/admin", "layout");
 }
 
-// A published form with the shifts it offers, or null.
+// A published form with the builds it offers, or null.
 async function loadForm(formId: string) {
   const form = await prisma.signupForm.findUnique({
     where: { id: formId, status: "PUBLISHED" },
-    select: { date: true, status: true, opensAt: true, closesAt: true },
+    select: { date: true, status: true, opensAt: true, closesAt: true, shifts: offeredShifts },
   });
   if (!form) return null;
-  const day = toDay(form.date);
-  const shifts = (await offeredShifts([day])).get(day) ?? [];
-  return { ...form, day, shifts };
+  return { ...form, day: toDay(form.date) };
 }
 
 // Signs up. Signing up again after cancelling counts as a new signup, but
@@ -152,8 +150,11 @@ export async function submitSignup(
     result = await prisma.$transaction(
       async (tx) => {
         // Lock the form until this transaction ends, so two people can't
-        // both take its last spot.
-        await tx.$queryRaw`SELECT id FROM "SignupForm" WHERE id = ${formId} FOR UPDATE`;
+        // both take its last spot. Its event may have been cancelled since
+        // it was loaded.
+        const [locked] = await tx.$queryRaw<{ status: string }[]>`
+          SELECT status FROM "SignupForm" WHERE id = ${formId} FOR UPDATE`;
+        if (locked?.status !== "PUBLISHED") return { outcome: "closed" as const };
 
         const active = await tx.formSignup.findFirst({
           where: { formId, volunteer: { email }, cancelledAt: null },
@@ -207,6 +208,10 @@ export async function submitSignup(
     return { errors: { form: "Something went wrong saving your signup. Please try again in a moment." } };
   }
 
+  if (result.outcome === "closed") {
+    revalidateSignup(formId);
+    return { errors: { form: "This form isn't taking signups right now. Refresh the page to see why." } };
+  }
   if (result.outcome === "already") {
     revalidateSignup(formId);
     return {

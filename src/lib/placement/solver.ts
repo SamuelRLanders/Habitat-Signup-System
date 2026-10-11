@@ -81,8 +81,7 @@ import type { BuildRoom } from "./room";
 // How a volunteer is getting to the build.
 export type Travel = "rider" | "ownWay" | "driver";
 
-// A build working that day. Each build has one shift a day, so callers use
-// the shift's ID and its number of spots.
+// A build working that day: its ID and its number of spots.
 export type PlacementBuild = {
   id: string;
   capacity: number;
@@ -414,7 +413,7 @@ const NEWCOMER_ID = "(newcomer)";
 // Usually the answer is simply whether everyone, the newcomer included, can
 // still be placed. But a day can end up short, with someone who can't be
 // placed, through no fault of the rules: a driver cancels, an admin declines
-// a pending driver, or a shift's spots are reduced. Nobody is ever removed
+// a pending driver, or a build's spots are reduced. Nobody is ever removed
 // automatically; admins see who's left out. On a short day, a newcomer is
 // taken only if they don't leave more people out than before. So drivers
 // (who can help) are still taken, and riders who'd make things worse aren't.

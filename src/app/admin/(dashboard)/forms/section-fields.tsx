@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { SectionErrors } from "@/lib/sections";
-import { FieldError } from "../builds/build-form";
+import { FieldError } from "@/components/field-error";
 
 export type SectionDefaults = { title: string; body: string };
 

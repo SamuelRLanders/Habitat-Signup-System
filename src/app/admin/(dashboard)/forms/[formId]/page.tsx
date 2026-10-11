@@ -7,23 +7,22 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { FormStatus } from "@/generated/prisma/enums";
 import { requireAdmin } from "@/lib/auth/dal";
+import { emailsSentToday } from "@/lib/email";
+import { emailLimitNote } from "@/lib/email-limit";
 import { getFormRoster, type RosterSignup } from "@/lib/form-signups/rosters";
 import { planForRoster, requestedPairs, travelRosterFor } from "@/lib/placement/load";
 import { placedAt, type BuildPlan, type Placement } from "@/lib/placement/solver";
 import { prisma } from "@/lib/prisma";
-import { deleteSignupForm, setSignupFormStatus } from "@/lib/signup-forms/actions";
-import { formPhase } from "@/lib/signup-forms/phase";
-import { getSignupForm, totalSpots } from "@/lib/signup-forms/queries";
 import {
-  DEFAULT_TIME_ZONE,
-  formatDate,
-  formatDay,
-  formatTimeRange,
-  timeZoneLabel,
-  toDay,
-} from "@/lib/time";
+  cancelSignupForm,
+  deleteSignupForm,
+  setSignupFormStatus,
+} from "@/lib/signup-forms/actions";
+import { formPhase } from "@/lib/signup-forms/phase";
+import { getSignupForm, shiftTime, today, totalSpots } from "@/lib/signup-forms/queries";
+import { DEFAULT_TIME_ZONE, formatDate, formatDay, toDay } from "@/lib/time";
 import { T_SHIRT_SIZES } from "@/lib/volunteers";
-import { BackLink, SpotsMeter } from "../../builds/build-parts";
+import { BackLink, SpotsMeter } from "../../admin-parts";
 import { VolunteerTable } from "../../volunteer-table";
 import { PhaseBadge, phaseNote } from "../form-parts";
 import { ShareDialog } from "../share-dialog";
@@ -51,6 +50,13 @@ export default async function SignupFormPage({
   if (!form) notFound();
 
   const phase = formPhase(form);
+  // An event can be cancelled until its day is over. Drafts nobody signed
+  // up for are deleted instead.
+  const canCancel =
+    form.status !== "CANCELLED" &&
+    form.day >= today() &&
+    (form.status === "PUBLISHED" || form.signupCount > 0);
+  const sentToday = canCancel ? await emailsSentToday() : 0;
   const spots = totalSpots(form.shifts);
   const roster = await getFormRoster(form.id, form.shifts);
   const active = roster.filter((signup) => !signup.cancelledAt);
@@ -69,8 +75,8 @@ export default async function SignupFormPage({
     pendingDrivers > 0 &&
       `${plural(pendingDrivers, "driver is", "drivers are")} still waiting for Purdue approval (marked "approval pending").`,
   ].filter((warning) => typeof warning === "string");
-  // Each build has one shift a day, so its name is enough to tell them apart.
-  const labels = new Map(form.shifts.map((shift) => [shift.id, shift.build.name]));
+  // Builds on a form have different names, so a name is enough.
+  const labels = new Map(form.shifts.map((shift) => [shift.id, shift.name]));
   // How many active signups chose each shift.
   const willing = new Map<string, number>();
   for (const signup of active) {
@@ -108,17 +114,22 @@ export default async function SignupFormPage({
               />
             </VolunteersDialog>
             {active.length > 0 && <TravelRosterDialog text={travel.text} warnings={rosterWarnings} />}
-            <Link
-              href={`/admin/forms/${form.id}/edit`}
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              Edit form
-            </Link>
+            {form.status !== "CANCELLED" && (
+              <Link
+                href={`/admin/forms/${form.id}/edit`}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                Edit form
+              </Link>
+            )}
             <StatusActions
               formId={form.id}
               status={form.status}
               signupCount={form.signupCount}
             />
+            {canCancel && (
+              <CancelEventButton formId={form.id} signupCount={form.signupCount} sentToday={sentToday} />
+            )}
           </div>
         </div>
 
@@ -139,52 +150,53 @@ export default async function SignupFormPage({
         {form.shifts.length === 0 ? (
           <Card>
             <CardContent className="py-6 text-center text-muted-foreground">
-              No builds on this day yet. Add builds for{" "}
-              {formatDay(form.day, "short")} to a project and they&apos;ll show
-              up here. Cancelled builds and projects aren&apos;t offered.
+              No builds yet.{" "}
+              <Link href={`/admin/forms/${form.id}/edit`} className="underline underline-offset-4">
+                Edit the form
+              </Link>{" "}
+              to add the day&apos;s builds.
             </CardContent>
           </Card>
         ) : (
-          // A box for each build; a project has at most one a day.
-          form.shifts.map((shift) => {
-            const { build } = shift;
-            const zone = build.timeZone;
-            return (
-              <div
-                key={shift.id}
-                className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 hover-gold rounded-xl p-4 ring-1 ring-foreground/10"
-              >
-                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <Link
-                    href={`/admin/builds/${build.id}`}
-                    className="font-semibold hover:underline"
+          form.shifts.map((shift) => (
+            <div
+              key={shift.id}
+              className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 hover-gold rounded-xl p-4 ring-1 ring-foreground/10"
+            >
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <p className="font-semibold">{shift.name}</p>
+                <p className="text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">{shiftTime(shift)}</span> ·{" "}
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(shift.address)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="hover:underline"
                   >
-                    {build.name}
-                  </Link>
-                  <p className="text-sm text-muted-foreground">
-                    <Link
-                      href={`/admin/builds/${build.id}/shifts/${shift.id}`}
-                      className="font-medium text-foreground hover:underline"
-                    >
-                      {formatTimeRange(shift.startsAt, shift.endsAt, zone)}
-                      {zone !== DEFAULT_TIME_ZONE && ` (${timeZoneLabel(zone)})`}
-                    </Link>{" "}
-                    · {build.address}
+                    {shift.address}
+                  </a>
+                </p>
+                {shift.description && (
+                  <p className="text-sm whitespace-pre-line text-muted-foreground">
+                    {shift.description}
                   </p>
-                  {shift.notes && (
-                    <p className="text-sm whitespace-pre-line text-muted-foreground">
-                      {shift.notes}
-                    </p>
-                  )}
-                  <ShiftPlan
-                    build={plan.builds.get(shift.id)!}
-                    pendingDrivers={plan.pendingDrivers.get(shift.id) ?? 0}
-                  />
-                </div>
-                <SpotsMeter willing={willing.get(shift.id) ?? 0} capacity={shift.capacity} />
+                )}
+                <ShiftPlan
+                  build={plan.builds.get(shift.id)!}
+                  pendingDrivers={plan.pendingDrivers.get(shift.id) ?? 0}
+                />
               </div>
-            );
-          })
+              <SpotsMeter willing={willing.get(shift.id) ?? 0} capacity={shift.capacity} />
+            </div>
+          ))
+        )}
+
+        {form.cancelledShifts.length > 0 && (
+          <p className="text-sm text-muted-foreground">
+            Cancelled, so not offered: {form.cancelledShifts.map((shift) => shift.name).join(", ")}.
+            Volunteers who chose them are kept, and count again if you restore
+            one from Edit form.
+          </p>
         )}
       </section>
     </div>
@@ -364,7 +376,40 @@ function ShiftPlan({ build, pendingDrivers }: { build: BuildPlan; pendingDrivers
   );
 }
 
+// Cancelling emails everyone signed up, so the admin is told that first.
+function CancelEventButton({
+  formId,
+  signupCount,
+  sentToday,
+}: {
+  formId: string;
+  signupCount: number;
+  sentToday: number;
+}) {
+  return (
+    <ActionButton
+      action={cancelSignupForm.bind(null, formId)}
+      label="Cancel event"
+      variant="ghost"
+      confirm={{
+        title: "Cancel this event?",
+        description:
+          "The form will say the event is cancelled, and nobody will be able to sign up. This can't be undone.",
+        confirmLabel: signupCount > 0 ? "Cancel event and email" : "Cancel event",
+        email:
+          signupCount > 0
+            ? {
+                message: `This emails ${plural(signupCount, "volunteer", "volunteers")} signed up to tell them the event is cancelled.`,
+                limitNote: emailLimitNote(sentToday, signupCount),
+              }
+            : { message: "Nobody is signed up, so no emails will be sent." },
+      }}
+    />
+  );
+}
+
 // Drafts can be published or deleted; published forms can be unpublished.
+// A cancelled event's form stays as it is.
 function StatusActions({
   formId,
   status,
@@ -374,8 +419,9 @@ function StatusActions({
   status: FormStatus;
   signupCount: number;
 }) {
-  const setStatus = (next: FormStatus) => setSignupFormStatus.bind(null, formId, next);
+  const setStatus = (next: "DRAFT" | "PUBLISHED") => setSignupFormStatus.bind(null, formId, next);
 
+  if (status === "CANCELLED") return null;
   if (status === "PUBLISHED") {
     return (
       <ActionButton
@@ -402,7 +448,7 @@ function StatusActions({
         variant="ghost"
         confirm={{
           title: "Delete this form?",
-          description: "The form and its sections will be permanently deleted. Projects and builds aren't affected.",
+          description: "The form, its builds and its sections will be permanently deleted.",
           confirmLabel: "Delete form",
         }}
       />

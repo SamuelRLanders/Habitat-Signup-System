@@ -9,8 +9,8 @@ import { planDay, type Day, type Placement, type PlacementVolunteer } from "./so
 import { travelRoster } from "./travel-roster";
 
 // A form's signups, ready for the placement solver (./solver.ts). Its
-// "builds" are the shifts the form offers (one per build that day), and its
-// volunteers are the signups that haven't been cancelled.
+// builds are the ones the form offers, and its volunteers are the signups
+// that haven't been cancelled.
 
 type Db = typeof prisma | Prisma.TransactionClient;
 
@@ -100,7 +100,7 @@ export async function loadPlacementDay(
       carSeats: signup.carSeats,
       canDriveOthers:
         signup.volunteer.driverRequestedAt !== null || signup.volunteer.driverApprovals.length > 0,
-      // A shift that's cancelled or moved to another day isn't offered.
+      // A cancelled build isn't offered.
       shiftIds: signup.preferences.map((p) => p.shiftId).filter((id) => offered.has(id)),
     })),
   );
@@ -168,7 +168,7 @@ export function travelRosterFor(
 ) {
   return travelRoster({
     day,
-    builds: shifts.map((shift) => ({ id: shift.id, address: shift.build.address })),
+    builds: shifts.map((shift) => ({ id: shift.id, address: shift.address })),
     volunteers: signups.map((signup) => ({
       id: signup.id,
       name: `${signup.firstName} ${signup.lastName}`,

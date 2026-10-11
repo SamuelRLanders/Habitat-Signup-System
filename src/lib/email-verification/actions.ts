@@ -45,9 +45,15 @@ export async function sendSignupCode(
 
   const form = await prisma.signupForm.findUnique({
     where: { id: formId, status: "PUBLISHED" },
-    select: { date: true, status: true, opensAt: true, closesAt: true },
+    select: {
+      date: true,
+      status: true,
+      opensAt: true,
+      closesAt: true,
+      shifts: { where: offeredShifts.where, select: { startsAt: true } },
+    },
   });
-  if (!form || !(await canUseForm(form))) {
+  if (!form || !canUseForm(form)) {
     return {
       status: "error",
       message: "This form isn't taking signups right now. Refresh the page to see why.",
@@ -74,15 +80,15 @@ export async function sendSignupCode(
   return { status: "sent", email, sentAt: Date.now(), resendAfter: RESEND_AFTER_SECONDS };
 }
 
-// Open, or closed but with its first shift still to come, so volunteers
+// Open, or closed but with its first build still to come, so volunteers
 // can cancel.
-async function canUseForm(form: Parameters<typeof formPhase>[0] & { date: Date }) {
+function canUseForm(
+  form: Parameters<typeof formPhase>[0] & { date: Date; shifts: { startsAt: Date }[] },
+) {
   const phase = formPhase(form);
   if (phase === "open") return true;
   if (phase !== "closed") return false;
-  const day = toDay(form.date);
-  const shifts = (await offeredShifts([day])).get(day) ?? [];
-  return new Date() < cancelDeadline(day, shifts);
+  return new Date() < cancelDeadline(toDay(form.date), form.shifts);
 }
 
 const codeErrors = {
