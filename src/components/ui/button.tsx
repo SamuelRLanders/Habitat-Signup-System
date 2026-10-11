@@ -1,5 +1,6 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
+import { Loader2Icon } from "lucide-react"
 import { cn } from "cn"
 
 const buttonVariantsBase = cva(
@@ -46,18 +47,28 @@ function buttonVariants(props?: Parameters<typeof buttonVariantsBase>[0]) {
   return cn(buttonVariantsBase(props))
 }
 
+// While `loading`, such as when its Server Action is running, the button
+// shows a spinner before its label and can't be clicked again.
 function Button({
   className,
   variant = "default",
   size = "default",
+  loading = false,
+  disabled,
+  children,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariantsBase>) {
+}: ButtonPrimitive.Props & VariantProps<typeof buttonVariantsBase> & { loading?: boolean }) {
   return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
       {...props}
-    />
+    >
+      {loading && <Loader2Icon aria-hidden="true" className="animate-spin" />}
+      {children}
+    </ButtonPrimitive>
   )
 }
 

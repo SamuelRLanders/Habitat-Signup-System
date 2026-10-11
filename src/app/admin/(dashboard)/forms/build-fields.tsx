@@ -21,6 +21,7 @@ export type BuildDefaults = {
   endTime: string;
   capacity: string;
   description: string;
+  lunch: string;
   cancelled: boolean;
   // Volunteers have chosen it, so removing it cancels it instead of
   // deleting it.
@@ -35,6 +36,7 @@ export const NEW_BUILD: BuildDefaults = {
   endTime: "",
   capacity: "",
   description: "",
+  lunch: "",
   cancelled: false,
   chosen: false,
 };
@@ -231,6 +233,21 @@ export function BuildFields({
                   {...aria("description")}
                 />
                 <FieldError field={`${id}-description`} error={buildErrors.description} />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label htmlFor={`${id}-lunch`}>
+                  Lunch <span className="font-normal text-muted-foreground">(optional)</span>
+                </Label>
+                <Textarea
+                  id={`${id}-lunch`}
+                  name="buildLunch"
+                  defaultValue={build.lunch}
+                  rows={2}
+                  placeholder="e.g. Lunch provided by the homeowner. Bring a water bottle."
+                  {...aria("lunch")}
+                />
+                <FieldError field={`${id}-lunch`} error={buildErrors.lunch} />
               </div>
             </div>
           </div>

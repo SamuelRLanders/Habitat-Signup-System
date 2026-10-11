@@ -152,18 +152,25 @@ model LoginCodeRequest {
 
 // ─── Signup forms ────────────────────────────────────────────────────────────
 
-// The signup form for one build day, shared with every group going out that
-// day. Admins add the day's builds to it. There's at most one form per date.
+// A signup form for a build day, with the builds volunteers choose from.
+// A day can have several forms, such as one for an outside group that signs
+// up apart from everyone else; each is separate, with its own builds and
+// signups, and its own name to tell it apart. A volunteer can only be
+// signed up on one form a day.
 model SignupForm {
   id          String     @id @default(cuid())
+  // Unique among the forms on its day, ignoring case.
+  name        String
   // The build day, in the Indiana time zone.
-  date        DateTime   @unique @db.Date
+  date        DateTime   @db.Date
   description String?    @db.Text
   status      FormStatus @default(DRAFT)
   // Volunteers can fill it out from opensAt until closesAt. A published form
-  // is visible before it opens.
+  // is visible before it opens: listed on the home page, unless it isn't
+  // listed, and then only through its link.
   opensAt     DateTime
   closesAt    DateTime
+  listed      Boolean    @default(true)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -179,11 +186,28 @@ model SignupForm {
   cancelledAt     DateTime?
   cancelledByName String?
 
+  // Which optional questions the form asks. Without the transportation
+  // questions (for a group that gets itself there), nobody is asked how
+  // they're getting there or for driver approval, and everyone counts as
+  // getting there on their own. Without the friends question, nobody is
+  // asked who they'd like to be placed with, and earlier requests are
+  // ignored. Either can change after signups; answers given are kept.
+  askTransportation Boolean @default(true)
+  askGroups         Boolean @default(true)
+
+  // When an admin saved custom assignments, after the form closed, and
+  // their name, copied as above. Until then (or after reverting), each
+  // volunteer's build comes from the app's placement (src/lib/placement);
+  // once saved, it's each signup's assignedShift.
+  assignmentsSavedAt     DateTime?
+  assignmentsSavedByName String?
+
   shifts   Shift[]
   sections FormSection[]
   signups  FormSignup[]
 
   @@index([status, date])
+  @@index([date])
 }
 
 // One of the builds on a form's day: a group working at one address, which
@@ -195,6 +219,8 @@ model Shift {
   name        String
   address     String
   description String?   @db.Text
+  // What volunteers do for lunch there, such as "Bring a packed lunch".
+  lunch       String?   @db.Text
   // On the form's day, entered and shown in Indiana time.
   startsAt    DateTime
   endsAt      DateTime
@@ -211,6 +237,7 @@ model Shift {
   form   SignupForm @relation(fields: [formId], references: [id], onDelete: Cascade)
 
   preferences ShiftPreference[]
+  assigned    FormSignup[]      @relation("Assignment")
   messages    Message[]
 
   @@index([formId, startsAt])
@@ -251,6 +278,12 @@ model Volunteer {
   // Seats in their car, counting the driver's: at least 3. Null until they
   // offer to drive others. (Before cars needed 3 seats, 0 meant no car.)
   carSeats          Int?
+  // Builds they've done are counted from their signups (src/lib/form-
+  // signups/experience.ts), and decide how experienced they are. When an
+  // admin edits the number, such as for builds before the app, this is the
+  // difference between theirs and the count, so later builds still add on.
+  // Can be negative.
+  buildsAdjustment  Int        @default(0)
   createdAt         DateTime   @default(now())
   updatedAt         DateTime   @updatedAt
 
@@ -297,13 +330,19 @@ model FormSignup {
   dateOfBirth       DateTime        @db.Date
   tShirtSize        TShirtSize
   hasDriversLicense Boolean
-  // Null for signups made before the form asked.
+  // Null for signups made before the form asked. OWN_WAY when the form
+  // didn't ask (see SignupForm.askTransportation).
   transportation    Transportation?
   // A copy of their car's seats when they offered to drive others.
   carSeats          Int?
   cancelledAt       DateTime?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
+
+  // The build an admin assigned them to, on a form with custom assignments
+  // (see SignupForm.assignmentsSavedAt). Null there means not placed.
+  assignedShiftId String?
+  assignedShift   Shift?  @relation("Assignment", fields: [assignedShiftId], references: [id], onDelete: SetNull)
 
   // Forms with signups can't be deleted, so this never cascades.
   formId String
@@ -317,6 +356,7 @@ model FormSignup {
 
   @@unique([formId, volunteerId])
   @@index([volunteerId])
+  @@index([assignedShiftId])
 }
 
 // A build a volunteer said they could work at. Admins use these to place

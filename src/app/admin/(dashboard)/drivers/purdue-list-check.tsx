@@ -112,7 +112,7 @@ function ListCheck({ listUrl }: { listUrl: string }) {
           </Step>
 
           <Step number={3} title="Check the list" hint="Matches show up below, ready to approve.">
-            <Button type="submit" size="sm" className="w-fit" disabled={checking || !fileName}>
+            <Button type="submit" size="sm" className="w-fit" loading={checking} disabled={!fileName}>
               {checking ? "Checking…" : "Check list"}
             </Button>
           </Step>
@@ -177,11 +177,14 @@ function Results({
   const [pending, startTransition] = useTransition();
   // Approving emails each driver, so the admin confirms these first.
   const [confirming, setConfirming] = useState<ListMatch[] | null>(null);
+  // Who's being approved right now, so their buttons show it's working.
+  const [approving, setApproving] = useState<Set<string>>(new Set());
   const waiting = check.matches.filter((match) => !approved.has(match.volunteerId));
 
   function approve(matches: ListMatch[]) {
     setConfirming(null);
     setError(null);
+    setApproving(new Set(matches.map((match) => match.volunteerId)));
     startTransition(async () => {
       const result = await approveFromPurdueList(
         matches.map(({ volunteerId, until }) => ({ volunteerId, until })),
@@ -205,7 +208,12 @@ function Results({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-medium">Ready to approve</h3>
             {waiting.length > 1 && (
-              <Button size="sm" disabled={pending} onClick={() => setConfirming(waiting)}>
+              <Button
+                size="sm"
+                loading={pending && approving.size > 1}
+                disabled={pending}
+                onClick={() => setConfirming(waiting)}
+              >
                 {pending ? "Approving…" : `Approve all ${waiting.length}`}
               </Button>
             )}
@@ -254,7 +262,13 @@ function Results({
                           {match.kind === "extend" ? "Extended" : "Approved"}
                         </span>
                       ) : (
-                        <Button size="sm" variant="outline" disabled={pending} onClick={() => setConfirming([match])}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          loading={pending && approving.has(match.volunteerId)}
+                          disabled={pending}
+                          onClick={() => setConfirming([match])}
+                        >
                           {match.kind === "extend" ? "Extend" : "Approve"}
                         </Button>
                       )}

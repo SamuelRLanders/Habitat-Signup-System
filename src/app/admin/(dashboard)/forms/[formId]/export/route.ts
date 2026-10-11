@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getAdmin } from "@/lib/auth/dal";
 import { toCsv } from "@/lib/csv";
+import { EXPERIENCE_LABELS, experienceOf } from "@/lib/experience";
 import { getFormRoster } from "@/lib/form-signups/rosters";
 import { getSignupForm, shiftLabel } from "@/lib/signup-forms/queries";
 import { toDay } from "@/lib/time";
@@ -24,6 +25,8 @@ const HEADER = [
   "transportation",
   "carSeats",
   "groupWith", // the Purdue emails they asked to be placed with
+  "buildsBefore", // builds they'd been on before this day
+  "experience",
   "status",
   "signedUpAt",
   "updatedAt",
@@ -44,7 +47,7 @@ export async function GET(
   const form = await getSignupForm(formId);
   if (!form) return new Response("This form no longer exists.", { status: 404 });
 
-  const roster = await getFormRoster(form.id, form.shifts);
+  const roster = await getFormRoster(form.id, form.day, form.shifts);
   const rows = roster.map((signup) => [
     signup.email,
     signup.firstName,
@@ -59,6 +62,8 @@ export async function GET(
     signup.transportation,
     signup.carSeats,
     signup.groupEmails.join("; "),
+    signup.builds,
+    EXPERIENCE_LABELS[experienceOf(signup.builds)],
     signup.cancelledAt ? "cancelled" : "signed up",
     signup.createdAt,
     signup.updatedAt,

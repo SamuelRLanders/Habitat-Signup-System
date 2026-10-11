@@ -147,7 +147,7 @@ export function PeopleSearchBar({
           )}
         </div>
 
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" loading={pending}>
           {pending ? "Searching…" : "Search"}
         </Button>
       </form>

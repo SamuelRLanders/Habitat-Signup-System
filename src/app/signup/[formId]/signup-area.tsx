@@ -1,8 +1,9 @@
 import { CheckCircle2Icon, CheckIcon } from "lucide-react";
+import Link from "next/link";
 import { ActionButton } from "@/components/action-button";
 import { EmailCodeForm } from "@/components/email-code-form";
 import { Panel } from "@/components/panel";
-import { Button } from "@/components/ui/button";
+import { SubmitButton } from "@/components/submit-button";
 import {
   forgetVerifiedEmail,
   sendSignupCode,
@@ -14,6 +15,8 @@ import {
   cancelDeadline,
   getAskedToGroupWith,
   getMySignup,
+  sameDayMessage,
+  sameDaySignup,
   type AskedToGroupWith,
   type MySignup,
 } from "@/lib/form-signups/queries";
@@ -32,7 +35,11 @@ import { SignupFields, type BuildChoice, type DetailsDefaults } from "./signup-f
 type SignupAreaProps = {
   form: {
     id: string;
+    name: string;
+    date: Date;
     day: string;
+    askTransportation: boolean;
+    askGroups: boolean;
     shifts: OfferedShift[];
     sections: { id: string; title: string; body: string }[];
   };
@@ -80,9 +87,12 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
   const mine = await getMySignup(form.id, email);
   const active = mine?.signup && !mine.signup.cancelledAt ? mine.signup : null;
   // On a day with more than one build, volunteers can ask to be placed with
-  // friends (src/lib/placement). Who has already asked for them:
-  const grouping = form.shifts.length > 1;
+  // friends (src/lib/placement), unless the form doesn't ask. Who has
+  // already asked for them:
+  const grouping = form.askGroups && form.shifts.length > 1;
   const askedBy = grouping ? await getAskedToGroupWith(form.id, email) : [];
+  // A volunteer can only be signed up on one of a day's forms.
+  const sameDay = open && !active ? await sameDaySignup(prisma, form.id, form.date, email) : null;
 
   let content;
   if (active) {
@@ -93,7 +103,7 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
           details={mine!.details}
           shifts={form.shifts}
           chosen={active.shiftIds}
-          transportation={active.transportation}
+          transportation={form.askTransportation ? active.transportation : null}
           carSeats={mine!.carSeats}
           groupEmails={grouping ? active.groupEmails : []}
           askedBy={askedBy}
@@ -113,8 +123,8 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
             confirm={{
               title: "Cancel your signup?",
               description: open
-                ? `You'll be taken off the list for ${formatDay(form.day, "short")}. You can sign up again while the form is open, if there's still room.`
-                : `You'll be taken off the list for ${formatDay(form.day, "short")}. The form has closed, so you won't be able to sign up again.`,
+                ? `You'll be taken off the list for ${form.name} on ${formatDay(form.day, "short")}. You can sign up again while the form is open, if there's still room.`
+                : `You'll be taken off the list for ${form.name} on ${formatDay(form.day, "short")}. The form has closed, so you won't be able to sign up again.`,
               confirmLabel: "Cancel signup",
             }}
           />
@@ -131,11 +141,30 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
         </p>
       </Panel>
     );
+  } else if (sameDay) {
+    content = (
+      <Panel title="Already signed up for this day">
+        <p className="text-sm text-muted-foreground">
+          {sameDayMessage(sameDay.name)}{" "}
+          <Link href={`/signup/${sameDay.id}`} className="underline underline-offset-4">
+            Go to {sameDay.name}
+          </Link>
+          .
+        </p>
+      </Panel>
+    );
   } else {
     // Who each build has room for, given everyone already signed up.
-    const rooms = buildRoom(await loadPlacementDay(prisma, form.id, form.shifts));
+    const rooms = buildRoom(
+      await loadPlacementDay(prisma, form.id, form.shifts, form.askTransportation),
+    );
     const capacity = form.shifts.reduce((sum, shift) => sum + shift.capacity, 0);
-    const full = [...rooms.values()].every((room) => room.driverMinSeats === null);
+    // Full when there's no room for anyone. A driver can fit where nobody
+    // else can, by bringing riders' seats; without transportation, everyone
+    // gets there on their own.
+    const full = [...rooms.values()].every((room) =>
+      form.askTransportation ? room.driverMinSeats === null : !room.ownWay,
+    );
     content =
       capacity === 0 ? (
         <Message>No builds are scheduled for this day right now, so there&apos;s nothing to sign up for yet.</Message>
@@ -155,6 +184,7 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
             defaults={mine ? toDefaults(mine.details) : null}
             driver={mine?.driver ?? { status: "none" }}
             savedCarSeats={mine?.carSeats ?? null}
+            askTransportation={form.askTransportation}
             grouping={grouping ? { askedBy: askedBy.map((asker) => asker.name) } : null}
           />
         </>
@@ -197,9 +227,9 @@ function SignedIn({ email }: { email: string }) {
           </span>
         </span>
         <form action={forgetVerifiedEmail}>
-          <Button type="submit" variant="outline" size="sm">
+          <SubmitButton variant="outline" size="sm">
             Not you? Use a different email
-          </Button>
+          </SubmitButton>
         </form>
       </div>
     </Panel>
@@ -284,7 +314,14 @@ function Summary({
         ) : (
           <ul className="flex flex-col gap-1">
             {chosenShifts.map((shift) => (
-              <li key={shift.id}>{shiftLabel(shift)}</li>
+              <li key={shift.id}>
+                {shiftLabel(shift)}
+                {shift.lunch && (
+                  <span className="block whitespace-pre-line text-muted-foreground">
+                    Lunch: {shift.lunch}
+                  </span>
+                )}
+              </li>
             ))}
           </ul>
         )}
@@ -320,6 +357,7 @@ function toChoice(shift: OfferedShift, room: BuildRoom): BuildChoice {
     address: shift.address,
     time: shiftTime(shift),
     description: shift.description,
+    lunch: shift.lunch,
     room,
   };
 }

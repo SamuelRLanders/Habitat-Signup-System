@@ -25,6 +25,7 @@ export const offeredShifts = {
     name: true,
     address: true,
     description: true,
+    lunch: true,
     startsAt: true,
     endsAt: true,
     capacity: true,
@@ -58,12 +59,13 @@ export const FORM_LIST_TABS = ["upcoming", "past"] as const;
 export type FormListTab = (typeof FORM_LIST_TABS)[number];
 
 // Forms for today and later, soonest first, or earlier ones, most recent
-// first, each with its build count, total spots and signups.
+// first (forms on the same day by name), each with its build count, total
+// spots and signups.
 export async function listSignupForms(tab: FormListTab) {
   const day = fromDay(today());
   const forms = await prisma.signupForm.findMany({
     where: { date: tab === "upcoming" ? { gte: day } : { lt: day } },
-    orderBy: { date: tab === "upcoming" ? "asc" : "desc" },
+    orderBy: [{ date: tab === "upcoming" ? "asc" : "desc" }, { name: "asc" }],
     include: {
       shifts: { where: offeredShifts.where, select: { capacity: true } },
       _count: { select: { signups: { where: { cancelledAt: null } } } },
@@ -109,15 +111,16 @@ export async function getSignupForm(formId: string) {
 // Whether a form is open depends on the time, so these wait for a request
 // rather than being rendered once at build time.
 
-// Published forms that haven't closed, soonest first, with the names of
-// their builds.
+// Published forms listed on the home page that haven't closed, soonest
+// first, with the names of their builds.
 export async function listPublicForms() {
   await connection();
   const forms = await prisma.signupForm.findMany({
-    where: { status: "PUBLISHED", closesAt: { gt: new Date() } },
-    orderBy: { date: "asc" },
+    where: { status: "PUBLISHED", listed: true, closesAt: { gt: new Date() } },
+    orderBy: [{ date: "asc" }, { name: "asc" }],
     select: {
       id: true,
+      name: true,
       date: true,
       status: true,
       opensAt: true,
@@ -141,11 +144,14 @@ export const getPublicForm = cache(async (formId: string) => {
     where: { id: formId, status: { in: ["PUBLISHED", "CANCELLED"] } },
     select: {
       id: true,
+      name: true,
       date: true,
       status: true,
       description: true,
       opensAt: true,
       closesAt: true,
+      askTransportation: true,
+      askGroups: true,
       shifts: offeredShifts,
       sections: {
         orderBy: { position: "asc" },

@@ -8,6 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { EXPERIENCE_LABELS, experienceOf } from "@/lib/experience";
 import { formatPhone } from "@/lib/phone";
 import { DEFAULT_TIME_ZONE, formatDate, formatDay } from "@/lib/time";
 import {
@@ -31,6 +32,8 @@ export type VolunteerRow = {
   carSeats: number | null;
   driver: DriverStatus;
   createdAt: Date;
+  // How many builds they'd been on before this day.
+  builds: number;
   // Builds to list for them, such as "Maple Street Home".
   shifts: string[];
   // Friends they asked to be placed with, or who asked for them, such as
@@ -42,19 +45,22 @@ export type VolunteerRow = {
 // Volunteers who signed up for a build day, with the details from their
 // signup. Ages are on the build day. Brief leaves out ages and when they
 // signed up. Scrollable fills the space it's given and scrolls inside it,
-// keeping the header in view, as in a popup.
+// keeping the header in view, as in a popup. Travel shows how they're
+// getting there; it's left out for a form that doesn't ask.
 export function VolunteerTable({
   rows,
   day,
   shiftsHeading,
   brief = false,
   scrollable = false,
+  travel = true,
 }: {
   rows: VolunteerRow[];
   day: string;
   shiftsHeading: string;
   brief?: boolean;
   scrollable?: boolean;
+  travel?: boolean;
 }) {
   const showFriends = rows.some((row) => row.friends && row.friends.length > 0);
   return (
@@ -80,7 +86,8 @@ export function VolunteerTable({
             {!brief && <TableHead className="text-right">Age</TableHead>}
             <TableHead>T-shirt</TableHead>
             <TableHead>Driver</TableHead>
-            <TableHead>Getting there</TableHead>
+            <TableHead>Experience</TableHead>
+            {travel && <TableHead>Getting there</TableHead>}
             <TableHead>{shiftsHeading}</TableHead>
             {showFriends && <TableHead>Friends</TableHead>}
             {!brief && <TableHead>Signed up</TableHead>}
@@ -106,19 +113,24 @@ export function VolunteerTable({
                 <DriverCell license={row.hasDriversLicense} driver={row.driver} />
               </TableCell>
               <TableCell className="whitespace-nowrap">
-                {row.transportation ? (
-                  <>
-                    {TRANSPORTATION_SHORT[row.transportation]}
-                    {row.transportation === "CAN_DRIVE" && row.carSeats !== null && (
-                      <span className="block text-xs text-muted-foreground">
-                        {seatsLabel(row.carSeats)}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
+                <ExperienceCell builds={row.builds} />
               </TableCell>
+              {travel && (
+                <TableCell className="whitespace-nowrap">
+                  {row.transportation ? (
+                    <>
+                      {TRANSPORTATION_SHORT[row.transportation]}
+                      {row.transportation === "CAN_DRIVE" && row.carSeats !== null && (
+                        <span className="block text-xs text-muted-foreground">
+                          {seatsLabel(row.carSeats)}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+              )}
               <TableCell className="text-sm">
                 {row.shifts.length === 0 ? (
                   <span className="text-muted-foreground">—</span>
@@ -158,6 +170,19 @@ export function VolunteerTable({
         </TableBody>
       </Table>
     </div>
+  );
+}
+
+// "High" over "7 builds", or "New" over "No builds".
+function ExperienceCell({ builds }: { builds: number }) {
+  const level = experienceOf(builds);
+  return (
+    <>
+      <span className={cn(level === "high" && "font-medium")}>{EXPERIENCE_LABELS[level]}</span>
+      <span className="block text-xs text-muted-foreground">
+        {builds === 0 ? "No builds" : `${builds} ${builds === 1 ? "build" : "builds"}`}
+      </span>
+    </>
   );
 }
 

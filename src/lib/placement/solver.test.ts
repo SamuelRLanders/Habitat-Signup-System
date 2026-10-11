@@ -193,6 +193,56 @@ describe("planDay with friends who asked to be together", () => {
   });
 });
 
+describe("planDay with highly experienced volunteers", () => {
+  const twoBuilds = [
+    { id: "A", capacity: 4 },
+    { id: "B", capacity: 4 },
+  ];
+  const expert = (travel: Travel, buildIds: string[], carSeats = 0) => ({
+    ...volunteer(travel, buildIds, carSeats),
+    experienced: true,
+  });
+
+  it("sends one to each build when it can", () => {
+    // Both experts could go anywhere; the new volunteers are split between
+    // the builds, so each build needs one of the experts.
+    const [first, second] = [expert("ownWay", ["A", "B"]), expert("ownWay", ["A", "B"])];
+    const day: Day = {
+      builds: twoBuilds,
+      volunteers: [first, second, ...ownWay(2, ["A"]), ...ownWay(2, ["B"])],
+    };
+    const plan = planDay(day);
+    assert.notEqual(plan.placement.get(first.id), plan.placement.get(second.id));
+    assert.equal(plan.builds.get("A")!.experienced, 1);
+    assert.equal(plan.builds.get("B")!.experienced, 1);
+  });
+
+  it("never holds more spots for drivers to spread them out", () => {
+    // The expert driver's car carries A's 3 riders. Sending them to B,
+    // which has no expert, would leave A's riders without a car.
+    const driver = expert("driver", ["A", "B"], 4);
+    const day: Day = {
+      builds: twoBuilds,
+      volunteers: [driver, ...riders(3, ["A"]), ...ownWay(2, ["B"])],
+    };
+    const plan = planDay(day);
+    assert.equal(plan.placement.get(driver.id), "A");
+    assert.equal(plan.builds.get("A")!.heldDriverSpots, 0);
+  });
+
+  it("puts a build's expert ahead of keeping friends together", () => {
+    // The expert asked to be with Alice at A, but A already has an expert
+    // and B has none.
+    const [lead, other, alice] = [expert("ownWay", ["A"]), expert("ownWay", ["A", "B"]), volunteer("ownWay", ["A"])];
+    const day: Day = {
+      builds: twoBuilds,
+      volunteers: [lead, other, alice, ...ownWay(2, ["B"])],
+      together: [[other.id, alice.id]],
+    };
+    assert.equal(planDay(day).placement.get(other.id), "B");
+  });
+});
+
 // ─── Compared with trying every placement ────────────────────────────────────
 
 // Pairs (from day.together) placed at the same build.
@@ -202,11 +252,16 @@ function pairsTogether(day: Day, placement: Map<string, string>) {
   ).length;
 }
 
+// Builds with someone highly experienced placed there.
+function buildsLed(builds: Map<string, { experienced: number }>) {
+  return [...builds.values()].filter((build) => build.experienced > 0).length;
+}
+
 // Tries every way of placing (or leaving out) each volunteer and returns the
 // most that can be placed, then among those the fewest held spots, then the
-// most pairs together.
+// most builds with someone highly experienced, then the most pairs together.
 function bruteForce(day: Day) {
-  let best = { placed: -1, held: Infinity, together: -1 };
+  let best = { placed: -1, held: Infinity, led: -1, together: -1 };
   const placement = new Map<string, string>();
 
   const tryFrom = (index: number) => {
@@ -214,14 +269,17 @@ function bruteForce(day: Day) {
       const builds = checkPlacement(day, placement);
       if (!builds) return;
       const held = [...builds.values()].reduce((sum, build) => sum + build.heldDriverSpots, 0);
+      const led = buildsLed(builds);
       const together = pairsTogether(day, placement);
       const better =
         placement.size !== best.placed
           ? placement.size > best.placed
           : held !== best.held
             ? held < best.held
-            : together > best.together;
-      if (better) best = { placed: placement.size, held, together };
+            : led !== best.led
+              ? led > best.led
+              : together > best.together;
+      if (better) best = { placed: placement.size, held, led, together };
       return;
     }
     const { id, buildIds } = day.volunteers[index];
@@ -255,7 +313,7 @@ function randomDay(next: (below: number) => number): Day {
     const travel = (["rider", "rider", "ownWay", "driver"] as const)[next(4)];
     const buildIds = builds.filter(() => next(5) < 2).map((b) => b.id);
     if (buildIds.length === 0) buildIds.push(builds[next(buildCount)].id);
-    return volunteer(travel, buildIds, 3 + next(5));
+    return { ...volunteer(travel, buildIds, 3 + next(5)), experienced: next(3) === 0 };
   });
   // A few different pairs who asked to be together.
   const together = new Map<string, [string, string]>();
@@ -278,7 +336,12 @@ describe("compared with trying every placement", () => {
       const held = [...plan.builds.values()].reduce((sum, build) => sum + build.heldDriverSpots, 0);
       assert.ok(plan.proven);
       assert.deepEqual(
-        { placed: plan.placement.size, held, together: pairsTogether(day, plan.placement) },
+        {
+          placed: plan.placement.size,
+          held,
+          led: buildsLed(plan.builds),
+          together: pairsTogether(day, plan.placement),
+        },
         expected,
         `day ${JSON.stringify(day)}`,
       );

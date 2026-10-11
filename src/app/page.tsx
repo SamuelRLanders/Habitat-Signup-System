@@ -49,6 +49,7 @@ export default async function HomePage() {
                     >
                       <span className="flex flex-wrap items-center gap-2">
                         <span className="font-medium">{formatDay(form.day)}</span>
+                        <span className="text-muted-foreground">· {form.name}</span>
                         {open ? (
                           <Badge className="bg-gold text-black">Open</Badge>
                         ) : (

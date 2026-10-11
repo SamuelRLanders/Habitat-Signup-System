@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SiteBrand } from "@/components/site-brand";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { SubmitButton } from "@/components/submit-button";
+import { buttonVariants } from "@/components/ui/button";
 import { signOut } from "@/lib/auth/actions";
 import { requireAdmin } from "@/lib/auth/dal";
 import { AdminNav } from "./admin-nav";
@@ -27,9 +28,9 @@ export default async function DashboardLayout({
             Volunteer site
           </Link>
           <form action={signOut}>
-            <Button type="submit" variant="outline" size="sm">
+            <SubmitButton variant="outline" size="sm">
               Sign out
-            </Button>
+            </SubmitButton>
           </form>
         </div>
       </header>

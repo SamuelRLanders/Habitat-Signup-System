@@ -46,10 +46,15 @@ import type { BuildRoom } from "./room";
 //   held spot) of their own: 7 + 2 + 1 + 1 = 11. An own-way volunteer or
 //   another driver could.
 //
-// Volunteers can also ask to be placed with friends. That's only a wish, not
-// a rule: it never decides whether someone can sign up or be placed. Among
-// the plans that place the most volunteers with the fewest held spots, the
-// plan for admins keeps as many of those pairs together as it can.
+// Two wishes come after the rules. Neither decides whether someone can
+// sign up or be placed; they only choose between plans that place the most
+// volunteers with the fewest held spots. In order:
+//
+//   • Experience. Every build should have someone highly experienced (6 or
+//     more builds, see src/lib/experience.ts) to lead it, so the plan for
+//     admins sends one to as many builds as it can.
+//   • Friends. Volunteers can ask to be placed with friends, and the plan
+//     keeps as many of those pairs together as it can.
 //
 // A day can take a new signup if there's still a plan that places everyone,
 // the new volunteer included. A build can take one if there's a plan that
@@ -95,6 +100,9 @@ export type PlacementVolunteer = {
   carSeats: number;
   // The builds they could work at.
   buildIds: string[];
+  // Highly experienced (see src/lib/experience.ts). Only the plan for
+  // admins looks at this (see planDay()).
+  experienced?: boolean;
 };
 
 export type Day = {
@@ -138,6 +146,8 @@ export type BuildPlan = {
   passengerSeats: number;
   // Spots held for drivers who haven't signed up yet.
   heldDriverSpots: number;
+  // Highly experienced volunteers placed there.
+  experienced: number;
 };
 
 // Volunteers placed at a build, not counting held spots.
@@ -145,36 +155,57 @@ export function placedAt(build: BuildPlan) {
   return build.riders + build.ownWay + build.drivers;
 }
 
-// Checks a placement against the rules, one build at a time. Returns what
-// each build looks like (by build ID), or null if the placement breaks a
-// rule. Volunteers left out of the placement don't count anywhere.
-export function checkPlacement(day: Day, placement: Placement): Map<string, BuildPlan> | null {
+// What each build looks like under a placement (by build ID), without
+// checking the rules: anyone can be anywhere, as in admins' custom
+// assignments. Volunteers left out, or placed at a build that isn't on the
+// day, don't count anywhere.
+export function tallyPlacement(day: Day, placement: Placement): Map<string, BuildPlan> {
   const builds = new Map<string, BuildPlan>(
     day.builds.map((build) => [
       build.id,
-      { capacity: build.capacity, riders: 0, ownWay: 0, drivers: 0, passengerSeats: 0, heldDriverSpots: 0 },
+      {
+        capacity: build.capacity,
+        riders: 0,
+        ownWay: 0,
+        drivers: 0,
+        passengerSeats: 0,
+        heldDriverSpots: 0,
+        experienced: 0,
+      },
     ]),
   );
-
-  // Tally who's at each build.
   for (const volunteer of day.volunteers) {
-    const buildId = placement.get(volunteer.id);
-    if (buildId === undefined) continue; // left out
-    const build = builds.get(buildId);
-    // Volunteers can only be placed at a build they chose.
-    if (!build || !volunteer.buildIds.includes(buildId)) return null;
-
+    const build = builds.get(placement.get(volunteer.id) ?? "");
+    if (!build) continue;
     if (volunteer.travel === "rider") build.riders += 1;
     if (volunteer.travel === "ownWay") build.ownWay += 1;
     if (volunteer.travel === "driver") build.drivers += 1;
     build.passengerSeats += passengerSeats(volunteer);
+    if (volunteer.experienced) build.experienced += 1;
   }
-
+  // Riders without a seat in a driver's car get one in a car we're waiting
+  // for, whose driver's spot is held.
   for (const build of builds.values()) {
-    // Rule 2, rides: riders without a seat in a driver's car get one in a
-    // car we're waiting for, whose driver's spot is held.
     build.heldDriverSpots = heldDriverSpots(build.riders, build.passengerSeats);
-    // Rule 1, room: everyone placed there, plus the held spots, fits.
+  }
+  return builds;
+}
+
+// Checks a placement against the rules, one build at a time. Returns what
+// each build looks like (by build ID), or null if the placement breaks a
+// rule. Volunteers left out of the placement don't count anywhere.
+export function checkPlacement(day: Day, placement: Placement): Map<string, BuildPlan> | null {
+  const offered = new Set(day.builds.map((build) => build.id));
+  for (const volunteer of day.volunteers) {
+    const buildId = placement.get(volunteer.id);
+    if (buildId === undefined) continue; // left out
+    // Volunteers can only be placed at a build they chose.
+    if (!offered.has(buildId) || !volunteer.buildIds.includes(buildId)) return null;
+  }
+  const builds = tallyPlacement(day, placement);
+  // Rule 1, room: everyone placed there, plus the spots held for drivers
+  // (rule 2, rides), fits.
+  for (const build of builds.values()) {
     if (placedAt(build) + build.heldDriverSpots > build.capacity) return null;
   }
   return builds;
@@ -187,7 +218,8 @@ export function checkPlacement(day: Day, placement: Placement): Map<string, Buil
 //   "most":     a plan that places as many volunteers as possible.
 //   "best":     as many as possible and, among those plans, the one that
 //               holds the fewest spots for drivers (so the fewest drivers
-//               still needed), then keeps the most pairs who asked to be
+//               still needed), then sends someone highly experienced to
+//               the most builds, then keeps the most pairs who asked to be
 //               together at the same build.
 type Goal = "everyone" | "most" | "best";
 
@@ -207,26 +239,31 @@ const DEFAULT_TIME_LIMIT_MS = 2000;
 // waste time trying to swap two people who are, for the rules, the same.
 // Someone who asked to be with a friend isn't interchangeable with anyone,
 // so when that counts, they're a group of their own (the separate IDs).
+// Likewise, when experience counts (byExperience), the highly experienced
+// are grouped apart from everyone else.
 type Group = {
   travel: Travel;
   carSeats: number;
   buildIds: string[];
+  experienced: boolean;
   memberIds: string[];
 };
 
-function groupInterchangeable(day: Day, separate = new Set<string>()): Group[] {
+function groupInterchangeable(day: Day, separate = new Set<string>(), byExperience = false): Group[] {
   const offered = new Set(day.builds.map((build) => build.id));
   const groups = new Map<string, Group>();
   for (const volunteer of day.volunteers) {
     const buildIds = [...new Set(volunteer.buildIds)].filter((id) => offered.has(id)).sort();
     const carSeats = volunteer.travel === "driver" ? volunteer.carSeats : 0;
+    const experienced = byExperience && volunteer.experienced === true;
     const key = JSON.stringify([
       volunteer.travel,
       carSeats,
       buildIds,
+      experienced,
       separate.has(volunteer.id) ? volunteer.id : null,
     ]);
-    const group = groups.get(key) ?? { travel: volunteer.travel, carSeats, buildIds, memberIds: [] };
+    const group = groups.get(key) ?? { travel: volunteer.travel, carSeats, buildIds, experienced, memberIds: [] };
     group.memberIds.push(volunteer.id);
     groups.set(key, group);
   }
@@ -255,11 +292,14 @@ function togetherPairs(day: Day, groups: Group[]): [number, number][] {
 // The solver's unknowns, all whole numbers of 0 or more:
 //   place:    how many volunteers from a group go to a build (one of theirs).
 //   hold:     how many spots are held for drivers at a build.
+//   led:      1 if someone highly experienced is placed at a build ("best"
+//             only).
 //   together: 1 if a pair who asked to be together are both placed at a
 //             build ("best" only).
 type Unknown =
   | { kind: "place"; group: Group; buildId: string }
   | { kind: "hold"; buildId: string }
+  | { kind: "led"; buildId: string }
   | { kind: "together"; pair: number; buildId: string };
 
 // Writes the rules as sums the solver can work with. Each rule is a
@@ -269,17 +309,31 @@ function writeModel(day: Day, groups: Group[], goal: Goal): Model<Unknown, strin
   const constraints = new Map<string, { max?: number; equal?: number }>();
   const unknowns: [Unknown, Record<string, number>][] = [];
   const pairs = goal === "best" ? togetherPairs(day, groups) : [];
+  // The builds someone highly experienced could go to ("best" only).
+  const ledBuilds = new Set(groups.filter((group) => group.experienced).flatMap((group) => group.buildIds));
 
   // For "best", each goal has to beat everything after it: placing one more
-  // volunteer beats any number of held spots and pairs kept together, and
-  // holding one spot fewer beats any number of pairs. So a pair together
-  // scores 1, a held spot costs one more than all the pairs, and a placed
+  // volunteer beats any number of held spots, led builds and pairs kept
+  // together; holding one spot fewer beats any number of led builds and
+  // pairs; and one more led build beats any number of pairs. So a pair
+  // together scores 1, a led build one more than all the pairs, a held spot
+  // costs one more than all the led builds and pairs, and a placed
   // volunteer scores more than the most spots a day can hold (all of them)
-  // plus all the pairs.
+  // plus all the rest.
   const totalSpots = day.builds.reduce((sum, build) => sum + build.capacity, 0);
-  const heldCost = pairs.length + 1;
+  const ledScore = pairs.length + 1;
+  const heldCost = ledBuilds.size * ledScore + pairs.length + 1;
   const placedScore = goal === "most" ? 1 : (totalSpots + 1) * heldCost;
   const heldScore = goal === "best" ? -heldCost : 0;
+
+  // Led: (build led) − (highly experienced volunteers placed there) ≤ 0,
+  // and a build counts as led once, however many of them are there.
+  for (const buildId of ledBuilds) {
+    const name = `led at ${buildId}`;
+    constraints.set(name, { max: 0 });
+    constraints.set(`${name}: once`, { max: 1 });
+    unknowns.push([{ kind: "led", buildId }, { [name]: 1, [`${name}: once`]: 1, score: ledScore }]);
+  }
 
   // Together: (pair together at a build) − (each of them placed there) ≤ 0,
   // so a pair only counts as together where both of them are. Each place
@@ -331,7 +385,8 @@ function writeModel(day: Day, groups: Group[], goal: Goal): Model<Unknown, strin
       // (driver).
       const seats =
         group.travel === "rider" ? 1 : group.travel === "driver" ? -Math.max(0, group.carSeats - 1) : 0;
-      const links = pairLinks.get(`${index} at ${buildId}`) ?? [];
+      const links = [...(pairLinks.get(`${index} at ${buildId}`) ?? [])];
+      if (group.experienced) links.push(`led at ${buildId}`);
       unknowns.push([
         { kind: "place", group, buildId },
         {
@@ -358,9 +413,10 @@ function writeModel(day: Day, groups: Group[], goal: Goal): Model<Unknown, strin
 
 // Asks the solver for a plan, then double-checks it against the rules.
 function search(day: Day, goal: Goal, timeLimitMs = DEFAULT_TIME_LIMIT_MS): Search {
-  // Only "best" keeps pairs together, so only then are they groups of their own.
+  // Only "best" keeps pairs together and looks at experience, so only then
+  // do they make groups of their own.
   const separate = new Set(goal === "best" ? (day.together ?? []).flat() : []);
-  const groups = groupInterchangeable(day, separate);
+  const groups = groupInterchangeable(day, separate, goal === "best");
   // Someone with no builds left to choose from (their builds were all
   // cancelled) can't be placed anywhere.
   if (goal === "everyone" && groups.some((group) => group.buildIds.length === 0)) {
@@ -504,8 +560,9 @@ export type DayPlan = {
 };
 
 // A likely plan for the day, for admins: everyone placed if possible (or
-// as many as possible), holding as few spots for drivers as possible. It
-// isn't final; admins decide where people go.
+// as many as possible), holding as few spots for drivers as possible, then
+// someone highly experienced at as many builds as possible, then friends
+// together. It isn't final; admins decide where people go.
 export function planDay(day: Day, timeLimitMs = 1000): DayPlan {
   const plan = (placement: Placement, proven: boolean): DayPlan => ({
     placement,

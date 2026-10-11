@@ -15,12 +15,17 @@ A web app for the Purdue Habitat for Humanity chapter. Volunteer organization le
 - Cancel their signup until the day's first build starts, with an email each time. Signups can't be changed: to change one, volunteers cancel and sign up again while the form is open
 
 **For admins (sign in with an emailed code)**
-- Create one signup form per build day, with open and close times, a description, sections, and the day's builds (name, address, start and end time, spots, description)
+- Create signup forms for a build day, each with a name, open and close times, a description, sections, and its builds. A day can have several separate forms, such as one for an outside group, which can be left off the home page and shared by link. Volunteers can only sign up on one form a day.
+- Give each build a name, address, start and end time, spots, description and lunch note
+- Turn off a form's transportation questions, for a group getting itself to the build: volunteers aren't asked how they're getting there or for driver approval, and everyone is placed as getting there on their own. Turn off the friends question too, if it isn't wanted.
 - Cancel a build day's event: its form says the event is off, and everyone signed up is emailed. Cancelling can't be undone.
 - Before any decision that emails volunteers (cancelling an event, approving or extending a driver), see who will be emailed, with a caution if it would go past the daily email limit
 - Publish and share a form's link. A day takes a signup only while everyone can still be placed at a build they chose, with a ride if they need one (see Placing volunteers below).
 - See each form's volunteers, the builds each could work at, how many are willing to work at each build, and T-shirt and driver's license totals. Download them as a CSV with a column per build.
-- See a likely placement for each build, how many more drivers are needed, and anyone who can't be placed
+- See a likely placement for each build, how many more drivers are needed, and anyone who can't be placed. After everyone having a spot and a ride, the placement tries to send someone highly experienced to every build, then keeps friends together.
+- Track each volunteer's experience: builds are counted from past signups, and admins can edit how many builds someone has done on the People page (for builds before the app, say); later builds still add on. New is 0 builds, low 1–2, moderate 3–5, high 6 or more.
+- Once a form closes, move volunteers between builds (or out of every build) on its Assignments tab by dragging them, with warnings before saving anything that breaks the placement rules. Saved assignments are marked custom, and can be reverted to the app's default placement. They're read-only once the event day is over, when the form shows as Passed.
+- Copy the emails of the volunteers going to each build, once its form closes
 - Copy Purdue's travel roster for a build day: who's going to each build, who's driving whom, and phone numbers, following the likely placement
 - Search and filter every volunteer on the People page, and download them as a CSV
 - Approve pending drivers through an end date (suggested a year after they asked), decline them, or revoke an approval on the Drivers page. Each decision records the admin's name, and approved drivers are emailed.

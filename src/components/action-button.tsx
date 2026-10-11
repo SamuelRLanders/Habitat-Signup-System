@@ -51,7 +51,7 @@ function DirectButton({
 
   return (
     <form action={formAction} className="flex flex-col items-end gap-1">
-      <Button type="submit" variant={variant} size={size} disabled={pending}>
+      <Button type="submit" variant={variant} size={size} loading={pending}>
         {label}
       </Button>
       {state.error && (
@@ -125,7 +125,7 @@ function ConfirmForm({
         <DialogClose render={<Button variant="outline" />}>
           Never mind
         </DialogClose>
-        <Button type="submit" variant="destructive" disabled={pending}>
+        <Button type="submit" variant="destructive" loading={pending}>
           {pending ? "Working…" : confirm.confirmLabel}
         </Button>
       </DialogFooter>

@@ -2,10 +2,18 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import type { Transportation } from "@/generated/prisma/enums";
 import { currentApproval } from "@/lib/drivers/status";
+import { isHighlyExperienced } from "@/lib/experience";
 import type { RosterSignup } from "@/lib/form-signups/rosters";
 import { prisma } from "@/lib/prisma";
 import type { OfferedShift } from "@/lib/signup-forms/queries";
-import { planDay, type Day, type Placement, type PlacementVolunteer } from "./solver";
+import {
+  planDay,
+  tallyPlacement,
+  type Day,
+  type DayPlan,
+  type Placement,
+  type PlacementVolunteer,
+} from "./solver";
 import { travelRoster } from "./travel-roster";
 
 // A form's signups, ready for the placement solver (./solver.ts). Its
@@ -22,11 +30,16 @@ type Db = typeof prisma | Prisma.TransactionClient;
 //     get there themselves, so they count as getting there on their own.
 //   - Signups without a car or an answer (from before the form required
 //     them) count as needing a ride, to be safe.
+//   - On a form that doesn't ask how volunteers are getting there,
+//     everyone gets there on their own, whatever they said before it
+//     stopped asking.
 export function travelOf(
   transportation: Transportation | null,
   carSeats: number | null,
   canDriveOthers: boolean,
+  askTransportation: boolean,
 ): Pick<PlacementVolunteer, "travel" | "carSeats"> {
+  if (!askTransportation) return { travel: "ownWay", carSeats: 0 };
   const hasCar = carSeats !== null && carSeats > 0;
   if (transportation === "CAN_DRIVE" && hasCar) {
     return canDriveOthers ? { travel: "driver", carSeats } : { travel: "ownWay", carSeats: 0 };
@@ -43,13 +56,19 @@ type SignupForPlacement = {
   canDriveOthers: boolean;
   // The shifts they chose that the form still offers.
   shiftIds: string[];
+  // Highly experienced, for the plan for admins.
+  experienced?: boolean;
 };
+
+// Which of a form's optional questions it asks (see SignupForm).
+export type FormQuestions = { askTransportation: boolean; askGroups: boolean };
 
 // The solver's view of a day. Signups whose chosen shifts have all been
 // cancelled are left out: they can't be placed and don't take a spot.
 export function placementDay(
   shifts: { id: string; capacity: number }[],
   signups: SignupForPlacement[],
+  askTransportation: boolean,
 ): Day {
   return {
     builds: shifts.map(({ id, capacity }) => ({ id, capacity })),
@@ -59,8 +78,9 @@ export function placementDay(
         : [
             {
               id: signup.id,
-              ...travelOf(signup.transportation, signup.carSeats, signup.canDriveOthers),
+              ...travelOf(signup.transportation, signup.carSeats, signup.canDriveOthers, askTransportation),
               buildIds: signup.shiftIds,
+              experienced: signup.experienced,
             },
           ],
     ),
@@ -73,6 +93,7 @@ export async function loadPlacementDay(
   db: Db,
   formId: string,
   shifts: { id: string; capacity: number }[],
+  askTransportation: boolean,
 ): Promise<Day> {
   const offered = new Set(shifts.map((shift) => shift.id));
   const signups = await db.formSignup.findMany({
@@ -103,14 +124,18 @@ export async function loadPlacementDay(
       // A cancelled build isn't offered.
       shiftIds: signup.preferences.map((p) => p.shiftId).filter((id) => offered.has(id)),
     })),
+    askTransportation,
   );
 }
 
 // Pairs of signups (by ID) who asked to be placed together: one asked for
 // the other's email. One request is enough, so each pair is listed once.
+// None on a form that doesn't ask.
 export function requestedPairs(
   signups: { id: string; email: string; groupEmails: string[] }[],
+  askGroups: boolean,
 ): [string, string][] {
+  if (!askGroups) return [];
   const byEmail = new Map(signups.map((signup) => [signup.email, signup.id]));
   const pairs = new Map<string, [string, string]>();
   for (const signup of signups) {
@@ -124,16 +149,51 @@ export function requestedPairs(
   return [...pairs.values()];
 }
 
-// A likely plan for a form's active signups, for admins, with who's left
-// out and how many placed drivers are still waiting for approval. Friends
-// who asked to be together are kept together where they can be.
-export function planForRoster(shifts: { id: string; capacity: number }[], signups: RosterSignup[]) {
+// The plan for a form's active signups, for admins, with who's left out
+// and how many placed drivers are still waiting for approval. Until an
+// admin saves custom assignments, it's the app's likely plan, sending
+// someone highly experienced to each build and keeping friends who asked
+// to be together where it can. With custom assignments
+// (custom is true), it's those, whatever the rules say: anyone not
+// assigned a build is left out.
+export function planForRoster(
+  shifts: { id: string; capacity: number }[],
+  signups: RosterSignup[],
+  questions: FormQuestions,
+  custom = false,
+) {
   const day = placementDay(
     shifts,
-    signups.map((signup) => ({ ...signup, canDriveOthers: signup.driver.status !== "none" })),
+    signups.map((signup) => ({
+      ...signup,
+      canDriveOthers: signup.driver.status !== "none",
+      experienced: isHighlyExperienced(signup.builds),
+    })),
+    questions.askTransportation,
   );
-  day.together = requestedPairs(signups);
-  const plan = planDay(day);
+  let plan: Pick<DayPlan, "placement" | "builds" | "proven" | "leftOut">;
+  if (custom) {
+    // Admins can assign anyone, even someone whose builds were all
+    // cancelled, so every signup counts.
+    day.volunteers = signups.map((signup) => ({
+      id: signup.id,
+      ...travelOf(signup.transportation, signup.carSeats, signup.driver.status !== "none", questions.askTransportation),
+      buildIds: signup.shiftIds,
+      experienced: isHighlyExperienced(signup.builds),
+    }));
+    const placement: Placement = new Map(
+      signups.flatMap((signup) => (signup.assignedShiftId ? [[signup.id, signup.assignedShiftId]] : [])),
+    );
+    plan = {
+      placement,
+      builds: tallyPlacement(day, placement),
+      proven: true,
+      leftOut: signups.filter((signup) => !placement.has(signup.id)).map((signup) => signup.id),
+    };
+  } else {
+    day.together = requestedPairs(signups, questions.askGroups);
+    plan = planDay(day);
+  }
 
   const byId = new Map(signups.map((signup) => [signup.id, signup]));
   const pendingDrivers = new Map<string, number>(); // by shift ID
@@ -146,6 +206,7 @@ export function planForRoster(shifts: { id: string; capacity: number }[], signup
   }
 
   return {
+    custom,
     placement: plan.placement,
     builds: plan.builds,
     proven: plan.proven,
@@ -153,8 +214,9 @@ export function planForRoster(shifts: { id: string; capacity: number }[], signup
     pendingDrivers,
     // Drivers still needed: a spot is held for each.
     driversNeeded: [...plan.builds.values()].reduce((sum, build) => sum + build.heldDriverSpots, 0),
-    // Signups whose chosen shifts have all been cancelled.
-    withoutShifts: signups.filter((signup) => signup.shiftIds.length === 0),
+    // Signups whose chosen shifts have all been cancelled, and who aren't
+    // assigned anywhere.
+    withoutShifts: signups.filter((signup) => signup.shiftIds.length === 0 && !plan.placement.has(signup.id)),
   };
 }
 
@@ -165,6 +227,7 @@ export function travelRosterFor(
   shifts: OfferedShift[],
   signups: RosterSignup[],
   placement: Placement,
+  questions: FormQuestions,
 ) {
   return travelRoster({
     day,
@@ -173,10 +236,15 @@ export function travelRosterFor(
       id: signup.id,
       name: `${signup.firstName} ${signup.lastName}`,
       phone: signup.phone,
-      ...travelOf(signup.transportation, signup.carSeats, signup.driver.status !== "none"),
+      ...travelOf(
+        signup.transportation,
+        signup.carSeats,
+        signup.driver.status !== "none",
+        questions.askTransportation,
+      ),
       driverStatus: signup.driver.status,
     })),
     placement,
-    together: requestedPairs(signups),
+    together: requestedPairs(signups, questions.askGroups),
   });
 }

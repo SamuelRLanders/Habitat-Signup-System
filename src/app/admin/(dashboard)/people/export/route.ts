@@ -17,6 +17,7 @@ const HEADER = [
   "dateOfBirth",
   "tShirtSize",
   "hasDriversLicense",
+  "builds", // builds they've done, counting any admin edits
   "createdAt",
   "updatedAt",
 ];
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
     toDay(person.dateOfBirth),
     person.tShirtSize,
     person.hasDriversLicense,
+    person.builds,
     person.createdAt,
     person.updatedAt,
   ]);

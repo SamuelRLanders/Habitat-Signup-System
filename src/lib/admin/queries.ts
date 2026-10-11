@@ -1,6 +1,7 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { PAGE_SIZE, type PeopleSearch } from "@/lib/admin/people-search";
+import { buildsDone } from "@/lib/form-signups/experience";
 import { prisma } from "@/lib/prisma";
 import { addDays, DEFAULT_TIME_ZONE, formatDay, fromDay, toDateInput, toDay, zonedDateTime } from "@/lib/time";
 
@@ -8,8 +9,9 @@ import { addDays, DEFAULT_TIME_ZONE, formatDay, fromDay, toDateInput, toDay, zon
 // must run requireAdmin() first; these functions don't check who is asking.
 
 // One page of the People search: every volunteer who has signed up through a
-// form and matches, with their latest details and how many upcoming build
-// days they're signed up for. A page past the end shows the last page.
+// form and matches, with their latest details, how many upcoming build
+// days they're signed up for, and how many builds they've been on (before
+// the app included). A page past the end shows the last page.
 export async function searchPeople(search: PeopleSearch) {
   const today = toDateInput(new Date(), DEFAULT_TIME_ZONE);
   const where = peopleWhere(search, today);
@@ -35,6 +37,7 @@ export async function searchPeople(search: PeopleSearch) {
       _count: { select: { signups: { where: upcomingSignup(today) } } },
     },
   });
+  const builds = await buildsDone(volunteers.map((volunteer) => volunteer.id));
 
   return {
     total,
@@ -43,18 +46,20 @@ export async function searchPeople(search: PeopleSearch) {
     people: volunteers.map(({ _count, ...volunteer }) => ({
       ...volunteer,
       upcomingSignups: _count.signups,
+      builds: builds.get(volunteer.id) ?? 0,
     })),
   };
 }
 
 // Everyone matching the search, on every page, with the Volunteer table's
-// columns for the CSV download.
+// columns and how many builds they've done, for the CSV download.
 export async function exportPeople(search: PeopleSearch) {
   const today = toDateInput(new Date(), DEFAULT_TIME_ZONE);
-  return prisma.volunteer.findMany({
+  const volunteers = await prisma.volunteer.findMany({
     where: peopleWhere(search, today),
     orderBy: PEOPLE_ORDER,
     select: {
+      id: true,
       email: true,
       firstName: true,
       lastName: true,
@@ -66,15 +71,20 @@ export async function exportPeople(search: PeopleSearch) {
       updatedAt: true,
     },
   });
+  const builds = await buildsDone(volunteers.map((volunteer) => volunteer.id));
+  return volunteers.map(({ id, ...volunteer }) => ({ ...volunteer, builds: builds.get(id) ?? 0 }));
 }
 
 // Every signup form, newest day first, for the "Signed up for" filter.
 export async function listFormChoices() {
   const forms = await prisma.signupForm.findMany({
-    orderBy: { date: "desc" },
-    select: { id: true, date: true },
+    orderBy: [{ date: "desc" }, { name: "asc" }],
+    select: { id: true, name: true, date: true },
   });
-  return forms.map((form) => ({ value: form.id, label: formatDay(toDay(form.date), "short") }));
+  return forms.map((form) => ({
+    value: form.id,
+    label: `${formatDay(toDay(form.date), "short")} · ${form.name}`,
+  }));
 }
 
 const PEOPLE_ORDER: Prisma.VolunteerOrderByWithRelationInput[] = [

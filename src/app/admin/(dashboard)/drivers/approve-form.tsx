@@ -60,7 +60,7 @@ export function ApproveForm({
               aria-invalid={error ? true : undefined}
             />
           </div>
-          <Button type="submit" size="sm" disabled={pending}>
+          <Button type="submit" size="sm" loading={pending}>
             {pending ? "Approving…" : "Approve"}
           </Button>
         </div>

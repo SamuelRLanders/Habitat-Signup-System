@@ -13,7 +13,7 @@ export async function generateMetadata({
 }: PageProps<"/signup/[formId]">): Promise<Metadata> {
   const { formId } = await params;
   const form = await getPublicForm(formId);
-  return { title: form ? `Sign up for ${formatDay(form.day, "short")}` : "Signup form" };
+  return { title: form ? `Sign up for ${form.name}, ${formatDay(form.day, "short")}` : "Signup form" };
 }
 
 // A build day's public signup form, as a column of panels: the build
@@ -40,7 +40,8 @@ export default async function SignupFormPage({
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-10 sm:py-14">
         <Panel>
           <div className="flex flex-col gap-1">
-            <h1 className="text-3xl font-semibold">{formatDay(form.day)}</h1>
+            <h1 className="text-3xl font-semibold">{form.name}</h1>
+            <p className="text-lg font-medium">{formatDay(form.day)}</p>
             {phase !== "cancelled" && (
               <p className="text-sm text-muted-foreground">
                 {phase === "not-open"

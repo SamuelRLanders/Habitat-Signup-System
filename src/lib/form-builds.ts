@@ -26,6 +26,11 @@ const buildSchema = z
       .trim()
       .max(5000, "Keep the description under 5,000 characters.")
       .transform((value) => value || null),
+    lunch: z
+      .string()
+      .trim()
+      .max(1000, "Keep the lunch note under 1,000 characters.")
+      .transform((value) => value || null),
     cancelled: z.string().transform((value) => value === "yes"),
   })
   .refine((build) => build.endTime > build.startTime, {
@@ -46,6 +51,7 @@ export function parseBuilds(formData: FormData) {
   const ends = field("buildEnd");
   const spots = field("buildSpots");
   const descriptions = field("buildDescription");
+  const lunches = field("buildLunch");
   const cancelled = field("buildCancelled");
   if (ids.length > MAX_BUILDS) {
     return { ok: false as const, form: `A form can have at most ${MAX_BUILDS} builds.` };
@@ -64,6 +70,7 @@ export function parseBuilds(formData: FormData) {
       endTime: ends[index] ?? "",
       capacity: spots[index] ?? "",
       description: descriptions[index] ?? "",
+      lunch: lunches[index] ?? "",
       cancelled: cancelled[index] ?? "",
     });
     if (!parsed.success) {

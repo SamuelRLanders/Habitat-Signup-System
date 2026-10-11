@@ -23,10 +23,12 @@ import {
 } from "@/lib/admin/people-search";
 import { listFormChoices, searchPeople } from "@/lib/admin/queries";
 import { requireAdmin } from "@/lib/auth/dal";
+import { EXPERIENCE_LABELS, experienceOf } from "@/lib/experience";
 import { formatPhone } from "@/lib/phone";
 import { DEFAULT_TIME_ZONE, formatDate, toDateInput } from "@/lib/time";
 import { ageOn, shirtLabel } from "@/lib/volunteers";
 import { PeopleSearchBar } from "./people-search";
+import { BuildsDialog } from "./builds-dialog";
 
 export const metadata: Metadata = { title: "People" };
 
@@ -149,6 +151,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
                   <TableHead className="text-right">Age</TableHead>
                   <TableHead>T-shirt</TableHead>
                   <TableHead>License</TableHead>
+                  <TableHead>Experience</TableHead>
                   <TableHead className="text-right">Upcoming days</TableHead>
                   <TableHead>First signed up</TableHead>
                 </TableRow>
@@ -170,6 +173,23 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
                     </TableCell>
                     <TableCell>{shirtLabel(person.tShirtSize)}</TableCell>
                     <TableCell>{person.hasDriversLicense ? "Yes" : "No"}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <div className="flex items-center gap-1">
+                        <div className="flex flex-col">
+                          <span>{EXPERIENCE_LABELS[experienceOf(person.builds)]}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {person.builds === 0
+                              ? "No builds"
+                              : `${person.builds} ${person.builds === 1 ? "build" : "builds"}`}
+                          </span>
+                        </div>
+                        <BuildsDialog
+                          volunteerId={person.id}
+                          name={`${person.firstName} ${person.lastName}`}
+                          builds={person.builds}
+                        />
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {person.upcomingSignups}
                     </TableCell>

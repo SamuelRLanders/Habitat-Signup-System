@@ -109,13 +109,9 @@ async function seed() {
     builds: TestBuild[];
     sections?: typeof waivers;
   }) => {
-    // Forms are one per day, so leave a day alone if it has a real form.
-    if (await prisma.signupForm.findUnique({ where: { date: day(data.date) } })) {
-      console.log(`Skipped the ${data.date} test form: that day already has a form.`);
-      return null;
-    }
     return prisma.signupForm.create({
       data: {
+        name: "Test build day",
         date: day(data.date),
         status: data.status,
         opensAt: at(...data.opens),
@@ -347,6 +343,29 @@ async function seed() {
   await signUp(await person("Ivy Chen", { seats: 8, status: "approved" }), oct31, ["Elm Court Landscaping"], "CAN_DRIVE", true);
   await signUpAll(["Abe Moore", "Bea Long", "Cal Ruiz", "Dee Fox", "Eve Kim", "Fay Diaz", "Gus Hill"], oct31, ["Elm Court Landscaping"], "NEEDS_RIDE");
 
+  // Wed, Oct 14: closed, with its build day still to come, for trying the
+  // "Copy emails" pill each build has once its form closes. Ash has a
+  // driver with room for 3, so his riders go there; Pine gets the rest.
+  const ASH = "Ash Street Home";
+  const PINE = "Pine Ridge Rehab";
+  const oct14 = await createForm({
+    date: "2026-10-14",
+    status: "PUBLISHED",
+    opens: ["2026-10-01", 9],
+    closes: ["2026-10-10", 22],
+    description: "Closed: signups are in. Copy each build's emails from its card.",
+    builds: [
+      { name: ASH, address: "61 Ash St, Lafayette, IN 47901", description: "Painting.", hours: [9, 13], capacity: 6 },
+      { name: PINE, address: "3300 Pine Ridge Rd, West Lafayette, IN 47906", description: "Flooring.", hours: [9, 14], capacity: 6 },
+    ],
+  });
+  await signUp(await person("Wade Lane", { seats: 4, status: "approved" }), oct14, [ASH], "CAN_DRIVE");
+  await signUpAll(["Xena Ford", "Yuri Bell"], oct14, [ASH], "NEEDS_RIDE");
+  await signUpAll(["Zack Wolfe"], oct14, [ASH, PINE], "NEEDS_RIDE");
+  await signUpAll(["Ana Cruz", "Bo Grant", "Cy Hart"], oct14, [PINE], "OWN_WAY");
+  await signUpAll(["Di Young", "Ed Marsh"], oct14, [ASH, PINE], "OWN_WAY");
+  await signUp(await person("Flo Stone"), oct14, [PINE], "OWN_WAY", true);
+
   console.log(`
 Test data created. See it at ${SITE}/admin/forms and
 ${SITE}/admin/people. Volunteers see published forms at ${SITE}/.
@@ -362,6 +381,8 @@ Signup forms:
   Sat, Oct 31   open; Elm Court is short a driver after Ivy cancelled, so
                 one rider can't be placed and only drivers (4+ seats) can
                 sign up there
+  Wed, Oct 14   closed, still to come; Ash Street and Pine Ridge each have
+                a "Copy emails" pill (Flo cancelled, so she's left out)
 
 Volunteers: alice, ben, carmen, dana and eli @example.org. Open the Oct 10
 form with one of them to see or cancel their signup.

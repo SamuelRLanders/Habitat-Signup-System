@@ -22,8 +22,9 @@ import {
   transportationSchema,
   type SignupField,
 } from "./details";
+import { alertAdminsOfCancellation } from "./closed-cancellation";
 import { sendCancellation, sendSignupConfirmation } from "./emails";
-import { cancelDeadline } from "./queries";
+import { cancelDeadline, sameDayMessage, sameDaySignup } from "./queries";
 
 // Volunteers signing up through a form and cancelling their signup. A
 // signup can't be changed (that keeps placing drivers and riders simple):
@@ -52,7 +53,16 @@ function revalidateSignup(formId: string) {
 async function loadForm(formId: string) {
   const form = await prisma.signupForm.findUnique({
     where: { id: formId, status: "PUBLISHED" },
-    select: { date: true, status: true, opensAt: true, closesAt: true, shifts: offeredShifts },
+    select: {
+      name: true,
+      date: true,
+      status: true,
+      opensAt: true,
+      closesAt: true,
+      askTransportation: true,
+      askGroups: true,
+      shifts: offeredShifts,
+    },
   });
   if (!form) return null;
   return { ...form, day: toDay(form.date) };
@@ -83,21 +93,26 @@ export async function submitSignup(
     errors.dateOfBirth = TOO_YOUNG;
   }
 
-  // Driving. Volunteers with a license who aren't approved or pending are
-  // asked whether they've filled out Purdue's driver approval form; only
-  // drivers who are approved or pending (counting a "yes" just now) can
-  // offer to drive others, and then they give their car's seats.
+  // Driving, on a form that asks how volunteers are getting there.
+  // Volunteers with a license who aren't approved or pending are asked
+  // whether they've filled out Purdue's driver approval form; only drivers
+  // who are approved or pending (counting a "yes" just now) can offer to
+  // drive others, and then they give their car's seats. On a form that
+  // doesn't ask, everyone is getting there on their own.
+  const asksTransportation = form.askTransportation;
   const hasLicense = values.hasDriversLicense === "yes";
   const known = await prisma.volunteer.findUnique({ where: { email }, select: { id: true } });
   const driver = known
     ? (await driverStatuses([known.id])).get(known.id)!
     : { status: "none" as const };
-  const askDriverForm = hasLicense && driver.status === "none";
+  const askDriverForm = asksTransportation && hasLicense && driver.status === "none";
   const driverForm = askDriverForm ? driverFormSchema.safeParse(values.driverForm) : null;
   if (driverForm && !driverForm.success) errors.driverForm = driverForm.error.issues[0].message;
   const nowPending = driverForm?.success && driverForm.data === "done";
 
-  const transportation = transportationSchema.safeParse(values.transportation);
+  const transportation = transportationSchema.safeParse(
+    asksTransportation ? values.transportation : "OWN_WAY",
+  );
   if (!transportation.success) errors.transportation = transportation.error.issues[0].message;
   const drives = transportation.success && transportation.data === "CAN_DRIVE";
   if (drives && !(hasLicense && (driver.status !== "none" || nowPending))) {
@@ -108,9 +123,10 @@ export async function submitSignup(
   if (carSeats && !carSeats.success) errors.carSeats = carSeats.error.issues[0].message;
 
   // Friends they'd like to be placed with, by Purdue email. Only asked when
-  // the day has more than one build; with one, everyone's together anyway.
+  // the form asks and the day has more than one build; with one, everyone's
+  // together anyway.
   const groupEmails = new Set<string>();
-  if (form.shifts.length > 1) {
+  if (form.askGroups && form.shifts.length > 1) {
     for (const value of formData.getAll("groupEmail").map(String)) {
       if (!value.trim()) continue;
       const friend = groupEmailSchema.safeParse(value);
@@ -140,7 +156,12 @@ export async function submitSignup(
   const details = { ...parsed.data, dateOfBirth: fromDay(parsed.data.dateOfBirth) };
   // How they count when placing volunteers (src/lib/placement).
   const newcomer = {
-    ...travelOf(transportation.data, seats, hasLicense && (driver.status !== "none" || !!nowPending)),
+    ...travelOf(
+      transportation.data,
+      seats,
+      hasLicense && (driver.status !== "none" || !!nowPending),
+      asksTransportation,
+    ),
     buildIds: shiftIds,
   };
 
@@ -150,11 +171,16 @@ export async function submitSignup(
     result = await prisma.$transaction(
       async (tx) => {
         // Lock the form until this transaction ends, so two people can't
-        // both take its last spot. Its event may have been cancelled since
-        // it was loaded.
-        const [locked] = await tx.$queryRaw<{ status: string }[]>`
-          SELECT status FROM "SignupForm" WHERE id = ${formId} FOR UPDATE`;
+        // both take its last spot. Its event may have been cancelled, or
+        // its questions changed, since it was loaded.
+        const [locked] = await tx.$queryRaw<
+          { status: string; askTransportation: boolean; askGroups: boolean }[]
+        >`
+          SELECT status, "askTransportation", "askGroups" FROM "SignupForm" WHERE id = ${formId} FOR UPDATE`;
         if (locked?.status !== "PUBLISHED") return { outcome: "closed" as const };
+        if (locked.askTransportation !== form.askTransportation || locked.askGroups !== form.askGroups) {
+          return { outcome: "changed" as const };
+        }
 
         const active = await tx.formSignup.findFirst({
           where: { formId, volunteer: { email }, cancelledAt: null },
@@ -162,9 +188,13 @@ export async function submitSignup(
         });
         if (active) return { outcome: "already" as const };
 
+        // A day can have several forms, but a volunteer can only be at one.
+        const sameDay = await sameDaySignup(tx, formId, form.date, email);
+        if (sameDay) return { outcome: "same-day" as const, formName: sameDay.name };
+
         // There has to be a way to place everyone at a build they chose,
         // them included, with a ride for everyone who needs one.
-        const day = await loadPlacementDay(tx, formId, form.shifts);
+        const day = await loadPlacementDay(tx, formId, form.shifts, asksTransportation);
         if (!signupChecker(day)(newcomer)) {
           return { outcome: "full" as const, rooms: Object.fromEntries(buildRoom(day)) };
         }
@@ -185,7 +215,9 @@ export async function submitSignup(
         const signup = await tx.formSignup.upsert({
           where: { formId_volunteerId: { formId, volunteerId: volunteer.id } },
           create: { formId, volunteerId: volunteer.id, ...answers },
-          update: { ...answers, cancelledAt: null },
+          // Signing up again starts over: any custom assignment from before
+          // they cancelled is dropped.
+          update: { ...answers, cancelledAt: null, assignedShiftId: null },
         });
 
         // Signing up again replaces every choice (and friend) from the
@@ -212,6 +244,14 @@ export async function submitSignup(
     revalidateSignup(formId);
     return { errors: { form: "This form isn't taking signups right now. Refresh the page to see why." } };
   }
+  if (result.outcome === "changed") {
+    revalidateSignup(formId);
+    return {
+      errors: {
+        form: "This form's questions were just changed. Refresh the page to see them. Your answers will need to be re-entered.",
+      },
+    };
+  }
   if (result.outcome === "already") {
     revalidateSignup(formId);
     return {
@@ -219,6 +259,9 @@ export async function submitSignup(
         form: "You're already signed up for this day. To make changes, cancel your signup and sign up again.",
       },
     };
+  }
+  if (result.outcome === "same-day") {
+    return { errors: { form: sameDayMessage(result.formName) } };
   }
   if (result.outcome === "full") {
     revalidateSignup(formId);
@@ -237,6 +280,7 @@ export async function submitSignup(
       to: email,
       firstName: details.firstName,
       formId,
+      formName: form.name,
       day: form.day,
       shifts: shiftIds.map((id) => offered.get(id)!),
     });
@@ -270,9 +314,26 @@ export async function cancelSignup(formId: string): Promise<ActionState> {
   });
 
   try {
-    await sendCancellation({ to: email, firstName: signup.firstName, formId, day: form.day });
+    await sendCancellation({
+      to: email,
+      firstName: signup.firstName,
+      formId,
+      formName: form.name,
+      day: form.day,
+    });
   } catch (error) {
     console.error("Failed to send cancellation email", error);
+  }
+
+  // After the form closes, admins may have set the assignments and sent
+  // the travel roster, so the form's creator and the operations lead hear
+  // about it.
+  if (formPhase(form, now) === "closed") {
+    try {
+      await alertAdminsOfCancellation(formId, signup.id);
+    } catch (error) {
+      console.error("Failed to email admins about a cancellation", error);
+    }
   }
 
   revalidateSignup(formId);

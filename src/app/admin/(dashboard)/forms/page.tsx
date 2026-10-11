@@ -4,7 +4,7 @@ import { cn } from "cn";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/auth/dal";
-import { formPhase } from "@/lib/signup-forms/phase";
+import { adminPhase } from "@/lib/signup-forms/phase";
 import {
   FORM_LIST_TABS,
   listSignupForms,
@@ -42,8 +42,9 @@ export default async function SignupFormsPage({
           </Link>
         </div>
         <p className="text-sm text-muted-foreground">
-          One form per event, with the day&apos;s builds. Volunteers sign up
-          through its link and say which builds they could work at.
+          Each form has its day&apos;s builds, and a day can have several
+          forms, such as one for an outside group. Volunteers sign up through
+          a form&apos;s link and say which builds they could work at.
         </p>
       </div>
 
@@ -82,7 +83,7 @@ export default async function SignupFormsPage({
       ) : (
         <ul className="flex flex-col gap-3">
           {forms.map((form) => {
-            const phase = formPhase(form, now);
+            const phase = adminPhase(form, now);
             return (
               <li key={form.id}>
                 <Link
@@ -94,6 +95,12 @@ export default async function SignupFormsPage({
                       <span className="font-medium">{formatDay(form.day)}</span>
                       <PhaseBadge phase={phase} />
                     </div>
+                    <span className="text-sm">
+                      {form.name}
+                      {!form.listed && form.status === "PUBLISHED" && (
+                        <span className="text-muted-foreground"> · Not on the home page</span>
+                      )}
+                    </span>
                     <span className="text-sm text-muted-foreground">
                       {phaseNote(phase, form)}
                     </span>

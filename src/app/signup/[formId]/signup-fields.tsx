@@ -47,6 +47,7 @@ export type BuildChoice = {
   address: string;
   time: string; // "8:00 AM – 12:00 PM"
   description: string | null;
+  lunch: string | null;
   // Who the build has room for, given everyone already signed up.
   room: BuildRoom;
 };
@@ -70,9 +71,12 @@ type SignupFieldsProps = {
   // given them before.
   driver: DriverStatus;
   savedCarSeats: number | null;
+  // Whether the form asks how they're getting there. If not, everyone is
+  // getting there on their own, and drivers aren't asked for approval.
+  askTransportation: boolean;
   // On a day with more than one build, volunteers can ask to be placed with
   // friends; askedBy are the names of those who already asked for them.
-  // Null on a day with one build.
+  // Null on a day with one build, or a form that doesn't ask.
   grouping: { askedBy: string[] } | null;
 };
 
@@ -101,7 +105,8 @@ const ERROR_STEPS: [SignupField, string][] = [
 // as steps: their information, driver approval (if they have a license),
 // how they're getting there, their car (if they'll drive others), the
 // builds they could work at, friends to be placed with (on a day with more
-// than one build), then each waiver. How they're getting there
+// than one build), then each waiver. A form can leave out the driving and
+// transportation steps, and the friends step. How they're getting there
 // comes before the builds because it decides which builds have room for
 // them (src/lib/placement). One step is open at a time; finished steps can
 // be reopened, and a step unlocks once every step before it is done. Every
@@ -114,6 +119,7 @@ export function SignupFields({
   defaults,
   driver,
   savedCarSeats,
+  askTransportation,
   grouping,
 }: SignupFieldsProps) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -145,8 +151,8 @@ export function SignupFields({
     OWN_WAY: builds.some((build) => rooms[build.id].ownWay),
     CAN_DRIVE: canDrive && builds.some((build) => rooms[build.id].driverMinSeats !== null),
   };
-  const transportChoice = transport && travelHasRoom[transport] ? transport : null;
-  const travel = transportChoice && TRAVEL[transportChoice];
+  const transportChoice = askTransportation && transport && travelHasRoom[transport] ? transport : null;
+  const travel = askTransportation ? transportChoice && TRAVEL[transportChoice] : "ownWay";
   // Whether a build has room for them, given how they're getting there.
   const hasRoom = (build: BuildChoice) =>
     travel !== null && hasRoomFor(rooms[build.id], travel, seats);
@@ -154,8 +160,8 @@ export function SignupFields({
 
   const steps = [
     { id: "info", title: "Your information" },
-    ...(license ? [{ id: "driver", title: "Driver approval" }] : []),
-    { id: "transport", title: "Getting to the site" },
+    ...(askTransportation && license ? [{ id: "driver", title: "Driver approval" }] : []),
+    ...(askTransportation ? [{ id: "transport", title: "Getting to the site" }] : []),
     ...(transportChoice === "CAN_DRIVE" ? [{ id: "car", title: "Your car" }] : []),
     { id: "builds", title: "Builds you could work at" },
     ...(grouping ? [{ id: "group", title: "Friends to work with" }] : []),
@@ -309,7 +315,7 @@ export function SignupFields({
                 {errors.form}
               </p>
             )}
-            <Button type="submit" size="lg" disabled={pending} className="w-full sm:w-fit">
+            <Button type="submit" size="lg" loading={pending} className="w-full sm:w-fit">
               {pending ? "Signing up…" : "Sign up"}
             </Button>
           </div>
@@ -517,6 +523,7 @@ export function SignupFields({
                   lines={[
                     `${build.time} · ${build.address}`,
                     build.description,
+                    build.lunch && `Lunch: ${build.lunch}`,
                     full ? fullNote(rooms[build.id], travel) : null,
                   ]}
                 />
@@ -532,7 +539,9 @@ export function SignupFields({
       {grouping &&
         step(
           "group",
-          "Want to work with friends? Add their Purdue emails and we'll try to place you at the same build, and in the same car if you're riding together.",
+          askTransportation
+            ? "Want to work with friends? Add their Purdue emails and we'll try to place you at the same build, and in the same car if you're riding together."
+            : "Want to work with friends? Add their Purdue emails and we'll try to place you at the same build.",
           <>
             {grouping.askedBy.length > 0 && (
               <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">
@@ -543,7 +552,7 @@ export function SignupFields({
             <p className="text-sm text-muted-foreground">
               Talk with them first, so you all choose the same builds. Only one of
               you needs to add the other. We can&apos;t promise you&apos;ll be
-              together: making sure everyone has a spot and a ride comes first.
+              together: making sure everyone has a spot{askTransportation && " and a ride"} comes first.
               Optional; up to {MAX_GROUP_REQUESTS} people.
             </p>
             {error("groupEmails")}

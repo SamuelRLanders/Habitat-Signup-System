@@ -71,7 +71,7 @@ export function EmailCodeForm({
           </p>
         )}
       </div>
-      <Button type="submit" size="lg" disabled={sending}>
+      <Button type="submit" size="lg" loading={sending}>
         {sending ? "Sending…" : "Send code"}
       </Button>
     </form>
@@ -131,7 +131,7 @@ function CodeStep({
             </p>
           )}
         </div>
-        <Button type="submit" size="lg" disabled={verifying}>
+        <Button type="submit" size="lg" loading={verifying}>
           {verifying ? verifyLabels.pending : verifyLabels.idle}
         </Button>
       </form>
@@ -143,7 +143,8 @@ function CodeStep({
             type="submit"
             variant="outline"
             size="sm"
-            disabled={sending || secondsLeft > 0}
+            loading={sending}
+            disabled={secondsLeft > 0}
           >
             {sending
               ? "Sending…"

@@ -19,7 +19,7 @@ const resend = process.env.RESEND_API_KEY
 // and when the day's count reaches WARN_AT, the operations lead is emailed
 // once.
 const WARN_AT = 90;
-const OPERATIONS_LEAD = "landers2@purdue.edu";
+export const OPERATIONS_LEAD = "landers2@purdue.edu";
 
 // The most emails Resend takes in one batch request.
 const BATCH_SIZE = 100;

@@ -5,7 +5,9 @@ import { useActionState } from "react";
 import { DatePicker } from "@/components/date-picker";
 import { TimeSelect } from "@/components/time-select";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { SignupFormField, SignupFormState } from "@/lib/signup-forms/actions";
 import { submitForm } from "@/lib/submit-form";
@@ -18,15 +20,16 @@ type AriaProps = { "aria-invalid"?: boolean; "aria-describedby"?: string };
 type FormEditorProps = {
   action: (prev: SignupFormState, formData: FormData) => Promise<SignupFormState>;
   defaults?: Partial<Record<SignupFormField, string>>;
-  // Left out for a new form, which starts with one empty build.
+  // Left out for a new form, which starts with one empty build and asks
+  // every optional question.
   builds?: BuildDefaults[];
   sections?: SectionDefaults[];
   submitLabel: string;
   cancelHref: string;
 };
 
-// Creating or editing a signup form: its day, when it's open, what it says,
-// and the builds volunteers choose from.
+// Creating or editing a signup form: its name and day, when it's open, what
+// it says, and the builds volunteers choose from.
 export function FormEditor({
   action,
   defaults = {},
@@ -46,6 +49,23 @@ export function FormEditor({
   return (
     <form onSubmit={submitForm(formAction)} className="flex flex-col gap-6">
       <div className="flex flex-col gap-2">
+        <Label htmlFor="name">Name</Label>
+        <Input
+          id="name"
+          name="name"
+          defaultValue={defaults.name}
+          placeholder="e.g. Purdue Habitat build day"
+          autoComplete="off"
+          {...aria("name")}
+        />
+        <p className="text-sm text-muted-foreground">
+          Volunteers see it on the form and in their emails. Forms on the same
+          day need different names.
+        </p>
+        <FieldError field="name" error={errors.name} />
+      </div>
+
+      <div className="flex flex-col gap-2">
         <Label htmlFor="date">Event day</Label>
         <DatePicker
           id="date"
@@ -55,7 +75,9 @@ export function FormEditor({
           {...aria("date")}
         />
         <p className="text-sm text-muted-foreground">
-          Each event has one form, with all of the day&apos;s builds.
+          A day can have more than one form, such as one for an outside group.
+          Each form is separate, with its own builds and signups. Volunteers
+          can only sign up on one form a day.
         </p>
         <FieldError field="date" error={errors.date} />
       </div>
@@ -100,6 +122,29 @@ export function FormEditor({
         <FieldError field="description" error={errors.description} />
       </div>
 
+      <OptionSwitch
+        name="listed"
+        label="List on the home page"
+        hint="Turn off for an outside group's form, so only people you share the link with can find it."
+        defaultChecked={defaults.listed !== "no"}
+      />
+
+      <fieldset className="flex flex-col gap-4">
+        <legend className="mb-1 text-sm font-medium">Optional questions</legend>
+        <OptionSwitch
+          name="askTransportation"
+          label="Ask how volunteers are getting there"
+          hint="Turn off for a group that's getting itself to the build. Volunteers won't be asked how they're getting there or for driver approval, and everyone counts as getting there on their own."
+          defaultChecked={defaults.askTransportation !== "no"}
+        />
+        <OptionSwitch
+          name="askGroups"
+          label="Let volunteers ask to work with friends"
+          hint="Only asked on a day with more than one build. Turning it off ignores requests volunteers have already made."
+          defaultChecked={defaults.askGroups !== "no"}
+        />
+      </fieldset>
+
       <BuildFields defaults={builds} errors={buildErrors} />
 
       <SectionFields defaults={sections} errors={sectionErrors} />
@@ -118,7 +163,7 @@ export function FormEditor({
       )}
 
       <div className="flex gap-2">
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" loading={pending}>
           {pending ? "Saving…" : submitLabel}
         </Button>
         <Link href={cancelHref} className={buttonVariants({ variant: "outline" })}>
@@ -126,6 +171,39 @@ export function FormEditor({
         </Link>
       </div>
     </form>
+  );
+}
+
+// A switch for one of the form's options, sent as "yes" or "no".
+function OptionSwitch({
+  name,
+  label,
+  hint,
+  defaultChecked,
+}: {
+  name: SignupFormField;
+  label: string;
+  hint: string;
+  defaultChecked: boolean;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <Switch
+        id={name}
+        name={name}
+        value="yes"
+        uncheckedValue="no"
+        defaultChecked={defaultChecked}
+        aria-describedby={`${name}-hint`}
+        className="mt-0.5"
+      />
+      <div className="flex flex-col gap-1">
+        <Label htmlFor={name}>{label}</Label>
+        <p id={`${name}-hint`} className="text-sm text-muted-foreground">
+          {hint}
+        </p>
+      </div>
+    </div>
   );
 }
 

@@ -1,4 +1,5 @@
 import "server-only";
+import type { Prisma } from "@/generated/prisma/client";
 import { driverStatuses } from "@/lib/drivers/status";
 import { prisma } from "@/lib/prisma";
 import { addDays, DEFAULT_TIME_ZONE, toDay, zonedDateTime } from "@/lib/time";
@@ -87,6 +88,32 @@ export async function getAskedToGroupWith(formId: string, email: string) {
 }
 
 export type AskedToGroupWith = Awaited<ReturnType<typeof getAskedToGroupWith>>;
+
+// Another form on the same day that the volunteer is signed up on, or
+// null. A volunteer can only be signed up on one form a day; a form
+// whose event was cancelled doesn't count. Pass the transaction client when
+// deciding on a new signup.
+export async function sameDaySignup(
+  db: typeof prisma | Prisma.TransactionClient,
+  formId: string,
+  date: Date,
+  email: string,
+) {
+  const other = await db.formSignup.findFirst({
+    where: {
+      formId: { not: formId },
+      volunteer: { email },
+      cancelledAt: null,
+      form: { date, status: { not: "CANCELLED" } },
+    },
+    select: { form: { select: { id: true, name: true } } },
+  });
+  return other?.form ?? null;
+}
+
+export function sameDayMessage(formName: string) {
+  return `You're already signed up for ${formName} on this day. To sign up here instead, cancel that signup first.`;
+}
 
 // Volunteers can cancel until the day's first build starts, even after the
 // form closes. With no builds, until the day ends.

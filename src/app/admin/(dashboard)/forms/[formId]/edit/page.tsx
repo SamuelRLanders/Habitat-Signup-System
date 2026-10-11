@@ -46,7 +46,7 @@ export default async function EditSignupFormPage({
         <BackLink href={formHref}>Back to form</BackLink>
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold">
-            Edit form for {formatDay(toDay(form.date), "short")}
+            Edit {form.name}, {formatDay(toDay(form.date), "short")}
           </h1>
           <p className="text-sm text-muted-foreground">
             Created by {form.createdByName || "an admin"} on{" "}
@@ -57,12 +57,16 @@ export default async function EditSignupFormPage({
       <FormEditor
         action={updateSignupForm.bind(null, form.id)}
         defaults={{
+          name: form.name,
           date: toDay(form.date),
           opensDate: toDateInput(form.opensAt, zone),
           opensTime: toTimeInput(form.opensAt, zone),
           closesDate: toDateInput(form.closesAt, zone),
           closesTime: toTimeInput(form.closesAt, zone),
           description: form.description ?? "",
+          listed: form.listed ? "yes" : "no",
+          askTransportation: form.askTransportation ? "yes" : "no",
+          askGroups: form.askGroups ? "yes" : "no",
         }}
         builds={form.shifts.map((shift) => ({
           id: shift.id,
@@ -72,6 +76,7 @@ export default async function EditSignupFormPage({
           endTime: toTimeInput(shift.endsAt, zone),
           capacity: String(shift.capacity),
           description: shift.description ?? "",
+          lunch: shift.lunch ?? "",
           cancelled: shift.cancelledAt !== null,
           // Everyone who ever chose it, including cancelled signups, so the
           // record is kept.
