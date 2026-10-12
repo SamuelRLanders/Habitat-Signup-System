@@ -1,13 +1,15 @@
 "use server";
 
 import { takeLoginCodeRequest, RESEND_AFTER_SECONDS } from "@/lib/auth/rate-limit";
-import { sendEmail } from "@/lib/email";
+import { sendEmail, volunteerEmailsLeft } from "@/lib/email";
 import {
+  NETWORK_BUSY,
   parseCode,
   recentCodeState,
   type SendCodeState,
   type VerifyCodeState,
 } from "@/lib/email-code";
+import { limitResets } from "@/lib/email-limit";
 import { emailSchema } from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
 import { clientIp } from "@/lib/request";
@@ -27,7 +29,8 @@ import {
 // Volunteers confirming their email address on a signup form. Only Purdue
 // emails can be used. Anyone can call these, so codes are only sent while a
 // form is open, or after it closes for cancelling until the day's first
-// shift. The same rate limits as admin sign-in apply.
+// shift. The same rate limits as admin sign-in apply, and codes stop once
+// the day's volunteer emails run out (VOLUNTEER_EMAIL_CAP).
 
 const NOT_PURDUE = `Use your Purdue email, ending in ${PURDUE_EMAIL_DOMAIN}.`;
 
@@ -60,8 +63,16 @@ export async function sendSignupCode(
     };
   }
 
+  // Keep the rest of the day's emails for admins' sign-in codes.
+  if (!(await volunteerEmailsLeft())) {
+    return {
+      status: "error",
+      message: `We've sent as many emails as we can today, so we can't send you a code right now. Please try again after ${limitResets()} Indiana time.`,
+    };
+  }
+
   const limit = await takeLoginCodeRequest(email, await clientIp());
-  if (!limit.allowed) return recentCodeState(email, limit.retryAfter);
+  if (!limit.allowed) return limit.busy ? NETWORK_BUSY : recentCodeState(email, limit.retryAfter);
 
   const day = formatDay(toDay(form.date));
   try {

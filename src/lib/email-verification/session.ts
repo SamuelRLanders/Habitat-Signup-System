@@ -42,28 +42,43 @@ export async function createCode(email: string) {
 
 export type CodeCheck = "ok" | "wrong" | "expired" | "too-many";
 
-// Checks a code against the email's latest one, counting wrong guesses. A
-// right code is used up.
+// Checks a code against the email's latest one, counting every try. A right
+// code is used up.
 export async function checkCode(email: string, code: string): Promise<CodeCheck> {
   const latest = await prisma.volunteerCode.findFirst({
     where: { email },
     orderBy: { createdAt: "desc" },
   });
   if (!latest || latest.expiresAt < new Date()) return "expired";
-  if (latest.attempts >= CODE_ATTEMPTS) return "too-many";
+
+  // Use up a try before comparing, in one statement that only succeeds while
+  // tries are left. Postgres makes updates to the same row take turns, so
+  // however many guesses arrive at the same moment, only CODE_ATTEMPTS of
+  // them are compared. (Reading the count first, then adding to it after a
+  // wrong guess, would let them all through before any was counted.)
+  const { count } = await prisma.volunteerCode.updateMany({
+    where: { id: latest.id, attempts: { lt: CODE_ATTEMPTS }, expiresAt: { gt: new Date() } },
+    data: { attempts: { increment: 1 } },
+  });
+  if (count === 0) {
+    // Out of tries, or the code was used or replaced in the meantime.
+    const current = await prisma.volunteerCode.findUnique({
+      where: { id: latest.id },
+      select: { expiresAt: true },
+    });
+    return current && current.expiresAt >= new Date() ? "too-many" : "expired";
+  }
 
   const matches = timingSafeEqual(
     Buffer.from(latest.codeHash, "hex"),
     Buffer.from(hash(code), "hex"),
   );
-  if (!matches) {
-    const { attempts } = await prisma.volunteerCode.update({
-      where: { id: latest.id },
-      data: { attempts: { increment: 1 } },
-    });
-    return attempts >= CODE_ATTEMPTS ? "too-many" : "wrong";
-  }
+  if (!matches) return latest.attempts + 1 >= CODE_ATTEMPTS ? "too-many" : "wrong";
 
+  // Used up once: if the right code was sent twice at the same moment, only
+  // one gets this far.
+  const used = await prisma.volunteerCode.deleteMany({ where: { id: latest.id } });
+  if (used.count === 0) return "expired";
   await prisma.volunteerCode.deleteMany({ where: { email } });
   return "ok";
 }

@@ -4,6 +4,7 @@ import { APIError } from "better-auth/api";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import {
+  NETWORK_BUSY,
   parseCode,
   recentCodeState,
   type SendCodeState,
@@ -41,7 +42,7 @@ export async function sendLoginCode(
   }
 
   const limit = await takeLoginCodeRequest(email, await clientIp());
-  if (!limit.allowed) return recentCodeState(email, limit.retryAfter);
+  if (!limit.allowed) return limit.busy ? NETWORK_BUSY : recentCodeState(email, limit.retryAfter);
 
   try {
     await auth.api.sendVerificationOTP({ body: { email, type: "sign-in" } });

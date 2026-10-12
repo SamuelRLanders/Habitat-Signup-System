@@ -150,6 +150,17 @@ model LoginCodeRequest {
   @@index([ipAddress, createdAt])
 }
 
+// One signup confirmation or cancellation emailed to a volunteer, kept for
+// a day to limit how many one volunteer can set off by signing up and
+// cancelling over and over.
+model SignupEmail {
+  id        String   @id @default(cuid())
+  email     String // lowercased
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+}
+
 // ─── Signup forms ────────────────────────────────────────────────────────────
 
 // A signup form for a build day, with the builds volunteers choose from.

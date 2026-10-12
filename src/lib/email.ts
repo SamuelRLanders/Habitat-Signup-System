@@ -1,6 +1,6 @@
 import "server-only";
 import { Resend } from "resend";
-import { DAILY_EMAIL_LIMIT } from "@/lib/email-limit";
+import { DAILY_EMAIL_LIMIT, VOLUNTEER_EMAIL_CAP } from "@/lib/email-limit";
 import { prisma } from "@/lib/prisma";
 import { addDays, DEFAULT_TIME_ZONE, formatDateTime, fromDay, toDay } from "@/lib/time";
 
@@ -17,8 +17,8 @@ const resend = process.env.RESEND_API_KEY
 
 // Every email sent is counted against Resend's daily limit (see EmailDay),
 // and when the day's count reaches WARN_AT, the operations lead is emailed
-// once.
-const WARN_AT = 90;
+// once. That's when volunteers' emails stop (VOLUNTEER_EMAIL_CAP).
+const WARN_AT = VOLUNTEER_EMAIL_CAP;
 export const OPERATIONS_LEAD = "landers2@purdue.edu";
 
 // The most emails Resend takes in one batch request.
@@ -68,6 +68,13 @@ export async function emailsSentToday() {
   return today?.sent ?? 0;
 }
 
+// Whether emails volunteers set off can still be sent today (see
+// VOLUNTEER_EMAIL_CAP). Several requests at the same moment can each see
+// room, so the count can pass the cap by a few.
+export async function volunteerEmailsLeft() {
+  return (await emailsSentToday()) < VOLUNTEER_EMAIL_CAP;
+}
+
 // Adds sent emails to today's count, and warns the operations lead the
 // first time it reaches WARN_AT. The emails are already sent, so a failure
 // here is only logged.
@@ -103,8 +110,8 @@ async function countSent(count: number) {
 function limitWarning(sent: number, day: Date) {
   const resets = formatDateTime(fromDay(addDays(toDay(day), 1)), DEFAULT_TIME_ZONE);
   const lines = [
-    `The Purdue Habitat signup system has sent ${sent} emails today, close to Resend's limit of ${DAILY_EMAIL_LIMIT} a day.`,
-    `Once it's reached, no more emails go out until the limit resets at ${resets} (Indiana time). That includes sign-in codes for admins and volunteers, so volunteers won't be able to sign up or cancel.`,
+    `The Purdue Habitat signup system has sent ${sent} emails today, so it has stopped sending volunteers emails until ${resets} (Indiana time). Until then, volunteers can't get a code to confirm their email, so they can't sign up or cancel, and they won't get signup confirmations.`,
+    `The last ${DAILY_EMAIL_LIMIT - VOLUNTEER_EMAIL_CAP} of Resend's ${DAILY_EMAIL_LIMIT} emails a day are kept for admins, such as their sign-in codes. Once all ${DAILY_EMAIL_LIMIT} are sent, no more emails go out, admins' included.`,
     "To send more, upgrade the Resend plan, or hold off on cancelling events or approving drivers until it resets.",
   ];
   return {

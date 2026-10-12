@@ -5,6 +5,7 @@ import { Panel } from "@/components/panel";
 import { PublicHeader } from "@/components/public-header";
 import { formPhase } from "@/lib/signup-forms/phase";
 import { getPublicForm } from "@/lib/signup-forms/queries";
+import { openGraphDefaults } from "@/lib/site-metadata";
 import { DEFAULT_TIME_ZONE, formatDay, formatWeekdayTime } from "@/lib/time";
 import { SignupArea } from "./signup-area";
 
@@ -13,7 +14,34 @@ export async function generateMetadata({
 }: PageProps<"/signup/[formId]">): Promise<Metadata> {
   const { formId } = await params;
   const form = await getPublicForm(formId);
-  return { title: form ? `Sign up for ${form.name}, ${formatDay(form.day, "short")}` : "Signup form" };
+  if (!form) return { title: "Signup form" };
+
+  const title = `Sign up for ${form.name}, ${formatDay(form.day, "short")}`;
+  const description = previewDescription(form);
+  return {
+    title,
+    description,
+    // The card shown when the link is shared in a chat or post.
+    openGraph: { ...openGraphDefaults, title, description, url: `/signup/${form.id}` },
+  };
+}
+
+// For link previews: "Saturday, October 24, 2026 · Maple Street Home, Birch
+// Avenue · Sign up by Tue, Oct 20 at 5:00 PM."
+function previewDescription(form: NonNullable<Awaited<ReturnType<typeof getPublicForm>>>) {
+  const day = formatDay(form.day);
+  const phase = formPhase(form);
+  if (phase === "cancelled") return `${day} · This build day has been cancelled.`;
+
+  const at = (date: Date) => formatWeekdayTime(date, DEFAULT_TIME_ZONE);
+  const builds = [...new Set(form.shifts.map((shift) => shift.name))].join(", ");
+  const when =
+    phase === "not-open"
+      ? `Signups open ${at(form.opensAt)}.`
+      : phase === "open"
+        ? `Sign up by ${at(form.closesAt)}.`
+        : "Signups have closed.";
+  return [day, builds, when].filter(Boolean).join(" · ");
 }
 
 // A build day's public signup form, as a column of panels: the build

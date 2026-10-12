@@ -30,6 +30,13 @@ export function recentCodeState(email: string, retryAfter: number): SendCodeStat
   };
 }
 
+// What to show when a code wasn't sent because another request from the
+// same network was being handled at that moment.
+export const NETWORK_BUSY: SendCodeState = {
+  status: "error",
+  message: "Lots of codes are being requested from your network right now. Wait a few seconds and try again.",
+};
+
 // The code as typed, allowing spaces or dashes in case it's pasted as
 // "123 456", or null if it isn't 6 digits.
 export function parseCode(value: FormDataEntryValue | null) {

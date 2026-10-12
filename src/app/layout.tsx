@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import {
+  openGraphDefaults,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  twitterDefaults,
+} from "@/lib/site-metadata";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -13,11 +19,15 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // Shared links need full URLs for the page and its preview image.
+  metadataBase: new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000"),
   title: {
-    default: "Purdue Habitat Volunteering",
+    default: SITE_NAME,
     template: "%s · Purdue Habitat",
   },
-  description: "Sign up to volunteer with Purdue Habitat for Humanity.",
+  description: SITE_DESCRIPTION,
+  openGraph: { ...openGraphDefaults, title: SITE_NAME, description: SITE_DESCRIPTION },
+  twitter: twitterDefaults,
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

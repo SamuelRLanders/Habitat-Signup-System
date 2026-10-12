@@ -94,6 +94,7 @@ npm run dev                # http://localhost:3000
 | `npm run db:migrate` | Apply schema changes to the database (`prisma migrate dev`) |
 | `npm run db:studio` | Browse and edit data in Prisma Studio |
 | `npm run admin:add -- <email> "<name>"` | Add an admin |
+| `npm run admin:remove -- <email>` | Remove an admin and sign them out (keeps the forms and decisions they made) |
 | `npm run seed:test` | Replace the test forms and builds, volunteers and signups (`-- --clean` only removes them; `-- --people 350` adds made-up volunteers). Test volunteers have `@example.org` emails. |
 
 **Project layout**
