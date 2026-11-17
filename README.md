@@ -59,7 +59,7 @@ A web app for the Purdue Habitat for Humanity chapter. Volunteer organization le
 - **DriverApproval**: an admin's approval (through an end date) or decline of a volunteer's Purdue driver approval, with the admin's name. A volunteer is pending while `Volunteer.driverRequestedAt` is set.
 - **VolunteerCode**, **VolunteerSession**: the codes volunteers confirm their email with, and the 2-hour browser sessions that follow (both stored hashed)
 - **Message**, **MessageRecipient**: for emails admins will send to volunteers (not built yet)
-- **EmailDay**: how many emails were sent through Resend each UTC day. When a day reaches 90 of Resend's 100, the operations lead (set in `src/lib/email.ts`) is emailed once.
+- **EmailDay**: how many emails were sent through Resend each UTC day. When a day reaches 85 of Resend's 100, emails volunteers set off stop (keeping the rest for admins' sign-in codes) and the operations lead (set in `src/lib/email.ts`) is emailed once.
 
 ## Key Considerations
 
@@ -91,10 +91,13 @@ npm run dev                # http://localhost:3000
 | `npm run build` | Production build |
 | `npm run lint` | Run ESLint |
 | `npm test` | Run the tests (the placement solver's) |
-| `npm run db:migrate` | Apply schema changes to the database (`prisma migrate dev`) |
+| `npm run db:migrate` | Apply schema changes to the development database (`prisma migrate dev`) |
+| `npm run db:status:prod` | List migrations the production database hasn't had yet (changes nothing) |
+| `npm run db:deploy:prod` | Apply committed migrations to the production database (`prisma migrate deploy`, never resets). Run it before merging additive changes to `main`; split column removals and renames across two releases. |
 | `npm run db:studio` | Browse and edit data in Prisma Studio |
 | `npm run admin:add -- <email> "<name>"` | Add an admin |
 | `npm run admin:remove -- <email>` | Remove an admin and sign them out (keeps the forms and decisions they made) |
+| `npm run admin:add:prod -- <email> "<name>"`, `npm run admin:remove:prod -- <email>` | The same, on the production database, using the `DATABASE_URL` in `.env.production.local` (git-ignored). `.env` holds the development database's. |
 | `npm run seed:test` | Replace the test forms and builds, volunteers and signups (`-- --clean` only removes them; `-- --people 350` adds made-up volunteers). Test volunteers have `@example.org` emails. |
 
 **Project layout**

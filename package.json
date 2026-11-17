@@ -10,9 +10,13 @@
     "test": "tsx --test \"src/**/*.test.ts\"",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:status:prod": "node --env-file=.env.production.local node_modules/prisma/build/index.js migrate status",
+    "db:deploy:prod": "node --env-file=.env.production.local node_modules/prisma/build/index.js migrate deploy",
     "db:studio": "prisma studio",
     "admin:add": "tsx scripts/add-admin.mts",
     "admin:remove": "tsx scripts/remove-admin.mts",
+    "admin:add:prod": "tsx --env-file=.env.production.local scripts/add-admin.mts",
+    "admin:remove:prod": "tsx --env-file=.env.production.local scripts/remove-admin.mts",
     "seed:test": "tsx scripts/seed-test-data.mts"
   },
   "dependencies": {
