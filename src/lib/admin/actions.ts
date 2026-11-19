@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import * as z from "zod";
-import { requireAdmin } from "@/lib/auth/dal";
+import { requireEditor } from "@/lib/auth/dal";
 import { MAX_BUILDS } from "@/lib/experience";
 import { countBuilds } from "@/lib/form-signups/experience";
 import type { FormState } from "@/lib/forms";
@@ -10,7 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { DEFAULT_TIME_ZONE, toDateInput } from "@/lib/time";
 
 // Admins changing a volunteer's record from the People page. Every action
-// calls requireAdmin() first, and treats the IDs it's sent as untrusted.
+// calls requireEditor() first, and treats the IDs it's sent as untrusted.
 
 const buildsSchema = z.coerce
   .number("Enter a number of builds.")
@@ -25,7 +25,7 @@ export type BuildsState = FormState<"builds">;
 // their signups (src/lib/form-signups/experience.ts), so builds they go on
 // later still add on.
 export async function setBuilds(volunteerId: string, _prev: BuildsState, formData: FormData): Promise<BuildsState> {
-  await requireAdmin();
+  await requireEditor();
 
   const raw = formData.get("builds");
   const parsed = buildsSchema.safeParse(typeof raw === "string" && raw.trim() !== "" ? raw : undefined);

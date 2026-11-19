@@ -4,6 +4,7 @@ import { cn } from "cn";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/auth/dal";
+import { canEdit } from "@/lib/auth/roles";
 import { adminPhase } from "@/lib/signup-forms/phase";
 import {
   FORM_LIST_TABS,
@@ -25,7 +26,8 @@ export default async function SignupFormsPage({
 }: PageProps<"/admin/forms">) {
   // Every admin page checks on its own. The layout's check doesn't re-run
   // when navigating between pages that share it.
-  await requireAdmin();
+  const admin = await requireAdmin();
+  const editor = canEdit(admin.role);
 
   const { tab: tabParam } = await searchParams;
   const tab = FORM_LIST_TABS.find((t) => t === tabParam) ?? "upcoming";
@@ -37,9 +39,11 @@ export default async function SignupFormsPage({
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between gap-4">
           <h1 className="text-2xl font-semibold">Signup forms</h1>
-          <Link href="/admin/forms/new" className={buttonVariants()}>
-            New form
-          </Link>
+          {editor && (
+            <Link href="/admin/forms/new" className={buttonVariants()}>
+              New form
+            </Link>
+          )}
         </div>
         <p className="text-sm text-muted-foreground">
           Each form has its day&apos;s builds, and a day can have several
@@ -73,7 +77,7 @@ export default async function SignupFormsPage({
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-8 text-center text-muted-foreground">
             <p>{tabs[tab].empty}</p>
-            {tab === "upcoming" && (
+            {tab === "upcoming" && editor && (
               <Link href="/admin/forms/new" className={buttonVariants({ variant: "outline" })}>
                 Create a form
               </Link>

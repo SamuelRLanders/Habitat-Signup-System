@@ -16,10 +16,9 @@ const resend = process.env.RESEND_API_KEY
   : null;
 
 // Every email sent is counted against Resend's daily limit (see EmailDay),
-// and when the day's count reaches WARN_AT, the operations lead is emailed
+// and when the day's count reaches WARN_AT, the site's owner is emailed
 // once. That's when volunteers' emails stop (VOLUNTEER_EMAIL_CAP).
 const WARN_AT = VOLUNTEER_EMAIL_CAP;
-export const OPERATIONS_LEAD = "landers2@purdue.edu";
 
 // The most emails Resend takes in one batch request.
 const BATCH_SIZE = 100;
@@ -75,8 +74,8 @@ export async function volunteerEmailsLeft() {
   return (await emailsSentToday()) < VOLUNTEER_EMAIL_CAP;
 }
 
-// Adds sent emails to today's count, and warns the operations lead the
-// first time it reaches WARN_AT. The emails are already sent, so a failure
+// Adds sent emails to today's count, and warns the owner the first time
+// it reaches WARN_AT. The emails are already sent, so a failure
 // here is only logged.
 async function countSent(count: number) {
   const day = utcToday();
@@ -95,8 +94,13 @@ async function countSent(count: number) {
       data: { warnedAt: new Date() },
     });
     if (claimed === 0) return;
+    const owner = await prisma.user.findFirst({ where: { role: "OWNER" }, select: { email: true } });
+    if (!owner) {
+      console.error("Today's emails reached the warning point, but there's no owner to warn.");
+      return;
+    }
     try {
-      await sendEmail(limitWarning(sent, day));
+      await sendEmail(limitWarning(owner.email, sent, day));
     } catch (error) {
       // Let the next email try again.
       await prisma.emailDay.update({ where: { day }, data: { warnedAt: null } });
@@ -107,7 +111,7 @@ async function countSent(count: number) {
   }
 }
 
-function limitWarning(sent: number, day: Date) {
+function limitWarning(to: string, sent: number, day: Date) {
   const resets = formatDateTime(fromDay(addDays(toDay(day), 1)), DEFAULT_TIME_ZONE);
   const lines = [
     `The Purdue Habitat signup system has sent ${sent} emails today, so it has stopped sending volunteers emails until ${resets} (Indiana time). Until then, volunteers can't get a code to confirm their email, so they can't sign up or cancel, and they won't get signup confirmations.`,
@@ -115,7 +119,7 @@ function limitWarning(sent: number, day: Date) {
     "To send more, upgrade the Resend plan, or hold off on cancelling events or approving drivers until it resets.",
   ];
   return {
-    to: OPERATIONS_LEAD,
+    to,
     subject: `Purdue Habitat has sent ${sent} of ${DAILY_EMAIL_LIMIT} emails today`,
     text: lines.join("\n\n"),
     html: lines.map((line) => `<p>${escapeHtml(line)}</p>`).join(""),

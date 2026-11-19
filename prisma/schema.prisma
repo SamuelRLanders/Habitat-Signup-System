@@ -4,6 +4,8 @@
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
+  // For the index that allows only one owner (see User).
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -12,9 +14,11 @@ datasource db {
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
-// Only admins sign in. Kept as a field so the sign-in check stays explicit.
+// What an admin can do. Only admins sign in; volunteers don't have accounts.
 enum Role {
-  ADMIN
+  OWNER // an editor who also manages the admins; there's at most one
+  EDITOR // can see and change everything else
+  VIEWER // can see the admin pages, but can't change anything
 }
 
 // Whether volunteers can see a signup form. When they can fill it out is set
@@ -62,17 +66,17 @@ enum DeliveryStatus {
 
 // ─── Users ───────────────────────────────────────────────────────────────────
 
-// An admin, who signs in with an emailed code. Admins are added by the
-// admin:add script, never from a form; volunteers don't have accounts (see
-// Volunteer). Better Auth uses this as its "user" model, so name,
-// emailVerified and image are fields it requires.
+// An admin, who signs in with an emailed code. The owner adds them on the
+// Admins page (or the admin:add script adds them); volunteers don't have
+// accounts (see Volunteer). Better Auth uses this as its "user" model, so
+// name, emailVerified and image are fields it requires.
 model User {
   id            String   @id @default(cuid())
   email         String   @unique
   name          String   @default("")
   emailVerified Boolean  @default(false)
   image         String?
-  role          Role     @default(ADMIN)
+  role          Role     @default(VIEWER)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -83,6 +87,33 @@ model User {
   formsCreated    SignupForm[]
   driverDecisions DriverApproval[]
   messagesSent    Message[]
+
+  // Ownership handovers waiting to be accepted.
+  transfersFrom OwnershipTransfer[] @relation("TransferFrom")
+  transfersTo   OwnershipTransfer[] @relation("TransferTo")
+
+  // Only one admin can be the owner.
+  @@unique([role], map: "User_one_owner", where: raw("role = 'OWNER'"))
+}
+
+// The owner handing the site over to another admin, who is emailed a link.
+// Nothing changes until they open it, signed in as themselves, and accept:
+// then they become the owner and the old owner becomes an editor. There's
+// at most one at a time, and the owner can cancel it until it's accepted.
+// The link's token is stored hashed, so a leaked row can't be used.
+model OwnershipTransfer {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  fromId String
+  from   User   @relation("TransferFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId   String
+  to     User   @relation("TransferTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@index([fromId])
+  @@index([toId])
 }
 
 // ─── Auth (managed by Better Auth) ───────────────────────────────────────────
@@ -441,8 +472,9 @@ model Message {
   body      String         @db.Text
   createdAt DateTime       @default(now())
 
-  sentById String
-  sentBy   User   @relation(fields: [sentById], references: [id])
+  // Kept, without the sender, when that admin is removed.
+  sentById String?
+  sentBy   User?   @relation(fields: [sentById], references: [id], onDelete: SetNull)
 
   shiftId String?
   shift   Shift?  @relation(fields: [shiftId], references: [id], onDelete: SetNull)

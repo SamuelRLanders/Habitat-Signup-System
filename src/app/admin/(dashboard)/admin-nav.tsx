@@ -1,6 +1,6 @@
 "use client";
 
-import { CarIcon, ClipboardListIcon, UsersIcon } from "lucide-react";
+import { CarIcon, ClipboardListIcon, ShieldIcon, UsersIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
@@ -11,14 +11,17 @@ const tabs = [
   { href: "/admin/drivers", label: "Drivers", icon: CarIcon },
 ];
 
+// Only the owner sees this tab (the page checks too).
+const adminsTab = { href: "/admin/admins", label: "Admins", icon: ShieldIcon };
+
 // The admin sections. A tab stays highlighted on the pages beneath it, so
 // "Forms" is active on /admin/forms/123/edit too.
-export function AdminNav() {
+export function AdminNav({ showAdmins }: { showAdmins: boolean }) {
   const pathname = usePathname();
 
   return (
     <nav aria-label="Admin sections" className="flex gap-1">
-      {tabs.map(({ href, label, icon: Icon }) => {
+      {(showAdmins ? [...tabs, adminsTab] : tabs).map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link

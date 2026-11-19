@@ -345,7 +345,7 @@ export async function cancelSignup(formId: string): Promise<ActionState> {
   }
 
   // After the form closes, admins may have set the assignments and sent
-  // the travel roster, so the form's creator and the operations lead hear
+  // the travel roster, so the form's creator and the owner hear
   // about it.
   if (formPhase(form, now) === "closed") {
     try {

@@ -1,7 +1,8 @@
 // Removes an admin, such as an officer who has stepped down. They're signed
 // out everywhere at once, since their sessions are deleted with them. The
 // forms they created and the driver decisions they made are kept, with their
-// name. The last admin can't be removed, so someone can always sign in.
+// name. The owner can't be removed: make someone else the owner first
+// (on the Admins page, or with admin:set-owner).
 // Usage: npm run admin:remove -- someone@example.org
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -22,8 +23,8 @@ try {
   const admin = await prisma.user.findUnique({ where: { email } });
   if (!admin) {
     console.log(`${email} isn't an admin.`);
-  } else if ((await prisma.user.count()) === 1) {
-    console.error(`${email} is the only admin. Add another with npm run admin:add before removing them.`);
+  } else if (admin.role === "OWNER") {
+    console.error(`${email} is the owner. Make someone else the owner first, with npm run admin:set-owner.`);
     process.exitCode = 1;
   } else {
     await prisma.user.delete({ where: { id: admin.id } });

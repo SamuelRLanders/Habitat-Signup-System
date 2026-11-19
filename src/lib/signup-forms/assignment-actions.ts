@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth/dal";
+import { requireEditor } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/forms";
 import type { Assignments } from "@/lib/placement/assignments";
 import { prisma } from "@/lib/prisma";
@@ -12,7 +12,7 @@ import { adminPhase } from "./phase";
 // before its event day is over. Admins are warned about anything that
 // breaks the placement rules before saving, so these only check that the
 // volunteers and builds belong to the form. Every action calls
-// requireAdmin() first, and treats the IDs it's sent as untrusted.
+// requireEditor() first, and treats the IDs it's sent as untrusted.
 
 function revalidateForm(formId: string) {
   revalidatePath("/admin", "layout");
@@ -44,7 +44,7 @@ export async function saveAssignments(
   savedAt: string | null,
   assignments: Assignments,
 ): Promise<ActionState> {
-  const admin = await requireAdmin();
+  const admin = await requireEditor();
   if (typeof assignments !== "object" || assignments === null) return { error: "Nothing to save." };
 
   const result = await prisma.$transaction(async (tx) => {
@@ -86,7 +86,7 @@ export async function saveAssignments(
 
 // Goes back to the app's placement, forgetting the custom assignments.
 export async function revertAssignments(formId: string): Promise<ActionState> {
-  await requireAdmin();
+  await requireEditor();
 
   const result = await prisma.$transaction(async (tx) => {
     const locked = await lockForEditing(tx, formId);

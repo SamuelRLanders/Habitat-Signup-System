@@ -63,7 +63,7 @@ export async function sendCancellation({ to, firstName, formId, formName, day }:
   });
 }
 
-// To admins (the form's creator and the operations lead) when a volunteer
+// To admins (the form's creator and the owner) when a volunteer
 // cancels after the form closed, when the build assignments and travel
 // roster may already be set. Each gets their own copy, sent together.
 export async function sendClosedFormCancellation({

@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { requireAdmin } from "@/lib/auth/dal";
+import { canEdit } from "@/lib/auth/roles";
 import { approveDriver, declineDriver, revokeDriver } from "@/lib/drivers/actions";
 import { getDrivers } from "@/lib/drivers/queries";
 import { formatPhone } from "@/lib/phone";
@@ -38,7 +39,8 @@ type Person = {
 // an admin checks with Purdue, then approves them through a day or
 // declines. Each decision keeps the admin's name.
 export default async function DriversPage() {
-  await requireAdmin();
+  const admin = await requireAdmin();
+  const editor = canEdit(admin.role);
   const { pending, approved, recentlyExpired } = await getDrivers();
 
   return (
@@ -46,7 +48,7 @@ export default async function DriversPage() {
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between gap-4">
           <h1 className="text-2xl font-semibold">Drivers</h1>
-          <PurdueListCheck listUrl={PURDUE_APPROVED_DRIVERS_URL} />
+          {editor && <PurdueListCheck listUrl={PURDUE_APPROVED_DRIVERS_URL} />}
         </div>
         <p className="text-sm text-muted-foreground">
           Volunteers ask to drive by filling out{" "}
@@ -66,8 +68,12 @@ export default async function DriversPage() {
               <TableRow>
                 <People />
                 <TableHead>Asked</TableHead>
-                <TableHead>Approve through</TableHead>
-                <TableHead />
+                {editor && (
+                  <>
+                    <TableHead>Approve through</TableHead>
+                    <TableHead />
+                  </>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -79,26 +85,30 @@ export default async function DriversPage() {
                     <TableCell className="whitespace-nowrap">
                       {formatDate(volunteer.driverRequestedAt!, DEFAULT_TIME_ZONE)}
                     </TableCell>
-                    <TableCell>
-                      <ApproveForm
-                        action={approveDriver.bind(null, volunteer.id)}
-                        suggestedUntil={volunteer.suggestedUntil}
-                        name={name}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <ActionButton
-                        action={declineDriver.bind(null, volunteer.id)}
-                        label="Decline"
-                        variant="ghost"
-                        confirm={{
-                          title: `Decline ${name}?`,
-                          description:
-                            "They won't be approved, and they'll be asked about the form again on their next signup. The decision is kept on record.",
-                          confirmLabel: "Decline",
-                        }}
-                      />
-                    </TableCell>
+                    {editor && (
+                      <>
+                        <TableCell>
+                          <ApproveForm
+                            action={approveDriver.bind(null, volunteer.id)}
+                            suggestedUntil={volunteer.suggestedUntil}
+                            name={name}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <ActionButton
+                            action={declineDriver.bind(null, volunteer.id)}
+                            label="Decline"
+                            variant="ghost"
+                            confirm={{
+                              title: `Decline ${name}?`,
+                              description:
+                                "They won't be approved, and they'll be asked about the form again on their next signup. The decision is kept on record.",
+                              confirmLabel: "Decline",
+                            }}
+                          />
+                        </TableCell>
+                      </>
+                    )}
                   </TableRow>
                 );
               })}
@@ -115,7 +125,7 @@ export default async function DriversPage() {
                 <People />
                 <TableHead>Approved through</TableHead>
                 <TableHead>Approved by</TableHead>
-                <TableHead />
+                {editor && <TableHead />}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -133,19 +143,21 @@ export default async function DriversPage() {
                         {formatDate(approval.decidedAt, DEFAULT_TIME_ZONE)}
                       </span>
                     </TableCell>
-                    <TableCell>
-                      <ActionButton
-                        action={revokeDriver.bind(null, approval.id)}
-                        label="Revoke"
-                        variant="ghost"
-                        confirm={{
-                          title: `Revoke ${volunteer.firstName} ${volunteer.lastName}'s approval?`,
-                          description:
-                            "They'll no longer be an approved driver, and they'll be asked about the form again on their next signup. The approval is kept on record as revoked.",
-                          confirmLabel: "Revoke",
-                        }}
-                      />
-                    </TableCell>
+                    {editor && (
+                      <TableCell>
+                        <ActionButton
+                          action={revokeDriver.bind(null, approval.id)}
+                          label="Revoke"
+                          variant="ghost"
+                          confirm={{
+                            title: `Revoke ${volunteer.firstName} ${volunteer.lastName}'s approval?`,
+                            description:
+                              "They'll no longer be an approved driver, and they'll be asked about the form again on their next signup. The approval is kept on record as revoked.",
+                            confirmLabel: "Revoke",
+                          }}
+                        />
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}

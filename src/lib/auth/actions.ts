@@ -16,6 +16,7 @@ import { clientIp } from "@/lib/request";
 import { auth } from ".";
 import { takeLoginCodeRequest, RESEND_AFTER_SECONDS } from "./rate-limit";
 import { ADMIN_HOME, safeNextPath } from "./redirects";
+import { isRole } from "./roles";
 
 export async function sendLoginCode(
   _prev: SendCodeState,
@@ -33,7 +34,7 @@ export async function sendLoginCode(
     where: { email },
     select: { role: true },
   });
-  if (admin?.role !== "ADMIN") {
+  if (!isRole(admin?.role)) {
     return {
       status: "error",
       message:
@@ -91,7 +92,7 @@ export async function verifyLoginCode(
 
   // Codes are only sent to admins, but someone could have lost admin access
   // since theirs was sent. getAdmin() ignores their new session.
-  if (role !== "ADMIN") return { error: "That email isn't an admin account." };
+  if (!isRole(role)) return { error: "That email isn't an admin account." };
 
   // redirect() works by throwing, so it must be outside the try/catch.
   redirect(safeNextPath(formData.get("next")) ?? ADMIN_HOME);

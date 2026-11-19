@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import * as z from "zod";
-import { requireAdmin } from "@/lib/auth/dal";
+import { requireEditor } from "@/lib/auth/dal";
 import type { ActionState, FormState } from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
 import { fromDay, toDay } from "@/lib/time";
@@ -11,7 +11,7 @@ import { matchPurdueList, type ListCheck } from "./purdue-match";
 import { currentApproval, driverToday } from "./status";
 
 // Admins deciding on volunteers' driver approvals. Every action calls
-// requireAdmin() first, and each decision keeps the admin's name.
+// requireEditor() first, and each decision keeps the admin's name.
 
 function revalidateDrivers() {
   revalidatePath("/admin", "layout");
@@ -27,7 +27,7 @@ export async function approveDriver(
   _prev: ApproveDriverState,
   formData: FormData,
 ): Promise<ApproveDriverState> {
-  const admin = await requireAdmin();
+  const admin = await requireEditor();
 
   const until = untilSchema.safeParse(formData.get("approvedUntil"));
   if (!until.success) return { errors: { approvedUntil: until.error.issues[0].message } };
@@ -48,7 +48,7 @@ export async function approveDriver(
   return { success: true };
 }
 
-type Admin = Awaited<ReturnType<typeof requireAdmin>>;
+type Admin = Awaited<ReturnType<typeof requireEditor>>;
 
 // Saves an approval through a day and ends the volunteer's pending
 // request. Drivers aren't emailed: the signup form shows their approval.
@@ -90,7 +90,7 @@ export async function checkPurdueList(
   _prev: PurdueListState,
   formData: FormData,
 ): Promise<PurdueListState> {
-  await requireAdmin();
+  await requireEditor();
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
@@ -121,7 +121,7 @@ export type ListApprovalResult = { error?: string; approved?: string[] };
 export async function approveFromPurdueList(
   entries: { volunteerId: string; until: string }[],
 ): Promise<ListApprovalResult> {
-  const admin = await requireAdmin();
+  const admin = await requireEditor();
 
   const parsed = listApprovalsSchema.safeParse(entries);
   if (!parsed.success) return { error: "Nothing to approve." };
@@ -153,7 +153,7 @@ export async function approveFromPurdueList(
 // Declines a pending driver, such as someone who never filled out the form.
 // They're asked again on their next signup.
 export async function declineDriver(volunteerId: string): Promise<ActionState> {
-  const admin = await requireAdmin();
+  const admin = await requireEditor();
 
   const volunteer = await prisma.volunteer.findUnique({
     where: { id: volunteerId },
@@ -181,7 +181,7 @@ export async function declineDriver(volunteerId: string): Promise<ActionState> {
 
 // Ends an approval early. The record is kept, marked revoked.
 export async function revokeDriver(approvalId: string): Promise<ActionState> {
-  const admin = await requireAdmin();
+  const admin = await requireEditor();
 
   const { count } = await prisma.driverApproval.updateMany({
     where: { id: approvalId, decision: "APPROVED", revokedAt: null },

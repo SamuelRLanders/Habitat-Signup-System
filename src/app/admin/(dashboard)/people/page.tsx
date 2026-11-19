@@ -23,6 +23,7 @@ import {
 } from "@/lib/admin/people-search";
 import { listFormChoices, searchPeople } from "@/lib/admin/queries";
 import { requireAdmin } from "@/lib/auth/dal";
+import { canEdit } from "@/lib/auth/roles";
 import { EXPERIENCE_LABELS, experienceOf } from "@/lib/experience";
 import { formatPhone } from "@/lib/phone";
 import { DEFAULT_TIME_ZONE, formatDate, toDateInput } from "@/lib/time";
@@ -36,7 +37,8 @@ export const metadata: Metadata = { title: "People" };
 // filtered through the URL, 100 at a time. Details are each volunteer's
 // latest.
 export default async function PeoplePage({ searchParams }: PageProps<"/admin/people">) {
-  await requireAdmin();
+  const admin = await requireAdmin();
+  const editor = canEdit(admin.role);
 
   const search = parsePeopleSearch(await searchParams);
   const [{ total, page, pageCount, people }, forms] = await Promise.all([
@@ -183,11 +185,13 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/peo
                               : `${person.builds} ${person.builds === 1 ? "build" : "builds"}`}
                           </span>
                         </div>
-                        <BuildsDialog
-                          volunteerId={person.id}
-                          name={`${person.firstName} ${person.lastName}`}
-                          builds={person.builds}
-                        />
+                        {editor && (
+                          <BuildsDialog
+                            volunteerId={person.id}
+                            name={`${person.firstName} ${person.lastName}`}
+                            builds={person.builds}
+                          />
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">

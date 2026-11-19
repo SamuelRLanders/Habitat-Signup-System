@@ -15,8 +15,10 @@
     "db:studio": "prisma studio",
     "admin:add": "tsx scripts/add-admin.mts",
     "admin:remove": "tsx scripts/remove-admin.mts",
+    "admin:set-owner": "tsx scripts/set-owner.mts",
     "admin:add:prod": "tsx --env-file=.env.production.local scripts/add-admin.mts",
     "admin:remove:prod": "tsx --env-file=.env.production.local scripts/remove-admin.mts",
+    "admin:set-owner:prod": "tsx --env-file=.env.production.local scripts/set-owner.mts",
     "seed:test": "tsx scripts/seed-test-data.mts"
   },
   "dependencies": {

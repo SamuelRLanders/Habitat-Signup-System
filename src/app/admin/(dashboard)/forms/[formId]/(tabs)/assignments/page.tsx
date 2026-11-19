@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ActionButton } from "@/components/action-button";
 import { Badge } from "@/components/ui/badge";
 import { requireAdmin } from "@/lib/auth/dal";
+import { canEdit } from "@/lib/auth/roles";
 import { travelOf } from "@/lib/placement/load";
 import { revertAssignments } from "@/lib/signup-forms/assignment-actions";
 import { assignmentsOpen } from "@/lib/signup-forms/phase";
@@ -25,14 +26,16 @@ export async function generateMetadata({
 export default async function AssignmentsPage({
   params,
 }: PageProps<"/admin/forms/[formId]/assignments">) {
-  await requireAdmin();
+  const admin = await requireAdmin();
   const { formId } = await params;
 
   const loaded = await loadFormPlan(formId);
   if (!loaded) notFound();
   const { form, active, custom, plan } = loaded;
   if (!assignmentsOpen(form.phase)) redirect(`/admin/forms/${form.id}`);
-  const readOnly = form.phase === "passed";
+  const passed = form.phase === "passed";
+  // Viewers see the board, but can't move anyone.
+  const readOnly = passed || !canEdit(admin.role);
   const names = new Map(form.shifts.map((shift) => [shift.id, shift.name]));
 
   const volunteers: BoardVolunteer[] = active.map((signup) => {
@@ -73,9 +76,11 @@ export default async function AssignmentsPage({
               : "Placed by the app, following the placement rules, then sending someone highly experienced to each build and keeping friends together where it can."}
           </p>
           <p className="text-sm text-muted-foreground">
-            {readOnly
+            {passed
               ? "The event day is over, so these are the final assignments."
-              : custom
+              : readOnly
+                ? "The Overview, Copy emails and the travel roster follow these. As a viewer, you can't change them."
+                : custom
                 ? "The Overview, Copy emails and the travel roster follow these. Volunteers who cancel are taken off; nobody else moves."
                 : "Move anyone and save to make custom assignments. The Overview, Copy emails and the travel roster will follow them."}
           </p>

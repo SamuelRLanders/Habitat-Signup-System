@@ -19,13 +19,13 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   user: {
     additionalFields: {
-      // input: false means sign-in can never set it. Admins are made with
-      // the admin:add script; everyone with an account is an admin.
+      // input: false means sign-in can never set it. Admins are added by
+      // the owner on the Admins page; everyone with an account is an admin.
       role: {
-        type: ["ADMIN"],
+        type: ["OWNER", "EDITOR", "VIEWER"],
         input: false,
         required: false,
-        defaultValue: "ADMIN",
+        defaultValue: "VIEWER",
       },
     },
   },

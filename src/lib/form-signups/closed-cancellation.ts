@@ -1,5 +1,4 @@
 import "server-only";
-import { OPERATIONS_LEAD } from "@/lib/email";
 import { cancellationEffects } from "@/lib/placement/cancellation";
 import { planForRoster, travelOf } from "@/lib/placement/load";
 import { prisma } from "@/lib/prisma";
@@ -7,13 +6,13 @@ import { getSignupForm } from "@/lib/signup-forms/queries";
 import { sendClosedFormCancellation } from "./emails";
 import { getFormRoster } from "./rosters";
 
-// Tells the admin who created a form and the operations lead that a
+// Tells the admin who created a form and the site's owner that a
 // volunteer cancelled after it closed (signupId is their just-cancelled
 // signup), with what it changes for travel: the plan with them, as admins
 // saw it until now, against the plan without them. Nobody new can sign up
 // to fill the gap, so admins may need to sort out rides or resend the
 // travel roster. Only admins with an account are emailed, once each (the
-// creator may be the operations lead); only they see the roster here.
+// creator may be the owner); only they see the roster here.
 export async function alertAdminsOfCancellation(formId: string, signupId: string) {
   const form = await getSignupForm(formId);
   if (!form) return;
@@ -21,7 +20,7 @@ export async function alertAdminsOfCancellation(formId: string, signupId: string
     where: {
       OR: [
         ...(form.createdById ? [{ id: form.createdById }] : []),
-        { email: { equals: OPERATIONS_LEAD, mode: "insensitive" as const } },
+        { role: "OWNER" as const },
       ],
     },
     select: { email: true, name: true },

@@ -4,6 +4,7 @@ import { ActionButton } from "@/components/action-button";
 import { buttonVariants } from "@/components/ui/button";
 import type { FormStatus } from "@/generated/prisma/enums";
 import { requireAdmin } from "@/lib/auth/dal";
+import { canEdit } from "@/lib/auth/roles";
 import { emailsSentToday } from "@/lib/email";
 import { emailLimitNote } from "@/lib/email-limit";
 import type { FormQuestions } from "@/lib/placement/load";
@@ -26,7 +27,8 @@ export default async function SignupFormLayout({
   params,
   children,
 }: LayoutProps<"/admin/forms/[formId]">) {
-  await requireAdmin();
+  const admin = await requireAdmin();
+  const editor = canEdit(admin.role);
   const { formId } = await params;
 
   const form = await loadForm(formId);
@@ -36,6 +38,7 @@ export default async function SignupFormLayout({
   // An event can be cancelled until its day is over. Drafts nobody signed
   // up for are deleted instead.
   const canCancel =
+    editor &&
     form.status !== "CANCELLED" &&
     form.day >= today() &&
     (form.status === "PUBLISHED" || form.signupCount > 0);
@@ -71,7 +74,7 @@ export default async function SignupFormLayout({
 
           <div className="flex flex-wrap items-start gap-2">
             {form.status === "PUBLISHED" && <ShareDialog path={`/signup/${form.id}`} />}
-            {form.status !== "CANCELLED" && (
+            {editor && form.status !== "CANCELLED" && (
               <Link
                 href={`/admin/forms/${form.id}/edit`}
                 className={buttonVariants({ variant: "outline", size: "sm" })}
@@ -79,11 +82,13 @@ export default async function SignupFormLayout({
                 Edit form
               </Link>
             )}
-            <StatusActions
-              formId={form.id}
-              status={form.status}
-              signupCount={form.signupCount}
-            />
+            {editor && (
+              <StatusActions
+                formId={form.id}
+                status={form.status}
+                signupCount={form.signupCount}
+              />
+            )}
             {canCancel && (
               <CancelEventButton formId={form.id} signupCount={form.signupCount} sentToday={sentToday} />
             )}

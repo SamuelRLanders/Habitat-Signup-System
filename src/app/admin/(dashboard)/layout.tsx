@@ -4,6 +4,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { buttonVariants } from "@/components/ui/button";
 import { signOut } from "@/lib/auth/actions";
 import { requireAdmin } from "@/lib/auth/dal";
+import { ROLE_LABELS } from "@/lib/auth/roles";
 import { AdminNav } from "./admin-nav";
 
 // Wraps every admin page except the login pages, which live outside this
@@ -19,10 +20,12 @@ export default async function DashboardLayout({
       <header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b-4 border-gold px-4 py-3">
         <SiteBrand href="/admin" label="Purdue Habitat Admin" />
         <div className="order-last w-full sm:order-none sm:w-auto sm:flex-1">
-          <AdminNav />
+          <AdminNav showAdmins={admin.role === "OWNER"} />
         </div>
         <div className="flex items-center gap-3 text-sm">
-          <span className="hidden text-muted-foreground md:inline">{admin.email}</span>
+          <span className="hidden text-muted-foreground md:inline">
+            {admin.email} · {ROLE_LABELS[admin.role]}
+          </span>
           {/* The public home page, as volunteers see it. */}
           <Link href="/" className={buttonVariants({ variant: "outline", size: "sm" })}>
             Volunteer site

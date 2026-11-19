@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/dal";
+import { requireEditorPage } from "@/lib/auth/dal";
 import { prisma } from "@/lib/prisma";
 import { updateSignupForm } from "@/lib/signup-forms/actions";
 import { offeredShifts } from "@/lib/signup-forms/queries";
@@ -20,8 +20,8 @@ export const metadata: Metadata = { title: "Edit signup form" };
 export default async function EditSignupFormPage({
   params,
 }: PageProps<"/admin/forms/[formId]/edit">) {
-  await requireAdmin();
   const { formId } = await params;
+  await requireEditorPage(`/admin/forms/${formId}/edit`, `/admin/forms/${formId}`);
 
   const form = await prisma.signupForm.findUnique({
     where: { id: formId },

@@ -48,7 +48,8 @@ A web app for the Purdue Habitat for Humanity chapter. Volunteer organization le
 
 ## Data Model
 
-- **User**: an admin. Admins are added with `npm run admin:add`; volunteers don't have accounts.
+- **User**: an admin: the owner, an editor or a viewer (see Admin roles). Volunteers don't have accounts.
+- **OwnershipTransfer**: the owner's pending handover to another admin, emailed as a link that works for 7 days (stored hashed)
 - **LoginCodeRequest**: recent requests for emailed codes (admin sign-in and volunteer email checks), used to limit how often codes are sent
 - **SignupForm**: the form for one build day (one per date): open and close times, draft or published, a description, and the name of the admin who created it
 - **Shift**: one of a form's builds (the app calls it a build): name, address, description, start/end time on the form's day (Indiana time), number of spots. Builds volunteers chose are cancelled rather than deleted.
@@ -58,8 +59,16 @@ A web app for the Purdue Habitat for Humanity chapter. Volunteer organization le
 - **ShiftPreference**: a build a volunteer said they could work at
 - **DriverApproval**: an admin's approval (through an end date) or decline of a volunteer's Purdue driver approval, with the admin's name. A volunteer is pending while `Volunteer.driverRequestedAt` is set.
 - **VolunteerCode**, **VolunteerSession**: the codes volunteers confirm their email with, and the 2-hour browser sessions that follow (both stored hashed)
-- **Message**, **MessageRecipient**: for emails admins will send to volunteers (not built yet)
-- **EmailDay**: how many emails were sent through Resend each UTC day. When a day reaches 85 of Resend's 100, emails volunteers set off stop (keeping the rest for admins' sign-in codes) and the operations lead (set in `src/lib/email.ts`) is emailed once.
+- **Message**, **MessageRecipient**: for emails admins will send to volunteers (not built yet). A message outlives the admin who sent it.
+- **EmailDay**: how many emails were sent through Resend each UTC day. When a day reaches 85 of Resend's 100, emails volunteers set off stop (keeping the rest for admins' sign-in codes) and the owner is emailed once.
+
+## Admin roles
+
+- **Owner** (exactly one): everything an editor can do, plus the **Admins** page: add admins (they're emailed), make them editors or viewers, remove them, and transfer ownership. The owner also gets the daily email limit warning, and the alert when a volunteer cancels after a form closes.
+- **Editor**: sees and changes forms, signups, assignments, people and drivers.
+- **Viewer**: sees every admin page and can copy emails and download CSVs, but can't change anything. Every Server Action that writes calls `requireEditor()` (`src/lib/auth/dal.ts`), so this holds even outside the UI.
+
+Transferring ownership emails the chosen admin a link. Opening it changes nothing: they sign in as themselves and choose **Accept ownership**, then they become the owner, the old owner becomes an editor and is emailed. Until then the owner can cancel. The database allows only one owner (a partial unique index). If the owner can't sign in, `npm run admin:set-owner` sets one directly.
 
 ## Key Considerations
 
@@ -78,6 +87,7 @@ npm install                # also generates the Prisma client
 cp .env.example .env       # then set DATABASE_URL and BETTER_AUTH_SECRET
 npm run db:migrate         # create the database tables
 npm run admin:add -- you@example.org "Your Name"   # add yourself as an admin
+npm run admin:set-owner -- you@example.org         # and make yourself the owner
 npm run dev                # http://localhost:3000
 ```
 
@@ -95,9 +105,10 @@ npm run dev                # http://localhost:3000
 | `npm run db:status:prod` | List migrations the production database hasn't had yet (changes nothing) |
 | `npm run db:deploy:prod` | Apply committed migrations to the production database (`prisma migrate deploy`, never resets). Run it before merging additive changes to `main`; split column removals and renames across two releases. |
 | `npm run db:studio` | Browse and edit data in Prisma Studio |
-| `npm run admin:add -- <email> "<name>"` | Add an admin |
-| `npm run admin:remove -- <email>` | Remove an admin and sign them out (keeps the forms and decisions they made) |
-| `npm run admin:add:prod -- <email> "<name>"`, `npm run admin:remove:prod -- <email>` | The same, on the production database, using the `DATABASE_URL` in `.env.production.local` (git-ignored). `.env` holds the development database's. |
+| `npm run admin:add -- <email> "<name>" [editor\|viewer]` | Add an admin (an editor unless said), without emailing them. The owner usually adds admins on the Admins page. |
+| `npm run admin:remove -- <email>` | Remove an admin and sign them out (keeps the forms and decisions they made). Not the owner. |
+| `npm run admin:set-owner -- <email>` | Make an admin the owner straight away; the old owner becomes an editor. For setup, or if the owner can't sign in. |
+| `npm run admin:add:prod`, `admin:remove:prod`, `admin:set-owner:prod` | The same, on the production database, using the `DATABASE_URL` in `.env.production.local` (git-ignored). `.env` holds the development database's. |
 | `npm run seed:test` | Replace the test forms and builds, volunteers and signups (`-- --clean` only removes them; `-- --people 350` adds made-up volunteers). Test volunteers have `@example.org` emails. |
 
 **Project layout**

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import * as z from "zod";
-import { requireAdmin } from "@/lib/auth/dal";
+import { requireEditor } from "@/lib/auth/dal";
 import { sendEventCancelled } from "@/lib/form-signups/emails";
 import {
   firstErrors,
@@ -24,7 +24,7 @@ import {
 } from "@/lib/time";
 import { today } from "./queries";
 
-// Every action calls requireAdmin() first: Server Actions can be called by
+// Every action calls requireEditor() first: Server Actions can be called by
 // anyone who sends a POST request, not only through our forms. IDs bound to
 // an action are also sent by the browser, so they're treated as untrusted.
 
@@ -145,7 +145,7 @@ export async function createSignupForm(
   _prev: SignupFormState,
   formData: FormData,
 ): Promise<SignupFormState> {
-  const admin = await requireAdmin();
+  const admin = await requireEditor();
 
   const parsed = parseSignupForm(formData);
   if (!parsed.ok) return parsed.state;
@@ -174,7 +174,7 @@ export async function updateSignupForm(
   _prev: SignupFormState,
   formData: FormData,
 ): Promise<SignupFormState> {
-  await requireAdmin();
+  await requireEditor();
 
   const existing = await prisma.signupForm.findUnique({
     where: { id: formId },
@@ -271,7 +271,7 @@ export async function setSignupFormStatus(
   formId: string,
   status: z.infer<typeof statusSchema>,
 ): Promise<ActionState> {
-  await requireAdmin();
+  await requireEditor();
 
   const next = statusSchema.safeParse(status);
   if (!next.success) return { error: "Unknown status." };
@@ -308,7 +308,7 @@ export async function setSignupFormStatus(
 // The form stays as a record, telling volunteers who open it that the
 // event is off. Admins are warned before this, since it sends email.
 export async function cancelSignupForm(formId: string): Promise<ActionState> {
-  const admin = await requireAdmin();
+  const admin = await requireEditor();
 
   const result = await prisma.$transaction(async (tx) => {
     // Lock the form until this transaction ends, as a signup does, so
@@ -363,7 +363,7 @@ export async function cancelSignupForm(formId: string): Promise<ActionState> {
 // Only drafts can be deleted, so a form volunteers might have the link to
 // doesn't vanish by accident, and only if nobody has signed up through it.
 export async function deleteSignupForm(formId: string): Promise<ActionState> {
-  await requireAdmin();
+  await requireEditor();
 
   const form = await prisma.signupForm.findUnique({
     where: { id: formId },
