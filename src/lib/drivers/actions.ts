@@ -3,10 +3,9 @@
 import { revalidatePath } from "next/cache";
 import * as z from "zod";
 import { requireAdmin } from "@/lib/auth/dal";
-import { emailsSentToday, escapeHtml, sendEmail } from "@/lib/email";
 import type { ActionState, FormState } from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
-import { formatDay, fromDay, toDay } from "@/lib/time";
+import { fromDay, toDay } from "@/lib/time";
 import { PurdueListError, readPurdueList } from "./purdue-list";
 import { matchPurdueList, type ListCheck } from "./purdue-match";
 import { currentApproval, driverToday } from "./status";
@@ -22,7 +21,7 @@ const untilSchema = z.iso.date("Choose the last day of the approval.");
 
 export type ApproveDriverState = FormState<"approvedUntil">;
 
-// Approves a pending driver through a day, and lets them know by email.
+// Approves a pending driver through a day.
 export async function approveDriver(
   volunteerId: string,
   _prev: ApproveDriverState,
@@ -38,27 +37,26 @@ export async function approveDriver(
 
   const volunteer = await prisma.volunteer.findUnique({
     where: { id: volunteerId },
-    select: { email: true, firstName: true, driverRequestedAt: true },
+    select: { driverRequestedAt: true },
   });
   if (!volunteer?.driverRequestedAt) {
     return { errors: { form: "This volunteer isn't waiting for approval anymore." } };
   }
 
-  await recordApproval(admin, volunteerId, volunteer.driverRequestedAt, until.data, volunteer);
+  await recordApproval(admin, volunteerId, volunteer.driverRequestedAt, until.data);
   revalidateDrivers();
   return { success: true };
 }
 
 type Admin = Awaited<ReturnType<typeof requireAdmin>>;
 
-// Saves an approval through a day, ends the volunteer's pending request,
-// and lets them know by email.
+// Saves an approval through a day and ends the volunteer's pending
+// request. Drivers aren't emailed: the signup form shows their approval.
 async function recordApproval(
   admin: Admin,
   volunteerId: string,
   requestedAt: Date,
   until: string,
-  volunteer: { email: string; firstName: string },
 ) {
   await prisma.$transaction([
     prisma.driverApproval.create({
@@ -73,19 +71,6 @@ async function recordApproval(
     }),
     prisma.volunteer.update({ where: { id: volunteerId }, data: { driverRequestedAt: null } }),
   ]);
-
-  // The approval is saved, so a failed email doesn't undo it.
-  const body = `You're now an approved Purdue Habitat driver through ${formatDay(until)}. Thanks for helping get volunteers to our builds!`;
-  try {
-    await sendEmail({
-      to: volunteer.email,
-      subject: "You're an approved Purdue Habitat driver",
-      text: `Hi ${volunteer.firstName},\n\n${body}`,
-      html: `<p>Hi ${escapeHtml(volunteer.firstName)},</p><p>${escapeHtml(body)}</p>`,
-    });
-  } catch (error) {
-    console.error("Failed to send driver approval email", error);
-  }
 }
 
 // ─── Purdue's approved driver list ───────────────────────────────────────────
@@ -96,8 +81,6 @@ export type PurdueListState = {
   error?: string;
   check?: ListCheck;
   checkedAt?: number;
-  // Emails sent today, since approving sends more.
-  sentToday?: number;
 };
 
 // Reads an uploaded copy of Purdue's ApprovedDrivers.xlsx and matches it
@@ -117,7 +100,7 @@ export async function checkPurdueList(
 
   try {
     const list = await readPurdueList(await file.arrayBuffer());
-    return { check: await matchPurdueList(list), checkedAt: Date.now(), sentToday: await emailsSentToday() };
+    return { check: await matchPurdueList(list), checkedAt: Date.now() };
   } catch (error) {
     if (error instanceof PurdueListError) return { error: error.message };
     console.error("Failed to read Purdue's driver list", error);
@@ -150,8 +133,6 @@ export async function approveFromPurdueList(
     const volunteer = await prisma.volunteer.findUnique({
       where: { id: volunteerId },
       select: {
-        email: true,
-        firstName: true,
         driverRequestedAt: true,
         driverApprovals: { where: currentApproval(today), orderBy: { approvedUntil: "desc" }, take: 1 },
       },
@@ -161,7 +142,7 @@ export async function approveFromPurdueList(
     const renewed = currentUntil && until > toDay(currentUntil);
     if (!volunteer.driverRequestedAt && !renewed) continue;
 
-    await recordApproval(admin, volunteerId, volunteer.driverRequestedAt ?? new Date(), until, volunteer);
+    await recordApproval(admin, volunteerId, volunteer.driverRequestedAt ?? new Date(), until);
     approved.push(volunteerId);
   }
 

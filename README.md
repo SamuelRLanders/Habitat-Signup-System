@@ -28,7 +28,7 @@ A web app for the Purdue Habitat for Humanity chapter. Volunteer organization le
 - Copy the emails of the volunteers going to each build, once its form closes
 - Copy Purdue's travel roster for a build day: who's going to each build, who's driving whom, and phone numbers, following the likely placement
 - Search and filter every volunteer on the People page, and download them as a CSV
-- Approve pending drivers through an end date (suggested a year after they asked), decline them, or revoke an approval on the Drivers page. Each decision records the admin's name, and approved drivers are emailed.
+- Approve pending drivers through an end date (suggested a year after they asked), decline them, or revoke an approval on the Drivers page. Each decision records the admin's name. Drivers aren't emailed; their next signup form shows they're approved.
 - Check drivers against Purdue's approved driver list: download ApprovedDrivers.xlsx from Purdue's SharePoint, upload it on the Drivers page, and approve the matches (by email, or by name to double-check) with their Purdue end dates. Approved drivers Purdue has renewed can be extended. The file isn't kept.
 - See each volunteer's driver status and how they're getting there on the rosters, with ride and seat totals
 - Remove builds from a form. A build volunteers chose is cancelled rather than deleted: it disappears from the form, and volunteers' choices of it come back if it's restored.
