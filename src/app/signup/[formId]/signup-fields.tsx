@@ -168,15 +168,11 @@ export function SignupFields({
   const travelNote = (option: Transportation) =>
     travelHasRoom[option]
       ? null
-      : !anyRoom
-        ? "Full: not taking more signups"
-        : option === "CAN_DRIVE"
-          ? "Full: there's no room for another car"
-          : onlyDrivers
-            ? "Full: the spots left are held for drivers"
-            : option === "NEEDS_RIDE"
-              ? "Full: not enough drivers for more riders yet"
-              : "Full for volunteers getting there on their own";
+      : onlyDrivers && option !== "CAN_DRIVE"
+        ? ONLY_DRIVERS
+        : anyRoom && option === "NEEDS_RIDE" && travelHasRoom.OWN_WAY
+          ? ONLY_OWN_WAY
+          : FULL;
 
   const steps = [
     { id: "info", title: "Your information" },
@@ -518,7 +514,7 @@ export function SignupFields({
                   // Full when no build has room for one more volunteer
                   // getting there this way.
                   disabled={!travelHasRoom[option.value]}
-                  lines={[travelNote(option.value)]}
+                  note={travelNote(option.value)}
                 />
               ),
             )}
@@ -578,11 +574,11 @@ export function SignupFields({
                   describedBy={errors.shifts ? "shifts-error" : undefined}
                   title={build.buildName}
                   disabled={full}
+                  note={full ? fullNote(rooms[build.id], travel, askTransportation) : null}
                   lines={[
                     `${build.time} · ${build.address}`,
                     build.description,
                     build.lunch && `Lunch: ${build.lunch}`,
-                    full ? fullNote(rooms[build.id], travel, askTransportation) : null,
                   ]}
                 />
               );
@@ -681,24 +677,32 @@ function listNames(names: string[]) {
   return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
-// Why a build is full for a volunteer getting there this way: it's full for
-// everyone, or its last spots are held for drivers, so a build can be full
-// for some volunteers and not others (src/lib/placement/solver.ts).
+// The short phrases saying why a build, or a way of getting there, can't be
+// chosen. Spots can be held for drivers, so a build can be full for some
+// volunteers and not others (src/lib/placement/solver.ts).
+const FULL = "Slots are full";
+const ONLY_DRIVERS = "Only accepting people willing to drive others";
+const ONLY_OWN_WAY = "Only accepting people who can find their own transportation";
+
+// Why a build the volunteer can't choose is closed to them, given how
+// they're getting there.
 function fullNote(room: BuildRoom, travel: Travel | null, askTransportation: boolean) {
-  if (!askTransportation || room.driverMinSeats === null) return "Full: not taking more signups";
-  if (travel === "driver") return `Full for cars with fewer than ${room.driverMinSeats} seats`;
-  if (!room.rider && !room.ownWay) return "Only taking drivers: the spots left are held for drivers";
-  if (travel === "rider") return "Full for volunteers who need a ride: not enough drivers yet";
-  return "Full for volunteers getting there on their own";
+  if (!askTransportation || room.driverMinSeats === null) return FULL;
+  if (travel === "driver") return `Only accepting cars with ${room.driverMinSeats} or more seats`;
+  if (!room.rider && !room.ownWay) return ONLY_DRIVERS;
+  if (travel === "rider" && room.ownWay) return ONLY_OWN_WAY;
+  return FULL;
 }
 
 // A pill-shaped choice that fills in when picked, as a checkbox or one of a
-// set of radio buttons. A disabled one is greyed out.
+// set of radio buttons. A disabled one is greyed out, except for its note
+// (why it can't be chosen), which is red under the title so it stands out.
 function ChoicePill({
   role,
   checked,
   onClick,
   title,
+  note = null,
   lines = [],
   describedBy,
   disabled = false,
@@ -707,6 +711,7 @@ function ChoicePill({
   checked: boolean;
   onClick: () => void;
   title: string;
+  note?: string | null;
   lines?: (string | null)[];
   describedBy?: string;
   disabled?: boolean;
@@ -722,7 +727,7 @@ function ChoicePill({
       className={cn(
         "flex items-center gap-3 rounded-full border px-4 py-2.5 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
         disabled
-          ? "cursor-not-allowed border-border opacity-60"
+          ? "cursor-not-allowed border-border"
           : checked
             ? "hover-gold border-primary bg-primary text-primary-foreground"
             : "hover-gold border-border hover:bg-muted/50",
@@ -733,16 +738,21 @@ function ChoicePill({
         className={cn(
           "flex size-6 shrink-0 items-center justify-center rounded-full border",
           checked ? "border-primary-foreground bg-primary-foreground text-primary" : "border-muted-foreground/40",
+          disabled && "opacity-60",
         )}
       >
         {checked && <CheckIcon className="size-4" />}
       </span>
       <span className="flex min-w-0 flex-col">
-        <span className="font-medium">{title}</span>
+        <span className={cn("font-medium", disabled && "opacity-60")}>{title}</span>
+        {note && <span className="text-sm font-medium text-destructive">{note}</span>}
         {lines.map(
           (line) =>
             line && (
-              <span key={line} className={cn("text-sm", checked ? "opacity-85" : "text-muted-foreground")}>
+              <span
+                key={line}
+                className={cn("text-sm", checked ? "opacity-85" : "text-muted-foreground", disabled && "opacity-60")}
+              >
                 {line}
               </span>
             ),

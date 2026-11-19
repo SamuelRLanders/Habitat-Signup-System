@@ -395,12 +395,12 @@ async function seed() {
   const mixed = await createForm({
     ...open(fromToday(10)),
     name: "Test: every reason a build is full",
-    description: "Four builds: one completely full, one only taking drivers, one full for riders, one with room. Pick each way of getting there to see the notes on the builds.",
+    description: "Four builds. Spruce Court is full, Hawthorn Way is only accepting drivers, Linden Street is full for riders, and Magnolia Drive has room. Pick each way of getting there to see the messages on the builds.",
     builds: [
-      { name: FULL, address: "12 Spruce Ct, Lafayette, IN 47905", description: "Completely full.", hours: [9, 13], capacity: 4 },
-      { name: ONLY_DRIVERS, address: "450 Hawthorn Way, West Lafayette, IN 47906", description: "Only taking drivers.", hours: [9, 13], capacity: 6 },
-      { name: NO_RIDES, address: "77 Linden St, Lafayette, IN 47901", description: "Full for volunteers who need a ride.", hours: [8, 12], capacity: 8 },
-      { name: ROOM, address: "2900 Magnolia Dr, Lafayette, IN 47909", description: "Plenty of room.", hours: [8, 14], capacity: 20 },
+      { name: FULL, address: "12 Spruce Ct, Lafayette, IN 47905", description: "Exterior painting.", hours: [9, 13], capacity: 4 },
+      { name: ONLY_DRIVERS, address: "450 Hawthorn Way, West Lafayette, IN 47906", description: "Kitchen cabinets and countertops.", hours: [9, 13], capacity: 6 },
+      { name: NO_RIDES, address: "77 Linden St, Lafayette, IN 47901", description: "Insulation. Masks provided.", hours: [8, 12], capacity: 8 },
+      { name: ROOM, address: "2900 Magnolia Dr, Lafayette, IN 47909", description: "Framing. No experience needed.", hours: [8, 14], capacity: 20 },
     ],
     sections: waivers,
   });
