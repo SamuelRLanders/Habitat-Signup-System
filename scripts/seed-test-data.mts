@@ -36,6 +36,13 @@ function at(date: string, hour: number) {
 
 const day = (date: string) => new Date(`${date}T00:00:00Z`);
 
+// The date in Indiana some days from now, like "2026-11-28", so test forms
+// can be open whenever the script runs.
+function fromToday(days: number) {
+  const date = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  return date.toLocaleDateString("en-CA", { timeZone: "America/Indiana/Indianapolis" });
+}
+
 async function clean() {
   const testEmail = { endsWith: TEST_DOMAIN };
   const testForm = { description: { startsWith: TEST_PREFIX } };
@@ -96,11 +103,13 @@ async function seed() {
     name: string;
     address: string;
     description?: string;
+    lunch?: string;
     hours: [number, number]; // in Indiana, on the form's day
     capacity: number;
     cancelled?: boolean;
   };
   const createForm = async (data: {
+    name?: string;
     date: string;
     status: "DRAFT" | "PUBLISHED";
     opens: [string, number];
@@ -111,7 +120,7 @@ async function seed() {
   }) => {
     return prisma.signupForm.create({
       data: {
-        name: "Test build day",
+        name: data.name ?? "Test build day",
         date: day(data.date),
         status: data.status,
         opensAt: at(...data.opens),
@@ -366,6 +375,80 @@ async function seed() {
   await signUpAll(["Di Young", "Ed Marsh"], oct14, [ASH, PINE], "OWN_WAY");
   await signUp(await person("Flo Stone"), oct14, [PINE], "OWN_WAY", true);
 
+  // ── Days open right now, for trying why ways of getting there and builds
+  // can't be chosen on the signup form. Each is on its own day, so one
+  // volunteer can try them all.
+  const open = (date: string) => ({
+    date,
+    status: "PUBLISHED" as const,
+    opens: [fromToday(-1), 9] as [string, number],
+    closes: [fromToday(9), 22] as [string, number],
+  });
+  const FULL = "Spruce Court Home";
+  const ONLY_DRIVERS = "Hawthorn Way Rehab";
+  const NO_RIDES = "Linden Street Home";
+  const ROOM = "Magnolia Drive Home";
+
+  // Every reason on one day: Spruce is full for everyone, Hawthorn is held
+  // for drivers (4 riders and no car), Linden is full for riders (Jo's car
+  // is full, 7 of 8), and Magnolia has room.
+  const mixed = await createForm({
+    ...open(fromToday(10)),
+    name: "Test: every reason a build is full",
+    description: "Four builds: one completely full, one only taking drivers, one full for riders, one with room. Pick each way of getting there to see the notes on the builds.",
+    builds: [
+      { name: FULL, address: "12 Spruce Ct, Lafayette, IN 47905", description: "Completely full.", hours: [9, 13], capacity: 4 },
+      { name: ONLY_DRIVERS, address: "450 Hawthorn Way, West Lafayette, IN 47906", description: "Only taking drivers.", hours: [9, 13], capacity: 6 },
+      { name: NO_RIDES, address: "77 Linden St, Lafayette, IN 47901", description: "Full for volunteers who need a ride.", hours: [8, 12], capacity: 8 },
+      { name: ROOM, address: "2900 Magnolia Dr, Lafayette, IN 47909", description: "Plenty of room.", hours: [8, 14], capacity: 20 },
+    ],
+    sections: waivers,
+  });
+  await signUpAll(["Ari Stone", "Bea Frost", "Cole Vance", "Dev Rao"], mixed, [FULL], "OWN_WAY");
+  await signUpAll(["Eden Pratt", "Finn Lowe", "Gia Moreno", "Hal Burke"], mixed, [ONLY_DRIVERS], "NEEDS_RIDE");
+  await signUp(await person("Jo Kemp", { seats: 5, status: "approved" }), mixed, [NO_RIDES], "CAN_DRIVE");
+  await signUpAll(["Kai Dunn", "Lou Hayes", "Mae Ross", "Ned Shaw"], mixed, [NO_RIDES], "NEEDS_RIDE");
+  await signUpAll(["Oli Wade", "Pia Lane"], mixed, [NO_RIDES], "OWN_WAY");
+
+  // Both builds held for drivers, so "I need a ride" and "I can get there
+  // on my own" are both greyed out.
+  const heldA = "Chestnut Lane Home";
+  const heldB = "Juniper Court Rehab";
+  const held = await createForm({
+    ...open(fromToday(11)),
+    name: "Test: only taking drivers",
+    description: "Both builds' last spots are held for drivers.",
+    builds: [
+      { name: heldA, address: "18 Chestnut Ln, Lafayette, IN 47905", hours: [9, 13], capacity: 6 },
+      { name: heldB, address: "605 Juniper Ct, West Lafayette, IN 47906", hours: [9, 13], capacity: 6 },
+    ],
+  });
+  await signUpAll(["Quin Hart", "Remy Cole", "Sage Park", "Tate Bell"], held, [heldA], "NEEDS_RIDE");
+  await signUpAll(["Uri Lamb", "Val Nash", "Wes Ford", "Xia Lin"], held, [heldB], "NEEDS_RIDE");
+
+  // One build that's full for riders, so there's no build step and "I need
+  // a ride" says there aren't enough drivers yet.
+  const solo = "Sycamore Street Home";
+  const noRides = await createForm({
+    ...open(fromToday(12)),
+    name: "Test: one build, full for riders",
+    description: "One build, so there's no build step. Its driver's car is full.",
+    builds: [{ name: solo, address: "330 Sycamore St, Lafayette, IN 47904", description: "Deck building.", hours: [8, 12], lunch: "Pizza from the homeowner", capacity: 8 }],
+    sections: waivers,
+  });
+  await signUp(await person("Yara Holt", { seats: 5, status: "approved" }), noRides, [solo], "CAN_DRIVE");
+  await signUpAll(["Zed Pace", "Amy Roth", "Bo Kline", "Cy Webb"], noRides, [solo], "NEEDS_RIDE");
+  await signUpAll(["Di Lowry", "Ez Mann"], noRides, [solo], "OWN_WAY");
+
+  // One build with plenty of room.
+  await createForm({
+    ...open(fromToday(13)),
+    name: "Test: one build with room",
+    description: "One build with plenty of room, so there's no build step.",
+    builds: [{ name: "Aspen Way Home", address: "51 Aspen Way, West Lafayette, IN 47906", description: "Painting and trim.", hours: [9, 14], capacity: 15 }],
+    sections: waivers,
+  });
+
   console.log(`
 Test data created. See it at ${SITE}/admin/forms and
 ${SITE}/admin/people. Volunteers see published forms at ${SITE}/.
@@ -383,6 +466,20 @@ Signup forms:
                 sign up there
   Wed, Oct 14   closed, still to come; Ash Street and Pine Ridge each have
                 a "Copy emails" pill (Flo cancelled, so she's left out)
+
+Open now, for trying why options are greyed out on the signup form:
+  ${fromToday(10)}  "Every reason a build is full": one full, one only
+                taking drivers, one full for riders, one with room
+  ${fromToday(11)}  "Only taking drivers": riding and getting there on
+                your own are greyed out
+  ${fromToday(12)}  "One build, full for riders": no build step; riding
+                says there aren't enough drivers yet
+  ${fromToday(13)}  "One build with room": no build step
+
+  Sign in as alice@example.org (approved driver, 5-seat car) to see the
+  driving option, ben@example.org (pending) for the pending driver note, or
+  any new @example.org address with a license for Purdue's form and the
+  "Put NA" note.
 
 Volunteers: alice, ben, carmen, dana and eli @example.org. Open the Oct 10
 form with one of them to see or cancel their signup.
