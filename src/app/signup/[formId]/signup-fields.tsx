@@ -141,6 +141,9 @@ export function SignupFields({
   const [rooms, setRooms] = useState<Record<string, BuildRoom>>(() =>
     Object.fromEntries(builds.map((build) => [build.id, build.room])),
   );
+  // With only one build that day there's nothing to choose: the builds step
+  // is left out, and they sign up for it once it has room for them.
+  const onlyBuild = builds.length === 1 ? builds[0] : null;
 
   // Only drivers who are approved or waiting for approval (counting a
   // "yes" just now) can offer to drive others.
@@ -156,14 +159,31 @@ export function SignupFields({
   // Whether a build has room for them, given how they're getting there.
   const hasRoom = (build: BuildChoice) =>
     travel !== null && hasRoomFor(rooms[build.id], travel, seats);
-  const chosenWithRoom = builds.filter((build) => chosen.has(build.id) && hasRoom(build));
+  const chosenWithRoom = builds.filter((build) => (onlyBuild || chosen.has(build.id)) && hasRoom(build));
+  // Why a way of getting there is full: every build is, or the spots left
+  // are held for drivers (so riders have rides), or there aren't enough
+  // drivers yet for more riders.
+  const anyRoom = builds.some((build) => rooms[build.id].driverMinSeats !== null);
+  const onlyDrivers = anyRoom && !travelHasRoom.NEEDS_RIDE && !travelHasRoom.OWN_WAY;
+  const travelNote = (option: Transportation) =>
+    travelHasRoom[option]
+      ? null
+      : !anyRoom
+        ? "Full: not taking more signups"
+        : option === "CAN_DRIVE"
+          ? "Full: there's no room for another car"
+          : onlyDrivers
+            ? "Full: the spots left are held for drivers"
+            : option === "NEEDS_RIDE"
+              ? "Full: not enough drivers for more riders yet"
+              : "Full for volunteers getting there on their own";
 
   const steps = [
     { id: "info", title: "Your information" },
     ...(askTransportation && license ? [{ id: "driver", title: "Driver approval" }] : []),
     ...(askTransportation ? [{ id: "transport", title: "Getting to the site" }] : []),
     ...(transportChoice === "CAN_DRIVE" ? [{ id: "car", title: "Your car" }] : []),
-    { id: "builds", title: "Builds you could work at" },
+    ...(onlyBuild ? [] : [{ id: "builds", title: "Builds you could work at" }]),
     ...(grouping ? [{ id: "group", title: "Friends to work with" }] : []),
     ...sections.map((section) => ({ id: `waiver-${section.id}`, title: section.title })),
   ];
@@ -181,8 +201,25 @@ export function SignupFields({
 
   const [state, formAction, pending] = useActionState(
     async (prev: SignupFormState, formData: FormData) => {
-      const result = await action(prev, formData);
+      let result = await action(prev, formData);
       if (result.rooms) setRooms(result.rooms);
+      // Without a builds step, the build filling up is a problem with how
+      // they're getting there (or, without that question, the whole day).
+      if (onlyBuild && result.errors?.shifts) {
+        const { shifts, ...rest } = result.errors;
+        result = {
+          ...result,
+          errors: !result.rooms
+            ? { ...rest, form: shifts }
+            : askTransportation
+              ? {
+                  ...rest,
+                  transportation:
+                    "Sorry, the build just filled up for volunteers getting there that way. Choose another way if there is one, or check the home page for other days.",
+                }
+              : { ...rest, form: "Sorry, the build just filled up. Check the home page for other days." },
+        };
+      }
       // Open the step with the first problem.
       const errors = result.errors ?? {};
       const step = ERROR_STEPS.find(([field]) => errors[field])?.[1];
@@ -225,6 +262,8 @@ export function SignupFields({
       problems.carSeats = "Tell us how many seats your car has.";
     } else if (active === "car" && seats !== null && seats < MIN_CAR_SEATS) {
       problems.carSeats = `To drive others, your car needs at least ${MIN_CAR_SEATS} seats, counting yours.`;
+    } else if (active === "car" && onlyBuild && !hasRoom(onlyBuild)) {
+      problems.carSeats = `The build only has room for another car with at least ${rooms[onlyBuild.id].driverMinSeats} seats, counting yours. With a smaller car, choose another way of getting there.`;
     } else if (active === "builds" && chosenWithRoom.length === 0) {
       problems.shifts = "Choose at least one build you could work at.";
     } else if (active === "group") {
@@ -345,6 +384,17 @@ export function SignupFields({
       }}
       className="flex flex-col gap-6"
     >
+      {onlyBuild && (
+        <section className="flex flex-col gap-1 rounded-3xl bg-muted/40 p-5 ring-1 ring-foreground/5 sm:p-6">
+          <p className="text-sm text-muted-foreground">The build</p>
+          <h2 className="text-lg font-semibold">{onlyBuild.buildName}</h2>
+          <p className="text-sm">
+            {onlyBuild.time} · {onlyBuild.address}
+          </p>
+          {onlyBuild.description && <p className="text-sm text-muted-foreground">{onlyBuild.description}</p>}
+          {onlyBuild.lunch && <p className="text-sm text-muted-foreground">Lunch: {onlyBuild.lunch}</p>}
+        </section>
+      )}
       {step(
         "info",
         defaults
@@ -401,7 +451,7 @@ export function SignupFields({
             <a href={DRIVER_APPROVAL_URL} target="_blank" rel="noreferrer" className="underline underline-offset-4">
               Purdue&apos;s driver approval form
             </a>
-            , please do.
+            , please do. Put NA for any question you don&apos;t know how to answer.
           </p>
         ) : (
           <>
@@ -413,6 +463,7 @@ export function SignupFields({
                 drivers in one car. Being approved also makes you more likely
                 to be placed on high-demand builds.
               </p>
+              <p>Put NA for any question on the form you don&apos;t know how to answer.</p>
             </div>
             <a
               href={DRIVER_APPROVAL_URL}
@@ -448,6 +499,13 @@ export function SignupFields({
         "How are you getting to the build site?",
         <>
           {error("transportation")}
+          {anyRoom && !(travelHasRoom.NEEDS_RIDE && travelHasRoom.OWN_WAY) && (
+            <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">
+              {onlyDrivers
+                ? `The spots left ${onlyBuild ? "are" : "at every build are"} held for volunteers who can drive others, so everyone who needs a ride has one.${canDrive ? "" : " Check back later, or see the home page for other days."}`
+                : "Volunteers who need a ride can only be placed where a driver has room for them. As more drivers sign up, more riders can too."}
+            </p>
+          )}
           <div role="radiogroup" aria-label="Getting to the site" className="flex flex-col gap-2">
             {TRANSPORTATION_OPTIONS.filter((option) => option.value !== "CAN_DRIVE" || canDrive).map(
               (option) => (
@@ -460,7 +518,7 @@ export function SignupFields({
                   // Full when no build has room for one more volunteer
                   // getting there this way.
                   disabled={!travelHasRoom[option.value]}
-                  lines={travelHasRoom[option.value] ? [] : ["Full right now"]}
+                  lines={[travelNote(option.value)]}
                 />
               ),
             )}
@@ -524,17 +582,17 @@ export function SignupFields({
                     `${build.time} · ${build.address}`,
                     build.description,
                     build.lunch && `Lunch: ${build.lunch}`,
-                    full ? fullNote(rooms[build.id], travel) : null,
+                    full ? fullNote(rooms[build.id], travel, askTransportation) : null,
                   ]}
                 />
               );
             })}
           </div>
-          {chosenWithRoom.map((build) => (
-            <input key={build.id} type="hidden" name="shiftId" value={build.id} />
-          ))}
         </>,
       )}
+      {chosenWithRoom.map((build) => (
+        <input key={build.id} type="hidden" name="shiftId" value={build.id} />
+      ))}
 
       {grouping &&
         step(
@@ -623,14 +681,15 @@ function listNames(names: string[]) {
   return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
-// Why a build is full for a volunteer getting there this way. Spots can be
-// held for drivers, so a build can be full for some volunteers and not
-// others (src/lib/placement/solver.ts).
-function fullNote(room: BuildRoom, travel: Travel | null) {
-  if (room.driverMinSeats === null) return "Full";
+// Why a build is full for a volunteer getting there this way: it's full for
+// everyone, or its last spots are held for drivers, so a build can be full
+// for some volunteers and not others (src/lib/placement/solver.ts).
+function fullNote(room: BuildRoom, travel: Travel | null, askTransportation: boolean) {
+  if (!askTransportation || room.driverMinSeats === null) return "Full: not taking more signups";
   if (travel === "driver") return `Full for cars with fewer than ${room.driverMinSeats} seats`;
-  if (travel === "rider" && room.ownWay) return "Full for volunteers who need a ride";
-  return "Full: the spots left are held for drivers";
+  if (!room.rider && !room.ownWay) return "Only taking drivers: the spots left are held for drivers";
+  if (travel === "rider") return "Full for volunteers who need a ride: not enough drivers yet";
+  return "Full for volunteers getting there on their own";
 }
 
 // A pill-shaped choice that fills in when picked, as a checkbox or one of a
