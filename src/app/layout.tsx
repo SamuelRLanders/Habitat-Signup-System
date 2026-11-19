@@ -6,6 +6,7 @@ import {
   SITE_NAME,
   twitterDefaults,
 } from "@/lib/site-metadata";
+import { SiteFooter } from "@/components/site-footer";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -36,7 +37,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <SiteFooter />
+      </body>
     </html>
   );
 }
