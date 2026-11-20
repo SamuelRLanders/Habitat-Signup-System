@@ -25,7 +25,7 @@ export async function getDrivers() {
     prisma.volunteer.findMany({
       where: { driverRequestedAt: { not: null } },
       orderBy: { driverRequestedAt: "asc" },
-      select: { ...volunteerSelect, driverRequestedAt: true },
+      select: { ...volunteerSelect, driverRequestedAt: true, driverAddedByName: true },
     }),
     // Current approvals, ending soonest first.
     prisma.driverApproval.findMany({

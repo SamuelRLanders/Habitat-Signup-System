@@ -315,8 +315,11 @@ model Volunteer {
   hasDriversLicense Boolean
   // When they said on a signup form that they'd filled out Purdue's driver
   // approval form. Set while their approval is pending; cleared when an
-  // admin approves or declines it.
+  // admin approves or declines it. An admin can also add them to pending
+  // from the Drivers page; then this is when, and the next field names the
+  // admin.
   driverRequestedAt DateTime?
+  driverAddedByName String?
   // Seats in their car, counting the driver's: at least 3. Null until they
   // offer to drive others. (Before cars needed 3 seats, 0 meant no car.)
   carSeats          Int?

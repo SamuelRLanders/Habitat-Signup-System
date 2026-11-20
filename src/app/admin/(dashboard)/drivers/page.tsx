@@ -16,6 +16,7 @@ import { getDrivers } from "@/lib/drivers/queries";
 import { formatPhone } from "@/lib/phone";
 import { DEFAULT_TIME_ZONE, formatDate, formatDay, toDay } from "@/lib/time";
 import { DRIVER_APPROVAL_URL, seatsLabel } from "@/lib/volunteers";
+import { AddDriver } from "./add-driver";
 import { ApproveForm } from "./approve-form";
 import { PurdueListCheck } from "./purdue-list-check";
 
@@ -35,9 +36,9 @@ type Person = {
 };
 
 // Volunteers' Purdue driver approvals. Volunteers become pending when they
-// say on a signup form that they filled out Purdue's driver approval form;
-// an admin checks with Purdue, then approves them through a day or
-// declines. Each decision keeps the admin's name.
+// say on a signup form that they filled out Purdue's driver approval form,
+// or when an admin adds them; an admin checks with Purdue, then approves
+// them through a day or declines. Each decision keeps the admin's name.
 export default async function DriversPage() {
   const admin = await requireAdmin();
   const editor = canEdit(admin.role);
@@ -46,9 +47,14 @@ export default async function DriversPage() {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8">
       <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <h1 className="text-2xl font-semibold">Drivers</h1>
-          {editor && <PurdueListCheck listUrl={PURDUE_APPROVED_DRIVERS_URL} />}
+          {editor && (
+            <div className="flex flex-wrap items-center gap-2">
+              <AddDriver />
+              <PurdueListCheck listUrl={PURDUE_APPROVED_DRIVERS_URL} />
+            </div>
+          )}
         </div>
         <p className="text-sm text-muted-foreground">
           Volunteers ask to drive by filling out{" "}
@@ -57,7 +63,8 @@ export default async function DriversPage() {
           </a>{" "}
           and telling us on a signup form. Check them against Purdue&apos;s
           approved driver list, then record their approval here, or use
-          Auto approve to check the whole list at once.
+          Auto approve to check the whole list at once. To approve someone
+          who hasn&apos;t asked, use Add driver to put them in pending first.
         </p>
       </div>
 
@@ -67,7 +74,7 @@ export default async function DriversPage() {
             <TableHeader>
               <TableRow>
                 <People />
-                <TableHead>Asked</TableHead>
+                <TableHead>Requested</TableHead>
                 {editor && (
                   <>
                     <TableHead>Approve through</TableHead>
@@ -84,6 +91,11 @@ export default async function DriversPage() {
                     <PersonCells person={volunteer} />
                     <TableCell className="whitespace-nowrap">
                       {formatDate(volunteer.driverRequestedAt!, DEFAULT_TIME_ZONE)}
+                      <span className="block text-xs text-muted-foreground">
+                        {volunteer.driverAddedByName
+                          ? `Added by ${volunteer.driverAddedByName}`
+                          : "Asked on a signup"}
+                      </span>
                     </TableCell>
                     {editor && (
                       <>

@@ -2,13 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import * as z from "zod";
+import { textWhere } from "@/lib/admin/queries";
 import { requireEditor } from "@/lib/auth/dal";
 import type { ActionState, FormState } from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
-import { fromDay, toDay } from "@/lib/time";
+import { formatDay, fromDay, toDay } from "@/lib/time";
 import { PurdueListError, readPurdueList } from "./purdue-list";
 import { matchPurdueList, type ListCheck } from "./purdue-match";
-import { currentApproval, driverToday } from "./status";
+import { currentApproval, driverStatuses, driverToday } from "./status";
 
 // Admins deciding on volunteers' driver approvals. Every action calls
 // requireEditor() first, and each decision keeps the admin's name.
@@ -69,8 +70,99 @@ async function recordApproval(
         decidedById: admin.id,
       },
     }),
-    prisma.volunteer.update({ where: { id: volunteerId }, data: { driverRequestedAt: null } }),
+    prisma.volunteer.update({
+      where: { id: volunteerId },
+      data: { driverRequestedAt: null, driverAddedByName: null },
+    }),
   ]);
+}
+
+// ─── Adding a volunteer to pending ───────────────────────────────────────────
+
+// How many matches the Add driver search shows.
+const CANDIDATE_LIMIT = 5;
+
+export type DriverCandidate = {
+  id: string;
+  name: string;
+  email: string;
+  // Why they can't be added, in a few words, or null if they can.
+  blocked: string | null;
+};
+
+export type DriverCandidates = { matches: DriverCandidate[]; more: boolean };
+
+// The Add driver search: the first few volunteers matching the text, the
+// way the People page's "Any field" search matches, each with whether they
+// can be added to pending.
+export async function searchDriverCandidates(query: string): Promise<DriverCandidates> {
+  await requireEditor();
+
+  const q = typeof query === "string" ? query.trim().slice(0, 100) : "";
+  const where = q ? textWhere({ by: "any", q }) : null;
+  if (!where) return { matches: [], more: false };
+
+  const volunteers = await prisma.volunteer.findMany({
+    where,
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }, { email: "asc" }],
+    take: CANDIDATE_LIMIT + 1,
+    select: { id: true, email: true, firstName: true, lastName: true, hasDriversLicense: true },
+  });
+  const shown = volunteers.slice(0, CANDIDATE_LIMIT);
+  const statuses = await driverStatuses(shown.map((volunteer) => volunteer.id));
+
+  return {
+    matches: shown.map((volunteer) => {
+      const driver = statuses.get(volunteer.id);
+      return {
+        id: volunteer.id,
+        name: `${volunteer.firstName} ${volunteer.lastName}`,
+        email: volunteer.email,
+        blocked:
+          driver?.status === "approved"
+            ? `Approved through ${formatDay(driver.until, "short")}`
+            : driver?.status === "pending"
+              ? "Already pending"
+              : !volunteer.hasDriversLicense
+                ? "No driver's license"
+                : null,
+      };
+    }),
+    more: volunteers.length > CANDIDATE_LIMIT,
+  };
+}
+
+// Adds a volunteer who hasn't asked to drive to pending approval, so an
+// admin can check them against Purdue's list and approve them like anyone
+// else. Nobody is approved here. The admin's name is kept until the
+// request is decided.
+export async function addPendingDriver(volunteerId: string): Promise<ActionState> {
+  const admin = await requireEditor();
+
+  const volunteer = await prisma.volunteer.findUnique({
+    where: { id: volunteerId },
+    select: {
+      hasDriversLicense: true,
+      driverRequestedAt: true,
+      driverApprovals: { where: currentApproval(), take: 1, select: { id: true } },
+    },
+  });
+  if (!volunteer) return { error: "We couldn't find this volunteer." };
+  if (volunteer.driverApprovals.length > 0) return { error: "They're already an approved driver." };
+  if (volunteer.driverRequestedAt) return { error: "They're already waiting for approval." };
+  if (!volunteer.hasDriversLicense) {
+    return { error: "They said on their last signup that they don't have a driver's license." };
+  }
+
+  // Only if they still aren't pending, in case they just asked themselves.
+  const { count } = await prisma.volunteer.updateMany({
+    where: { id: volunteerId, driverRequestedAt: null },
+    data: { driverRequestedAt: new Date(), driverAddedByName: admin.name || admin.email },
+  });
+  if (count === 0) return { error: "They're already waiting for approval." };
+
+  revalidateDrivers();
+  return {};
 }
 
 // ─── Purdue's approved driver list ───────────────────────────────────────────
@@ -173,7 +265,10 @@ export async function declineDriver(volunteerId: string): Promise<ActionState> {
         decidedById: admin.id,
       },
     }),
-    prisma.volunteer.update({ where: { id: volunteerId }, data: { driverRequestedAt: null } }),
+    prisma.volunteer.update({
+      where: { id: volunteerId },
+      data: { driverRequestedAt: null, driverAddedByName: null },
+    }),
   ]);
   revalidateDrivers();
   return {};

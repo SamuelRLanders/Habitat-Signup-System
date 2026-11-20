@@ -214,7 +214,7 @@ export async function submitSignup(
         // they've filled out the driver form makes their approval pending.
         const latest = {
           ...details,
-          ...(nowPending && { driverRequestedAt: new Date() }),
+          ...(nowPending && { driverRequestedAt: new Date(), driverAddedByName: null }),
           ...(seats !== null && { carSeats: seats }),
         };
         const volunteer = await tx.volunteer.upsert({

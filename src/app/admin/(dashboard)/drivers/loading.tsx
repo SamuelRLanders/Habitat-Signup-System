@@ -1,8 +1,8 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingPage, PageHeaderSkeleton, TableSkeleton } from "../skeletons";
 
-// The Drivers page: title and Auto approve, then pending and approved
-// drivers.
+// The Drivers page: title, Add driver and Auto approve, then pending and
+// approved drivers.
 export default function Loading() {
   return (
     <LoadingPage className="mx-auto flex max-w-5xl flex-col gap-8">

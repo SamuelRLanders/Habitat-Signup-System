@@ -143,8 +143,11 @@ function peopleWhere(search: PeopleSearch, today: string): Prisma.VolunteerWhere
 // The search box. Matching ignores case and finds the text anywhere in the
 // field. "Any field" matches each word separately, so "nguyen alice" finds
 // Alice Nguyen. Phone searches compare digits only, so "(765) 555" matches
-// +17655550123.
-function textWhere({ by, q }: PeopleSearch): Prisma.VolunteerWhereInput | null {
+// +17655550123. The Drivers page's "Add driver" search uses it too.
+export function textWhere({
+  by,
+  q,
+}: Pick<PeopleSearch, "by" | "q">): Prisma.VolunteerWhereInput | null {
   if (!q) return null;
   const has = (value: string) => ({ contains: value, mode: "insensitive" as const });
   const phoneHas = (value: string) => {
