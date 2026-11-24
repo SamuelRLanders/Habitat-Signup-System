@@ -3,10 +3,10 @@ import { escapeHtml, sendEmails } from "@/lib/email";
 import { absoluteUrl } from "@/lib/request";
 import { formatDay } from "@/lib/time";
 
-// The emails about signups: to admins when a volunteer cancels after the
-// form closed, and to volunteers when an admin cancels their event.
-// Volunteers aren't emailed when they sign up or cancel themselves; the
-// form's page shows it.
+// The email about signups: to admins when a volunteer cancels after the
+// form closed. Volunteers aren't emailed about their signups: the form's
+// page shows them, and admins contact volunteers themselves, such as when
+// an event is cancelled.
 
 // To admins (the build's responsible admin and the owner) when a volunteer
 // cancels after the form closed, when the build assignments and travel
@@ -83,28 +83,6 @@ export async function sendClosedFormCancellation({
           : "",
         `<p>${escapeHtml(roster)} See the <a href="${assignmentsUrl}">assignments</a> and the <a href="${rosterUrl}">travel roster</a>.</p>`,
       ].join(""),
-    })),
-  );
-}
-
-// To everyone signed up through a form when an admin cancels its event,
-// sent together.
-export async function sendEventCancelled(
-  formName: string,
-  day: string,
-  volunteers: { to: string; firstName: string }[],
-) {
-  const date = formatDay(day);
-  const url = absoluteUrl("/");
-  const body = `${formName} on ${date} has been cancelled, so your signup for it is cancelled too. You don't need to do anything.`;
-  const sorry = "We're sorry for the change of plans, and hope to see you at another build day.";
-
-  await sendEmails(
-    volunteers.map(({ to, firstName }) => ({
-      to,
-      subject: `${formName}, ${formatDay(day, "short")} is cancelled`,
-      text: `Hi ${firstName},\n\n${body}\n\n${sorry} See upcoming build days at ${url}.`,
-      html: `<p>Hi ${escapeHtml(firstName)},</p><p>${escapeHtml(body)}</p><p>${escapeHtml(sorry)} <a href="${url}">See upcoming build days</a>.</p>`,
     })),
   );
 }

@@ -34,6 +34,6 @@ export function phaseNote(
     case "passed":
       return `Closed ${at(form.closesAt)}. The event day is over.`;
     case "cancelled":
-      return `Event cancelled${form.cancelledByName ? ` by ${form.cancelledByName}` : ""}${form.cancelledAt ? ` on ${at(form.cancelledAt)}` : ""}. Volunteers signed up then were emailed.`;
+      return `Event cancelled${form.cancelledByName ? ` by ${form.cancelledByName}` : ""}${form.cancelledAt ? ` on ${at(form.cancelledAt)}` : ""}.`;
   }
 }

@@ -4,8 +4,6 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import * as z from "zod";
 import { requireEditor } from "@/lib/auth/dal";
-import { sendEventCancelled } from "@/lib/form-signups/emails";
-import { SIGNED_UP } from "@/lib/form-signups/status";
 import { fillFromWaitlist } from "@/lib/form-signups/waitlist";
 import {
   firstErrors,
@@ -340,15 +338,15 @@ export async function setSignupFormStatus(
   return {};
 }
 
-// Cancels a day's event for good, and emails everyone signed up for it.
-// The form stays as a record, telling volunteers who open it that the
-// event is off. Admins are warned before this, since it sends email.
+// Cancels a day's event for good. The form stays as a record, telling
+// volunteers who open it that the event is off. Nobody is emailed: admins
+// contact the volunteers themselves.
 export async function cancelSignupForm(formId: string): Promise<ActionState> {
   const admin = await requireEditor();
 
   const result = await prisma.$transaction(async (tx) => {
     // Lock the form until this transaction ends, as a signup does, so
-    // nobody signs up between reading who to email and cancelling.
+    // nobody signs up while it's being cancelled.
     await tx.$queryRaw`SELECT id FROM "SignupForm" WHERE id = ${formId} FOR UPDATE`;
 
     const form = await tx.signupForm.findUnique({
@@ -357,8 +355,7 @@ export async function cancelSignupForm(formId: string): Promise<ActionState> {
     });
     if (!form) return { error: "This form no longer exists." };
     if (form.status === "CANCELLED") return { error: "This event is already cancelled." };
-    const day = toDay(form.date);
-    if (day < today()) return { error: "This event has already happened." };
+    if (toDay(form.date) < today()) return { error: "This event has already happened." };
 
     await tx.signupForm.update({
       where: { id: formId },
@@ -368,32 +365,12 @@ export async function cancelSignupForm(formId: string): Promise<ActionState> {
         cancelledByName: admin.name || admin.email,
       },
     });
-    // Only those signed up: people on the waitlist aren't emailed.
-    const signups = await tx.formSignup.findMany({
-      where: { formId, ...SIGNED_UP },
-      select: { firstName: true, volunteer: { select: { email: true } } },
-    });
-    return {
-      day,
-      name: form.name,
-      volunteers: signups.map((signup) => ({ to: signup.volunteer.email, firstName: signup.firstName })),
-    };
+    return {};
   });
   if ("error" in result) return { error: result.error };
 
   revalidateForms();
   revalidatePath(`/signup/${formId}`);
-
-  // The event is cancelled, so a failed email doesn't undo it.
-  try {
-    await sendEventCancelled(result.name, result.day, result.volunteers);
-  } catch (error) {
-    console.error("Failed to send event cancelled emails", error);
-    return {
-      error:
-        "The event is cancelled, but the emails to volunteers didn't send. Download the volunteer list and email them yourself.",
-    };
-  }
   return {};
 }
 

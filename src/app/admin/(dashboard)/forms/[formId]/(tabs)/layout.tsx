@@ -5,8 +5,6 @@ import { buttonVariants } from "@/components/ui/button";
 import type { FormStatus } from "@/generated/prisma/enums";
 import { requireAdmin } from "@/lib/auth/dal";
 import { canEdit } from "@/lib/auth/roles";
-import { emailsSentToday } from "@/lib/email";
-import { emailLimitNote } from "@/lib/email-limit";
 import type { FormQuestions } from "@/lib/placement/load";
 import {
   cancelSignupForm,
@@ -42,7 +40,6 @@ export default async function SignupFormLayout({
     form.status !== "CANCELLED" &&
     form.day >= today() &&
     (form.status === "PUBLISHED" || form.signupCount > 0);
-  const sentToday = canCancel ? await emailsSentToday() : 0;
   const spots = totalSpots(form.shifts);
 
   return (
@@ -91,7 +88,7 @@ export default async function SignupFormLayout({
               />
             )}
             {canCancel && (
-              <CancelEventButton formId={form.id} signupCount={form.signupCount} sentToday={sentToday} />
+              <CancelEventButton formId={form.id} />
             )}
           </div>
         </div>
@@ -112,8 +109,6 @@ export default async function SignupFormLayout({
   );
 }
 
-const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
-
 // Which optional questions the form leaves out, if any.
 function QuestionsNote({ questions }: { questions: FormQuestions }) {
   const off = [
@@ -125,16 +120,8 @@ function QuestionsNote({ questions }: { questions: FormQuestions }) {
   return <p className="text-sm text-muted-foreground">Not asked on this form: {off.join("; ")}.</p>;
 }
 
-// Cancelling emails everyone signed up, so the admin is told that first.
-function CancelEventButton({
-  formId,
-  signupCount,
-  sentToday,
-}: {
-  formId: string;
-  signupCount: number;
-  sentToday: number;
-}) {
+// Cancelling doesn't email anyone: admins contact volunteers themselves.
+function CancelEventButton({ formId }: { formId: string }) {
   return (
     <ActionButton
       action={cancelSignupForm.bind(null, formId)}
@@ -143,15 +130,8 @@ function CancelEventButton({
       confirm={{
         title: "Cancel this event?",
         description:
-          "The form will say the event is cancelled, and nobody will be able to sign up. This can't be undone.",
-        confirmLabel: signupCount > 0 ? "Cancel event and email" : "Cancel event",
-        email:
-          signupCount > 0
-            ? {
-                message: `This emails ${plural(signupCount, "volunteer", "volunteers")} signed up to tell them the event is cancelled.`,
-                limitNote: emailLimitNote(sentToday, signupCount),
-              }
-            : { message: "Nobody is signed up, so no emails will be sent." },
+          "The form will say the event is cancelled, and nobody will be able to sign up. This can't be undone. Volunteers aren't emailed: download the volunteer list from the Volunteers tab to contact them.",
+        confirmLabel: "Cancel event",
       }}
     />
   );

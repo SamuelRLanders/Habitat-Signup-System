@@ -116,7 +116,7 @@ function limitWarning(to: string, sent: number, day: Date) {
   const lines = [
     `The Purdue Habitat signup system has sent ${sent} emails today, so it has stopped sending volunteers emails until ${resets} (Indiana time). Until then, volunteers can't get a code to confirm their email, so they can't sign up or cancel.`,
     `The last ${DAILY_EMAIL_LIMIT - VOLUNTEER_EMAIL_CAP} of Resend's ${DAILY_EMAIL_LIMIT} emails a day are kept for admins, such as their sign-in codes. Once all ${DAILY_EMAIL_LIMIT} are sent, no more emails go out, admins' included.`,
-    "To send more, upgrade the Resend plan, or hold off on cancelling events or approving drivers until it resets.",
+    "To send more, upgrade the Resend plan, or wait until it resets.",
   ];
   return {
     to,
