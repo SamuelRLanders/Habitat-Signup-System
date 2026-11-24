@@ -1,67 +1,12 @@
 import "server-only";
-import { escapeHtml, sendEmail, sendEmails } from "@/lib/email";
+import { escapeHtml, sendEmails } from "@/lib/email";
 import { absoluteUrl } from "@/lib/request";
-import { shiftLabel, type OfferedShift } from "@/lib/signup-forms/queries";
 import { formatDay } from "@/lib/time";
 
-// Emails to volunteers about their signup. Each links back to the form,
-// where they confirm their email again to cancel. And one to admins, when a
-// volunteer cancels after the form closed.
-
-type SignupEmail = {
-  to: string;
-  firstName: string;
-  formId: string;
-  formName: string; // "Purdue Habitat build day"
-  day: string; // "2026-10-10"
-};
-
-export async function sendSignupConfirmation({
-  to,
-  firstName,
-  formId,
-  formName,
-  day,
-  shifts,
-}: SignupEmail & { shifts: OfferedShift[] }) {
-  const date = formatDay(day);
-  const url = absoluteUrl(`/signup/${formId}`);
-  const intro = `Thanks for signing up for ${formName} on ${date}!`;
-  const lines = shifts.map(shiftLabel);
-
-  await sendEmail({
-    to,
-    subject: `You're signed up for ${formName}, ${formatDay(day, "short")}`,
-    text: [
-      `Hi ${firstName},`,
-      intro,
-      `You said you could work at:\n${lines.map((line) => `- ${line}`).join("\n")}`,
-      "We'll let you know which build you're placed at.",
-      `To cancel your signup, go to ${url} and confirm your email. To make changes, cancel and sign up again.`,
-    ].join("\n\n"),
-    html: [
-      `<p>Hi ${escapeHtml(firstName)},</p>`,
-      `<p>${escapeHtml(intro)}</p>`,
-      `<p>You said you could work at:</p>`,
-      `<ul>${lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>`,
-      `<p>We'll let you know which build you're placed at.</p>`,
-      `<p>To cancel your signup, <a href="${url}">go to the signup form</a> and confirm your email. To make changes, cancel and sign up again.</p>`,
-    ].join(""),
-  });
-}
-
-export async function sendCancellation({ to, firstName, formId, formName, day }: SignupEmail) {
-  const date = formatDay(day);
-  const url = absoluteUrl(`/signup/${formId}`);
-  const body = `Your signup for ${formName} on ${date} is cancelled.`;
-
-  await sendEmail({
-    to,
-    subject: `Your signup for ${formName}, ${formatDay(day, "short")} is cancelled`,
-    text: `Hi ${firstName},\n\n${body}\n\nChanged your mind? While the form is open, you can sign up again at ${url}.`,
-    html: `<p>Hi ${escapeHtml(firstName)},</p><p>${escapeHtml(body)}</p><p>Changed your mind? While the form is open, you can <a href="${url}">sign up again</a>.</p>`,
-  });
-}
+// The emails about signups: to admins when a volunteer cancels after the
+// form closed, and to volunteers when an admin cancels their event.
+// Volunteers aren't emailed when they sign up or cancel themselves; the
+// form's page shows it.
 
 // To admins (the form's creator and the owner) when a volunteer
 // cancels after the form closed, when the build assignments and travel

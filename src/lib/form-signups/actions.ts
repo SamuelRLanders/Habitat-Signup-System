@@ -1,9 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { takeSignupEmail } from "@/lib/auth/rate-limit";
 import { driverStatuses } from "@/lib/drivers/status";
-import { volunteerEmailsLeft } from "@/lib/email";
 import { getVerifiedEmail } from "@/lib/email-verification/session";
 import { firstErrors, formValues, type ActionState } from "@/lib/forms";
 import { loadPlacementDay, travelOf } from "@/lib/placement/load";
@@ -25,7 +23,6 @@ import {
   type SignupField,
 } from "./details";
 import { alertAdminsOfCancellation } from "./closed-cancellation";
-import { sendCancellation, sendSignupConfirmation } from "./emails";
 import { cancelDeadline, sameDayMessage, sameDaySignup } from "./queries";
 
 // Volunteers signing up through a form and cancelling their signup. A
@@ -49,15 +46,6 @@ const SESSION_EXPIRED =
 function revalidateSignup(formId: string) {
   revalidatePath(`/signup/${formId}`);
   revalidatePath("/admin", "layout");
-}
-
-// Whether to email a volunteer their confirmation or cancellation. It's
-// skipped when they've had too many lately (signing up and cancelling over
-// and over would use up the day's emails), or the day's volunteer emails
-// have run out. Their signup or cancellation is saved either way, and the
-// form's page shows it.
-async function mayEmail(email: string) {
-  return (await volunteerEmailsLeft()) && (await takeSignupEmail(email));
 }
 
 // A published form with the builds it offers, or null.
@@ -285,22 +273,8 @@ export async function submitSignup(
     };
   }
 
-  // The signup is saved, so a failed email doesn't undo it.
-  try {
-    if (await mayEmail(email)) {
-      await sendSignupConfirmation({
-        to: email,
-        firstName: details.firstName,
-        formId,
-        formName: form.name,
-        day: form.day,
-        shifts: shiftIds.map((id) => offered.get(id)!),
-      });
-    }
-  } catch (error) {
-    console.error("Failed to send signup confirmation", error);
-  }
-
+  // Volunteers aren't emailed a confirmation: the form's page shows their
+  // signup instead.
   revalidateSignup(formId);
   return { success: true };
 }
@@ -317,33 +291,21 @@ export async function cancelSignup(formId: string): Promise<ActionState> {
 
   const signup = await prisma.formSignup.findFirst({
     where: { formId, volunteer: { email }, cancelledAt: null },
-    select: { id: true, firstName: true },
+    select: { id: true },
   });
   const NOTHING_TO_CANCEL = "You don't have a signup for this day to cancel.";
   if (!signup) return { error: NOTHING_TO_CANCEL };
 
   // Only cancels it if it's still active, in one statement, so several
-  // requests at the same moment can't each cancel it and each send an email.
+  // requests at the same moment can't each cancel it and each alert the
+  // admins.
   const { count } = await prisma.formSignup.updateMany({
     where: { id: signup.id, cancelledAt: null },
     data: { cancelledAt: now },
   });
   if (count === 0) return { error: NOTHING_TO_CANCEL };
 
-  try {
-    if (await mayEmail(email)) {
-      await sendCancellation({
-        to: email,
-        firstName: signup.firstName,
-        formId,
-        formName: form.name,
-        day: form.day,
-      });
-    }
-  } catch (error) {
-    console.error("Failed to send cancellation email", error);
-  }
-
+  // Volunteers aren't emailed about it: the form's page says it's cancelled.
   // After the form closes, admins may have set the assignments and sent
   // the travel roster, so the form's creator and the owner hear
   // about it.

@@ -5,8 +5,8 @@ import { DEFAULT_TIME_ZONE } from "@/lib/time";
 // before sending emails that would go past it.
 export const DAILY_EMAIL_LIMIT = 100;
 
-// Emails volunteers set off (their codes, signup confirmations and
-// cancellations) stop once today's count reaches this, keeping the rest of
+// Emails volunteers set off (the codes confirming their email) stop once
+// today's count reaches this, keeping the rest of
 // the day's limit for admins, such as their sign-in codes.
 export const VOLUNTEER_EMAIL_CAP = 85;
 

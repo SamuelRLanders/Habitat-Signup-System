@@ -181,9 +181,8 @@ model LoginCodeRequest {
   @@index([ipAddress, createdAt])
 }
 
-// One signup confirmation or cancellation emailed to a volunteer, kept for
-// a day to limit how many one volunteer can set off by signing up and
-// cancelling over and over.
+// Unused: it limited the signup confirmations and cancellations emailed to
+// each volunteer, which are no longer sent. Kept until a migration drops it.
 model SignupEmail {
   id        String   @id @default(cuid())
   email     String // lowercased

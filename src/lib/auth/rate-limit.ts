@@ -5,9 +5,8 @@ import { prisma } from "@/lib/prisma";
 // Limits on the emails anyone can set off, so the public forms can't be
 // used to flood someone's inbox or use up the day's emails (see
 // src/lib/email.ts): codes for admin sign-in and for volunteers confirming
-// their email (one shared count per address), and volunteers' signup
-// confirmations and cancellations. Better Auth has its own rate limiter, but
-// it only covers its HTTP endpoints, which we don't expose.
+// their email (one shared count per address). Better Auth has its own rate
+// limiter, but it only covers its HTTP endpoints, which we don't expose.
 //
 // Each check counts recent emails and records the new one while holding a
 // lock, so requests sent at the same moment can't all be counted before any
@@ -17,7 +16,6 @@ import { prisma } from "@/lib/prisma";
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
 
 // Takes a lock that's held until the transaction ends, or returns false if
 // another transaction holds it. Keys are hashed into Postgres's advisory
@@ -103,41 +101,3 @@ export async function takeLoginCodeRequest(
 // Seconds until the one-per-minute limit allows another code, shown as the
 // "resend" countdown after a code is sent.
 export const RESEND_AFTER_SECONDS = MINUTE / 1000;
-
-// ─── Signup confirmations and cancellations ──────────────────────────────────
-
-// Signing up, cancelling and signing up again is 3 emails, so these leave
-// room for a volunteer changing their mind, but not for doing it over and
-// over.
-const SIGNUP_EMAIL_LIMITS = [
-  { max: 4, window: HOUR },
-  { max: 8, window: DAY },
-] as const;
-
-// Checks whether a signup confirmation or cancellation can be emailed to a
-// volunteer, and if so records it.
-export async function takeSignupEmail(email: string): Promise<boolean> {
-  const now = Date.now();
-  await prisma.signupEmail.deleteMany({
-    where: { createdAt: { lt: new Date(now - DAY) } },
-  });
-
-  return prisma.$transaction(async (tx) => {
-    // Another of their requests is emailing them right now.
-    if (!(await tryLock(tx, `signup-email:${email}`))) return false;
-
-    for (const limit of SIGNUP_EMAIL_LIMITS) {
-      const recent = await tx.signupEmail.findMany({
-        where: { email, createdAt: { gte: new Date(now - limit.window) } },
-        orderBy: { createdAt: "desc" },
-        take: limit.max,
-        select: { createdAt: true },
-      });
-      const createdAt = recent.map((sent) => sent.createdAt);
-      if (waitFor(createdAt, limit.max, limit.window, now) > 0) return false;
-    }
-
-    await tx.signupEmail.create({ data: { email } });
-    return true;
-  });
-}

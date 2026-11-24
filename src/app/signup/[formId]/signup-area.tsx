@@ -132,12 +132,12 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
       </Panel>
     );
   } else if (!open) {
-    content = (
+    content = mine?.signup ? (
+      <Cancelled>The form has closed, so you can&apos;t sign up again.</Cancelled>
+    ) : (
       <Panel title="Your signup">
         <p className="text-sm text-muted-foreground">
-          {mine?.signup
-            ? "Your signup for this day is cancelled."
-            : `We don't have a signup for ${email} on this day.`}
+          We don&apos;t have a signup for {email} on this day.
         </p>
       </Panel>
     );
@@ -173,9 +173,7 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
       ) : (
         <>
           {mine?.signup?.cancelledAt && (
-            <p className="px-2 text-sm text-muted-foreground">
-              You cancelled your signup for this day. You can sign up again below.
-            </p>
+            <Cancelled>You can sign up again below while the form is open.</Cancelled>
           )}
           <SignupFields
             action={submitSignup.bind(null, form.id)}
@@ -203,6 +201,22 @@ function Message({ children }: { children: React.ReactNode }) {
   return (
     <Panel>
       <p className="py-2 text-center text-muted-foreground">{children}</p>
+    </Panel>
+  );
+}
+
+// Confirms a volunteer's signup for the day is cancelled. Volunteers aren't
+// emailed about it, so this is how they know it went through.
+function Cancelled({ children }: { children: React.ReactNode }) {
+  return (
+    <Panel>
+      <div role="status" className="flex flex-col gap-1">
+        <h3 className="flex items-center gap-2 text-xl font-semibold">
+          <CheckCircle2Icon className="size-6 text-primary" aria-hidden="true" />
+          Your signup is cancelled
+        </h3>
+        <p className="text-sm text-muted-foreground">{children}</p>
+      </div>
     </Panel>
   );
 }

@@ -42,7 +42,7 @@ A web app for the Purdue Habitat for Humanity chapter. Volunteer organization le
 | Database | PostgreSQL (hosted on [Supabase](https://supabase.com)) | Relational data (forms ↔ builds ↔ volunteers) |
 | ORM | [Prisma](https://www.prisma.io) | Type-safe queries and schema migrations |
 | Admin auth | [Better Auth](https://better-auth.com) with 6-digit email codes | No passwords to manage; codes work on phones, where email links often open in another browser |
-| Email | [Resend](https://resend.com) | Sign-in codes, signup confirmations, and notices to volunteers. The free plan sends 100 a day, which the app counts |
+| Email | [Resend](https://resend.com) | Sign-in codes, and notices to volunteers and admins. The free plan sends 100 a day, which the app counts |
 | Validation | [Zod](https://zod.dev) | Shared validation for forms and Server Actions |
 | Hosting | [Vercel](https://vercel.com) | Zero-config deploys for Next.js |
 
@@ -91,7 +91,7 @@ npm run admin:set-owner -- you@example.org         # and make yourself the owner
 npm run dev                # http://localhost:3000
 ```
 
-**Emailed codes:** until `RESEND_API_KEY` and `EMAIL_FROM` are set, emails (admin sign-in codes, volunteer codes and confirmations) are printed in the terminal running `npm run dev` instead of sent. A production server refuses to start sending without them.
+**Emailed codes:** until `RESEND_API_KEY` and `EMAIL_FROM` are set, emails (admin sign-in codes, volunteer codes and notices) are printed in the terminal running `npm run dev` instead of sent. A production server refuses to start sending without them.
 
 **Signing in:** admins go to `/login`. Volunteers never sign in: they open a form from `/`.
 
@@ -135,7 +135,7 @@ npm run dev                # http://localhost:3000
 
 ## Roadmap
 
-1. Set up Resend so codes and confirmations are emailed
+1. Set up Resend so codes and notices are emailed
 2. Confirming placements in the app and emailing volunteers where they'll work
 3. Pairing up groups that want to work together
 4. More questions on the signup form
