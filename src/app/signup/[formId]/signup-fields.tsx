@@ -421,7 +421,7 @@ export function SignupFields({
           {joining && (
             <>
               <p className="text-sm font-medium text-destructive">
-                {fullNote(rooms[onlyBuild.id], travel, askTransportation)} · You&apos;ll join the waitlist
+                {waitNote(fullNote(rooms[onlyBuild.id], travel, askTransportation), true)}
               </p>
               <p className="mt-2 rounded-2xl bg-muted/60 px-4 py-3 text-sm">{WAITLIST_NOTE}</p>
             </>
@@ -551,7 +551,7 @@ export function SignupFields({
                   // Full when no build has room for one more volunteer
                   // getting there this way, unless they can wait.
                   disabled={!waitlist && !travelHasRoom[option.value]}
-                  note={waitNote(travelNote(option.value), waitlist, "Waitlist only")}
+                  note={waitNote(travelNote(option.value), waitlist)}
                 />
               ),
             )}
@@ -620,7 +620,7 @@ export function SignupFields({
                   disabled={full && !canWait(build)}
                   note={
                     full
-                      ? waitNote(fullNote(rooms[build.id], travel, askTransportation), canWait(build), "Join the waitlist")
+                      ? waitNote(fullNote(rooms[build.id], travel, askTransportation), canWait(build))
                       : null
                   }
                   lines={[
@@ -654,12 +654,6 @@ export function SignupFields({
                 don&apos;t need to add {grouping.askedBy.length === 1 ? "them" : "anyone"} back.
               </p>
             )}
-            <p className="text-sm text-muted-foreground">
-              Talk with them first, so you all choose the same builds. Only one of
-              you needs to add the other. We can&apos;t promise you&apos;ll be
-              together: making sure everyone has a spot{askTransportation && " and a ride"} comes first.
-              Optional; up to {MAX_GROUP_REQUESTS} people.
-            </p>
             {error("groupEmails")}
             <div className="flex flex-col gap-2">
               {friends.map((friend, index) => (
@@ -737,10 +731,13 @@ const FULL = "Slots are full";
 const WAITLIST_NOTE =
   "If you join the waitlist for any build(s), you won't be placed immediately, but if someone cancels you will be added automatically and contacted.";
 
-// A full option's note, saying it's a waitlist when it can be waited for:
-// "Slots are full · Join the waitlist".
-function waitNote(note: string | null, canWait: boolean, wait: string) {
-  return note && canWait ? `${note} · ${wait}` : note;
+// A full option's note, offering the waitlist when it can be waited for:
+// "Slots are full, but you can join the waitlist", or "Only accepting people
+// willing to drive others, or join the waitlist", so it's clear they can
+// either change how they're getting there or wait.
+function waitNote(note: string | null, canWait: boolean) {
+  if (!note || !canWait) return note;
+  return note === FULL ? `${FULL}, but you can join the waitlist` : `${note}, or join the waitlist`;
 }
 const ONLY_DRIVERS = "Only accepting people willing to drive others";
 const ONLY_OWN_WAY = "Only accepting people who can find their own transportation";
