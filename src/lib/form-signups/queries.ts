@@ -34,6 +34,7 @@ export async function getMySignup(formId: string, email: string) {
           hasDriversLicense: true,
           transportation: true,
           cancelledAt: true,
+          waitlistedAt: true,
           preferences: { select: { shiftId: true } },
           groupRequests: { select: { email: true }, orderBy: { email: "asc" } },
         },
@@ -61,6 +62,7 @@ export async function getMySignup(formId: string, email: string) {
       ? {
           id: signup.id,
           cancelledAt: signup.cancelledAt,
+          waitlistedAt: signup.waitlistedAt,
           shiftIds: signup.preferences.map((p) => p.shiftId),
           transportation: signup.transportation,
           groupEmails: signup.groupRequests.map((request) => request.email),
@@ -89,9 +91,9 @@ export async function getAskedToGroupWith(formId: string, email: string) {
 
 export type AskedToGroupWith = Awaited<ReturnType<typeof getAskedToGroupWith>>;
 
-// Another form on the same day that the volunteer is signed up on, or
-// null. A volunteer can only be signed up on one form a day; a form
-// whose event was cancelled doesn't count. Pass the transaction client when
+// Another form on the same day that the volunteer is signed up on (or
+// waiting on), or null. A volunteer can only be signed up on one form a
+// day; a form whose event was cancelled doesn't count. Pass the transaction client when
 // deciding on a new signup.
 export async function sameDaySignup(
   db: typeof prisma | Prisma.TransactionClient,

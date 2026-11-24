@@ -31,6 +31,7 @@ export type VolunteerRow = {
   transportation: Transportation | null;
   carSeats: number | null;
   driver: DriverStatus;
+  // When they signed up (or, on the waitlist, joined it).
   createdAt: Date;
   // How many builds they'd been on before this day.
   builds: number;
@@ -46,7 +47,8 @@ export type VolunteerRow = {
 // signup. Ages are on the build day. Brief leaves out ages and when they
 // signed up. Scrollable fills the space it's given and scrolls inside it,
 // keeping the header in view, as in a popup. Travel shows how they're
-// getting there; it's left out for a form that doesn't ask.
+// getting there; it's left out for a form that doesn't ask. Numbered shows
+// each row's place, as on a waitlist; dateHeading names the last column.
 export function VolunteerTable({
   rows,
   day,
@@ -54,6 +56,8 @@ export function VolunteerTable({
   brief = false,
   scrollable = false,
   travel = true,
+  numbered = false,
+  dateHeading = "Signed up",
 }: {
   rows: VolunteerRow[];
   day: string;
@@ -61,6 +65,8 @@ export function VolunteerTable({
   brief?: boolean;
   scrollable?: boolean;
   travel?: boolean;
+  numbered?: boolean;
+  dateHeading?: string;
 }) {
   const showFriends = rows.some((row) => row.friends && row.friends.length > 0);
   return (
@@ -80,6 +86,7 @@ export function VolunteerTable({
           )}
         >
           <TableRow>
+            {numbered && <TableHead className="text-right">#</TableHead>}
             <TableHead>Name</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Phone</TableHead>
@@ -90,12 +97,13 @@ export function VolunteerTable({
             {travel && <TableHead>Getting there</TableHead>}
             <TableHead>{shiftsHeading}</TableHead>
             {showFriends && <TableHead>Friends</TableHead>}
-            {!brief && <TableHead>Signed up</TableHead>}
+            {!brief && <TableHead>{dateHeading}</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <TableRow key={row.id}>
+              {numbered && <TableCell className="text-right tabular-nums text-muted-foreground">{index + 1}</TableCell>}
               <TableCell className="font-medium">
                 {row.firstName} {row.lastName}
               </TableCell>

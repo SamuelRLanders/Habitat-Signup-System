@@ -38,7 +38,9 @@ async function lockForEditing(tx: Parameters<Parameters<typeof prisma.$transacti
 // placed. savedAt is when the assignments the admin started from were saved
 // (null for the app's), so changes made elsewhere since aren't overwritten.
 // Signups not in the assignments, such as someone who signed up after a
-// form was reopened, are saved as not placed.
+// form was reopened, are saved as not placed. Someone on the waitlist who's
+// given a build is added to it, and is signed up from then on; null leaves
+// them waiting. Nobody is emailed.
 export async function saveAssignments(
   formId: string,
   savedAt: string | null,
@@ -57,21 +59,29 @@ export async function saveAssignments(
     }
 
     const [signups, shifts] = await Promise.all([
-      tx.formSignup.findMany({ where: { formId, cancelledAt: null }, select: { id: true } }),
+      tx.formSignup.findMany({ where: { formId, cancelledAt: null }, select: { id: true, waitlistedAt: true } }),
       tx.shift.findMany({ where: { formId, cancelledAt: null }, select: { id: true } }),
     ]);
     const offered = new Set(shifts.map((shift) => shift.id));
     const byShift = new Map<string | null, string[]>();
-    for (const { id } of signups) {
+    const added = new Map<string, string[]>(); // from the waitlist, by build
+    for (const { id, waitlistedAt } of signups) {
       const shiftId = assignments[id] ?? null;
       if (shiftId !== null && (typeof shiftId !== "string" || !offered.has(shiftId))) {
         return { error: "One of these builds is no longer on the form. Refresh the page and try again." };
       }
-      byShift.set(shiftId, [...(byShift.get(shiftId) ?? []), id]);
+      if (!waitlistedAt) byShift.set(shiftId, [...(byShift.get(shiftId) ?? []), id]);
+      else if (shiftId) added.set(shiftId, [...(added.get(shiftId) ?? []), id]);
     }
 
     for (const [assignedShiftId, ids] of byShift) {
       await tx.formSignup.updateMany({ where: { id: { in: ids } }, data: { assignedShiftId } });
+    }
+    for (const [assignedShiftId, ids] of added) {
+      await tx.formSignup.updateMany({
+        where: { id: { in: ids } },
+        data: { assignedShiftId, waitlistedAt: null },
+      });
     }
     await tx.signupForm.update({
       where: { id: formId },

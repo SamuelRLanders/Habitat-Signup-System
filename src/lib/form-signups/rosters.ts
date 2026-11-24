@@ -18,6 +18,7 @@ const rosterSelect = {
   transportation: true,
   carSeats: true,
   cancelledAt: true,
+  waitlistedAt: true,
   createdAt: true,
   updatedAt: true,
   assignedShiftId: true,

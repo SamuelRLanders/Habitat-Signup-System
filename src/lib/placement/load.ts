@@ -4,6 +4,7 @@ import type { Transportation } from "@/generated/prisma/enums";
 import { currentApproval } from "@/lib/drivers/status";
 import { isHighlyExperienced } from "@/lib/experience";
 import type { RosterSignup } from "@/lib/form-signups/rosters";
+import { SIGNED_UP, WAITING } from "@/lib/form-signups/status";
 import { prisma } from "@/lib/prisma";
 import type { OfferedShift } from "@/lib/signup-forms/queries";
 import {
@@ -17,8 +18,8 @@ import {
 import { travelRoster } from "./travel-roster";
 
 // A form's signups, ready for the placement solver (./solver.ts). Its
-// builds are the ones the form offers, and its volunteers are the signups
-// that haven't been cancelled.
+// builds are the ones the form offers, and its volunteers are the signed-up
+// signups: not cancelled, and not waiting (src/lib/form-signups/status.ts).
 
 type Db = typeof prisma | Prisma.TransactionClient;
 
@@ -48,7 +49,7 @@ export function travelOf(
   return { travel: "rider", carSeats: 0 };
 }
 
-type SignupForPlacement = {
+export type SignupForPlacement = {
   id: string;
   transportation: Transportation | null;
   carSeats: number | null;
@@ -87,18 +88,34 @@ export function placementDay(
   };
 }
 
-// Loads a form's signups for placing. Pass the transaction client when
-// deciding on a new signup, so it sees the signups as of the form's lock.
+// Loads a form's signed-up volunteers for placing. Pass the transaction
+// client when deciding on a new signup, so it sees the signups as of the
+// form's lock.
 export async function loadPlacementDay(
   db: Db,
   formId: string,
   shifts: { id: string; capacity: number }[],
   askTransportation: boolean,
 ): Promise<Day> {
+  const signups = await loadForPlacement(db, formId, shifts, SIGNED_UP);
+  return placementDay(shifts, signups, askTransportation);
+}
+
+// A form's waiting volunteers, in the order they joined the waitlist.
+export function loadWaiting(db: Db, formId: string, shifts: { id: string }[]) {
+  return loadForPlacement(db, formId, shifts, WAITING);
+}
+
+async function loadForPlacement(
+  db: Db,
+  formId: string,
+  shifts: { id: string }[],
+  which: typeof SIGNED_UP | typeof WAITING,
+): Promise<SignupForPlacement[]> {
   const offered = new Set(shifts.map((shift) => shift.id));
   const signups = await db.formSignup.findMany({
-    where: { formId, cancelledAt: null },
-    orderBy: { createdAt: "asc" },
+    where: { formId, ...which },
+    orderBy: which === WAITING ? [{ waitlistedAt: "asc" }, { id: "asc" }] : { createdAt: "asc" },
     select: {
       id: true,
       transportation: true,
@@ -113,19 +130,15 @@ export async function loadPlacementDay(
     },
   });
 
-  return placementDay(
-    shifts,
-    signups.map((signup) => ({
-      id: signup.id,
-      transportation: signup.transportation,
-      carSeats: signup.carSeats,
-      canDriveOthers:
-        signup.volunteer.driverRequestedAt !== null || signup.volunteer.driverApprovals.length > 0,
-      // A cancelled build isn't offered.
-      shiftIds: signup.preferences.map((p) => p.shiftId).filter((id) => offered.has(id)),
-    })),
-    askTransportation,
-  );
+  return signups.map((signup) => ({
+    id: signup.id,
+    transportation: signup.transportation,
+    carSeats: signup.carSeats,
+    canDriveOthers:
+      signup.volunteer.driverRequestedAt !== null || signup.volunteer.driverApprovals.length > 0,
+    // A cancelled build isn't offered.
+    shiftIds: signup.preferences.map((p) => p.shiftId).filter((id) => offered.has(id)),
+  }));
 }
 
 // Pairs of signups (by ID) who asked to be placed together: one asked for

@@ -78,6 +78,9 @@ type SignupFieldsProps = {
   // friends; askedBy are the names of those who already asked for them.
   // Null on a day with one build, or a form that doesn't ask.
   grouping: { askedBy: string[] } | null;
+  // Whether volunteers can join the waitlist for builds that are full for
+  // them.
+  waitlist: boolean;
 };
 
 type Errors = Partial<Record<SignupField | "form", string>>;
@@ -108,7 +111,9 @@ const ERROR_STEPS: [SignupField, string][] = [
 // than one build), then each waiver. A form can leave out the driving and
 // transportation steps, and the friends step. How they're getting there
 // comes before the builds because it decides which builds have room for
-// them (src/lib/placement). One step is open at a time; finished steps can
+// them (src/lib/placement). On a form with a waitlist, full builds can be
+// chosen too, to wait for, but not alongside builds with room. One step is
+// open at a time; finished steps can
 // be reopened, and a step unlocks once every step before it is done. Every
 // step's fields stay in the one form, so the last step's button submits them
 // all. The server checks everything again (src/lib/form-signups).
@@ -121,6 +126,7 @@ export function SignupFields({
   savedCarSeats,
   askTransportation,
   grouping,
+  waitlist,
 }: SignupFieldsProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const [license, setLicense] = useState(defaults?.hasDriversLicense ?? null);
@@ -154,12 +160,24 @@ export function SignupFields({
     OWN_WAY: builds.some((build) => rooms[build.id].ownWay),
     CAN_DRIVE: canDrive && builds.some((build) => rooms[build.id].driverMinSeats !== null),
   };
-  const transportChoice = askTransportation && transport && travelHasRoom[transport] ? transport : null;
+  // With a waitlist, any way of getting there can be chosen: where it's
+  // full, they can wait.
+  const transportChoice =
+    askTransportation && transport && (transport !== "CAN_DRIVE" || canDrive) && (waitlist || travelHasRoom[transport])
+      ? transport
+      : null;
   const travel = askTransportation ? transportChoice && TRAVEL[transportChoice] : "ownWay";
   // Whether a build has room for them, given how they're getting there.
   const hasRoom = (build: BuildChoice) =>
     travel !== null && hasRoomFor(rooms[build.id], travel, seats);
-  const chosenWithRoom = builds.filter((build) => (onlyBuild || chosen.has(build.id)) && hasRoom(build));
+  // Whether a build is full for them but can be chosen to wait for.
+  const canWait = (build: BuildChoice) => waitlist && travel !== null && !hasRoom(build);
+  const isChosen = (build: BuildChoice) => onlyBuild !== null || chosen.has(build.id);
+  const chosenWithRoom = builds.filter((build) => isChosen(build) && hasRoom(build));
+  // The builds they'll wait for: only when they haven't chosen any with
+  // room, since then they'd simply be signed up.
+  const chosenToWait = chosenWithRoom.length > 0 ? [] : builds.filter((build) => isChosen(build) && canWait(build));
+  const joining = chosenToWait.length > 0;
   // Why a way of getting there is full: every build is, or the spots left
   // are held for drivers (so riders have rides), or there aren't enough
   // drivers yet for more riders.
@@ -188,10 +206,10 @@ export function SignupFields({
   const [active, setActive] = useState("info");
   const [done, setDone] = useState<Set<string>>(() => new Set());
   // A finished step stays finished, except that the builds step needs a
-  // chosen build with room: changing how they're getting there, or a build
-  // filling up, can take that away.
+  // chosen build with room (or to wait for): changing how they're getting
+  // there, or a build filling up, can take that away.
   const isDone = (id: string) =>
-    done.has(id) && (id !== "builds" || chosenWithRoom.length > 0);
+    done.has(id) && (id !== "builds" || chosenWithRoom.length > 0 || joining);
   // Problems found before submitting; after submitting, the server's.
   const [stepErrors, setStepErrors] = useState<Errors | null>(null);
 
@@ -258,9 +276,9 @@ export function SignupFields({
       problems.carSeats = "Tell us how many seats your car has.";
     } else if (active === "car" && seats !== null && seats < MIN_CAR_SEATS) {
       problems.carSeats = `To drive others, your car needs at least ${MIN_CAR_SEATS} seats, counting yours.`;
-    } else if (active === "car" && onlyBuild && !hasRoom(onlyBuild)) {
+    } else if (active === "car" && onlyBuild && !hasRoom(onlyBuild) && !waitlist) {
       problems.carSeats = `The build only has room for another car with at least ${rooms[onlyBuild.id].driverMinSeats} seats, counting yours. With a smaller car, choose another way of getting there.`;
-    } else if (active === "builds" && chosenWithRoom.length === 0) {
+    } else if (active === "builds" && chosenWithRoom.length === 0 && !joining) {
       problems.shifts = "Choose at least one build you could work at.";
     } else if (active === "group") {
       const typed = friends.map((friend) => friend.trim().toLowerCase()).filter(Boolean);
@@ -278,18 +296,29 @@ export function SignupFields({
     open(steps[index + 1].id);
   }
 
-  function toggle(id: string) {
+  // Choosing a build with room drops any chosen to wait for, and the other
+  // way round: they can't be both signed up and waiting.
+  function toggle(build: BuildChoice, checked: boolean) {
     setChosen((current) => {
       const updated = new Set(current);
-      if (updated.has(id)) updated.delete(id);
-      else updated.add(id);
+      if (checked) {
+        updated.delete(build.id);
+        return updated;
+      }
+      const room = hasRoom(build);
+      for (const other of builds) {
+        if (updated.has(other.id) && hasRoom(other) !== room) updated.delete(other.id);
+      }
+      updated.add(build.id);
       return updated;
     });
   }
 
   const summaries: Record<string, string> = {
     info: name,
-    builds: chosenWithRoom.map((build) => build.buildName).join(", "),
+    builds: joining
+      ? `Waitlist: ${chosenToWait.map((build) => build.buildName).join(", ")}`
+      : chosenWithRoom.map((build) => build.buildName).join(", "),
     driver:
       driver.status === "approved"
         ? `Approved through ${formatDay(driver.until, "short")}`
@@ -351,7 +380,7 @@ export function SignupFields({
               </p>
             )}
             <Button type="submit" size="lg" loading={pending} className="w-full sm:w-fit">
-              {pending ? "Signing up…" : "Sign up"}
+              {joining ? (pending ? "Joining…" : "Join the waitlist") : pending ? "Signing up…" : "Sign up"}
             </Button>
           </div>
         ) : (
@@ -389,6 +418,14 @@ export function SignupFields({
           </p>
           {onlyBuild.description && <p className="text-sm text-muted-foreground">{onlyBuild.description}</p>}
           {onlyBuild.lunch && <p className="text-sm text-muted-foreground">Lunch: {onlyBuild.lunch}</p>}
+          {joining && (
+            <>
+              <p className="text-sm font-medium text-destructive">
+                {fullNote(rooms[onlyBuild.id], travel, askTransportation)} · You&apos;ll join the waitlist
+              </p>
+              <p className="mt-2 rounded-2xl bg-muted/60 px-4 py-3 text-sm">{WAITLIST_NOTE}</p>
+            </>
+          )}
         </section>
       )}
       {step(
@@ -512,9 +549,9 @@ export function SignupFields({
                   onClick={() => setTransport(option.value)}
                   title={option.label}
                   // Full when no build has room for one more volunteer
-                  // getting there this way.
-                  disabled={!travelHasRoom[option.value]}
-                  note={travelNote(option.value)}
+                  // getting there this way, unless they can wait.
+                  disabled={!waitlist && !travelHasRoom[option.value]}
+                  note={waitNote(travelNote(option.value), waitlist, "Waitlist only")}
                 />
               ),
             )}
@@ -562,19 +599,30 @@ export function SignupFields({
         "Choose every build you'd be able to work at. We'll place you at one of them and let you know.",
         <>
           {error("shifts")}
+          {builds.some(canWait) && (
+            <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">
+              {WAITLIST_NOTE}
+              {builds.some(hasRoom) && " You can choose builds with room or join waitlists, but not both."}
+            </p>
+          )}
           <div role="group" aria-label="Builds" className="flex flex-col gap-2">
             {builds.map((build) => {
               const full = !hasRoom(build);
+              const checked = chosenWithRoom.includes(build) || chosenToWait.includes(build);
               return (
                 <ChoicePill
                   key={build.id}
                   role="checkbox"
-                  checked={chosen.has(build.id) && !full}
-                  onClick={() => toggle(build.id)}
+                  checked={checked}
+                  onClick={() => toggle(build, checked)}
                   describedBy={errors.shifts ? "shifts-error" : undefined}
                   title={build.buildName}
-                  disabled={full}
-                  note={full ? fullNote(rooms[build.id], travel, askTransportation) : null}
+                  disabled={full && !canWait(build)}
+                  note={
+                    full
+                      ? waitNote(fullNote(rooms[build.id], travel, askTransportation), canWait(build), "Join the waitlist")
+                      : null
+                  }
                   lines={[
                     `${build.time} · ${build.address}`,
                     build.description,
@@ -588,6 +636,9 @@ export function SignupFields({
       )}
       {chosenWithRoom.map((build) => (
         <input key={build.id} type="hidden" name="shiftId" value={build.id} />
+      ))}
+      {chosenToWait.map((build) => (
+        <input key={build.id} type="hidden" name="waitlistShiftId" value={build.id} />
       ))}
 
       {grouping &&
@@ -681,6 +732,16 @@ function listNames(names: string[]) {
 // chosen. Spots can be held for drivers, so a build can be full for some
 // volunteers and not others (src/lib/placement/solver.ts).
 const FULL = "Slots are full";
+
+// Shown wherever volunteers can join a waitlist.
+const WAITLIST_NOTE =
+  "If you join the waitlist for any build(s), you won't be placed immediately, but if someone cancels you will be added automatically and contacted.";
+
+// A full option's note, saying it's a waitlist when it can be waited for:
+// "Slots are full · Join the waitlist".
+function waitNote(note: string | null, canWait: boolean, wait: string) {
+  return note && canWait ? `${note} · ${wait}` : note;
+}
 const ONLY_DRIVERS = "Only accepting people willing to drive others";
 const ONLY_OWN_WAY = "Only accepting people who can find their own transportation";
 
@@ -696,7 +757,8 @@ function fullNote(room: BuildRoom, travel: Travel | null, askTransportation: boo
 
 // A pill-shaped choice that fills in when picked, as a checkbox or one of a
 // set of radio buttons. A disabled one is greyed out, except for its note
-// (why it can't be chosen), which is red under the title so it stands out.
+// (why it can't be chosen, or that it's a waitlist), which is red under the
+// title so it stands out.
 function ChoicePill({
   role,
   checked,
@@ -745,7 +807,9 @@ function ChoicePill({
       </span>
       <span className="flex min-w-0 flex-col">
         <span className={cn("font-medium", disabled && "opacity-60")}>{title}</span>
-        {note && <span className="text-sm font-medium text-destructive">{note}</span>}
+        {note && (
+          <span className={cn("text-sm font-medium", checked ? "opacity-85" : "text-destructive")}>{note}</span>
+        )}
         {lines.map(
           (line) =>
             line && (

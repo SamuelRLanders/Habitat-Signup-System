@@ -40,6 +40,7 @@ type SignupAreaProps = {
     day: string;
     askTransportation: boolean;
     askGroups: boolean;
+    waitlist: boolean;
     shifts: OfferedShift[];
     sections: { id: string; title: string; body: string }[];
   };
@@ -96,9 +97,13 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
 
   let content;
   if (active) {
+    const waiting = active.waitlistedAt !== null;
+    const day = `${form.name} on ${formatDay(form.day, "short")}`;
     content = (
       <Panel title="Your signup">
         <Summary
+          waiting={waiting}
+          open={open}
           email={email}
           details={mine!.details}
           shifts={form.shifts}
@@ -108,7 +113,7 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
           groupEmails={grouping ? active.groupEmails : []}
           askedBy={askedBy}
         />
-        {open && (
+        {open && !waiting && (
           <p className="text-sm text-muted-foreground">
             Need to change something? Cancel your signup, then sign up again
             with your new answers.
@@ -117,16 +122,26 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
         <div className="flex flex-wrap gap-2">
           <ActionButton
             action={cancelSignup.bind(null, form.id)}
-            label="Cancel my signup"
+            label={waiting ? "Leave the waitlist" : "Cancel my signup"}
             variant="outline"
             size="default"
-            confirm={{
-              title: "Cancel your signup?",
-              description: open
-                ? `You'll be taken off the list for ${form.name} on ${formatDay(form.day, "short")}. You can sign up again while the form is open, if there's still room.`
-                : `You'll be taken off the list for ${form.name} on ${formatDay(form.day, "short")}. The form has closed, so you won't be able to sign up again.`,
-              confirmLabel: "Cancel signup",
-            }}
+            confirm={
+              waiting
+                ? {
+                    title: "Leave the waitlist?",
+                    description: open
+                      ? `You'll be taken off the waitlist for ${day}. If you join again, you'll be at the back of the line.`
+                      : `You'll be taken off the waitlist for ${day}. The form has closed, so you won't be able to join again.`,
+                    confirmLabel: "Leave waitlist",
+                  }
+                : {
+                    title: "Cancel your signup?",
+                    description: open
+                      ? `You'll be taken off the list for ${day}. You can sign up again while the form is open, if there's still room.`
+                      : `You'll be taken off the list for ${day}. The form has closed, so you won't be able to sign up again.`,
+                    confirmLabel: "Cancel signup",
+                  }
+            }
           />
         </div>
       </Panel>
@@ -161,14 +176,15 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
     const capacity = form.shifts.reduce((sum, shift) => sum + shift.capacity, 0);
     // Full when there's no room for anyone. A driver can fit where nobody
     // else can, by bringing riders' seats; without transportation, everyone
-    // gets there on their own.
+    // gets there on their own. With a waitlist, the form still shows, so
+    // volunteers can join it.
     const full = [...rooms.values()].every((room) =>
       form.askTransportation ? room.driverMinSeats === null : !room.ownWay,
     );
     content =
       capacity === 0 ? (
         <Message>No builds are scheduled for this day right now, so there&apos;s nothing to sign up for yet.</Message>
-      ) : full ? (
+      ) : full && !form.waitlist ? (
         <Message>This build day is full. Thanks for your interest! Check the home page for other days.</Message>
       ) : (
         <>
@@ -184,6 +200,7 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
             savedCarSeats={mine?.carSeats ?? null}
             askTransportation={form.askTransportation}
             grouping={grouping ? { askedBy: askedBy.map((asker) => asker.name) } : null}
+            waitlist={form.waitlist}
           />
         </>
       );
@@ -251,6 +268,8 @@ function SignedIn({ email }: { email: string }) {
 }
 
 function Summary({
+  waiting,
+  open,
   email,
   details,
   shifts,
@@ -260,6 +279,10 @@ function Summary({
   groupEmails,
   askedBy,
 }: {
+  // On the waitlist rather than signed up.
+  waiting: boolean;
+  // The form is still open.
+  open: boolean;
   email: string;
   details: MySignup["details"];
   shifts: OfferedShift[];
@@ -287,10 +310,14 @@ function Summary({
       <div className="flex flex-col gap-1">
         <h3 className="flex items-center gap-2 text-xl font-semibold">
           <CheckCircle2Icon className="size-6 text-primary" aria-hidden="true" />
-          You&apos;re signed up
+          {waiting ? "You're on the waitlist" : "You're signed up"}
         </h3>
         <p className="text-sm text-muted-foreground">
-          We&apos;ll email {email} to let you know which build you&apos;re placed at.
+          {!waiting
+            ? `We'll email ${email} to let you know which build you're placed at.`
+            : open
+              ? "You're not placed at a build yet. If someone cancels, you'll be added automatically and contacted."
+              : "You're not placed at a build yet. The form has closed, but the organizers may still add you if someone cancels, and will contact you if they do."}
         </p>
       </div>
 
@@ -319,7 +346,7 @@ function Summary({
       </dl>
 
       <div className="flex flex-col gap-2 text-sm">
-        <p className="font-medium">Builds you could work at</p>
+        <p className="font-medium">{waiting ? "Builds you're waiting for" : "Builds you could work at"}</p>
         {chosenShifts.length === 0 ? (
           <p className="text-muted-foreground">
             None of the builds you chose are still scheduled. Cancel your

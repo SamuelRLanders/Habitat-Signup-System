@@ -236,6 +236,11 @@ model SignupForm {
   askTransportation Boolean @default(true)
   askGroups         Boolean @default(true)
 
+  // Whether volunteers can join a full build's waitlist (see
+  // FormSignup.waitlistedAt). Turning it off only stops new people joining:
+  // anyone already waiting stays, and is still added when room opens up.
+  waitlist Boolean @default(true)
+
   // When an admin saved custom assignments, after the form closed, and
   // their name, copied as above. Until then (or after reverting), each
   // volunteer's build comes from the app's placement (src/lib/placement);
@@ -380,6 +385,13 @@ model FormSignup {
   // A copy of their car's seats when they offered to drive others.
   carSeats          Int?
   cancelledAt       DateTime?
+  // When they joined the waitlist, for a signup that's waiting rather than
+  // signed up: the builds they chose (preferences) were all full for them.
+  // Waiting signups aren't placed, counted or emailed as signed up. While
+  // the form is open they're added in this order when a volunteer cancels
+  // or a build gets more spots (src/lib/form-signups/waitlist.ts); after it
+  // closes, admins add them on the Assignments tab. Null once added.
+  waitlistedAt      DateTime?
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 

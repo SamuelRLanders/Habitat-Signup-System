@@ -2,12 +2,14 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_TIME_ZONE, fromDay, toDateInput } from "@/lib/time";
+import { SIGNED_UP } from "./status";
 
 // How many builds each volunteer has done, for how experienced they are
 // (src/lib/experience.ts): their signups through the app for earlier event
 // days, plus any adjustment an admin made by editing the number
 // (Volunteer.buildsAdjustment). Attendance isn't taken, so a signup counts
-// unless it was cancelled, its event was cancelled, or admins saved custom
+// unless it was cancelled, was only on the waitlist, its event was
+// cancelled, or admins saved custom
 // assignments that didn't place them at a build. Callers must run
 // requireAdmin() first.
 
@@ -15,7 +17,7 @@ import { DEFAULT_TIME_ZONE, fromDay, toDateInput } from "@/lib/time";
 // the app knows.
 function pastBuild(before: string): Prisma.FormSignupWhereInput {
   return {
-    cancelledAt: null,
+    ...SIGNED_UP,
     form: { status: "PUBLISHED", date: { lt: fromDay(before) } },
     OR: [{ form: { assignmentsSavedAt: null } }, { assignedShiftId: { not: null } }],
   };

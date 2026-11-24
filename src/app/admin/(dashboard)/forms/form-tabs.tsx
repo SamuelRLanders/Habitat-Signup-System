@@ -7,16 +7,22 @@ import { cn } from "cn";
 import { assignmentsOpen, type AdminPhase } from "@/lib/signup-forms/phase";
 
 // The tabs on a signup form's admin pages: its overview, who signed up,
+// who's on the waitlist (when the form has one, or anyone is still on it),
 // their assignments to builds (locked until the form closes), and Purdue's
 // travel roster. The open tab comes from the address.
 export function FormTabs({
   formId,
   phase,
   volunteerCount,
+  waitingCount,
+  waitlist,
 }: {
   formId: string;
   phase: AdminPhase;
   volunteerCount: number;
+  waitingCount: number;
+  // The form lets volunteers join its waitlist.
+  waitlist: boolean;
 }) {
   const pathname = usePathname();
   const base = `/admin/forms/${formId}`;
@@ -24,6 +30,7 @@ export function FormTabs({
   const tabs = [
     { href: base, label: "Overview" },
     { href: `${base}/volunteers`, label: `Volunteers (${volunteerCount})` },
+    ...(waitlist || waitingCount > 0 ? [{ href: `${base}/waitlist`, label: `Waitlist (${waitingCount})` }] : []),
     { href: `${base}/assignments`, label: "Assignments", locked },
     { href: `${base}/travel-roster`, label: "Travel roster" },
   ];

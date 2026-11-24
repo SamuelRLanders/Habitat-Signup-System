@@ -24,6 +24,7 @@ import {
 } from "./details";
 import { alertAdminsOfCancellation } from "./closed-cancellation";
 import { cancelDeadline, sameDayMessage, sameDaySignup } from "./queries";
+import { fillFromWaitlist } from "./waitlist";
 
 // Volunteers signing up through a form and cancelling their signup. A
 // signup can't be changed (that keeps placing drivers and riders simple):
@@ -60,6 +61,7 @@ async function loadForm(formId: string) {
       closesAt: true,
       askTransportation: true,
       askGroups: true,
+      waitlist: true,
       shifts: offeredShifts,
     },
   });
@@ -67,8 +69,12 @@ async function loadForm(formId: string) {
   return { ...form, day: toDay(form.date) };
 }
 
-// Signs up. Signing up again after cancelling counts as a new signup, but
-// someone already signed up can't sign up again over it.
+// Signs up, or joins the waitlist. Volunteers choose builds with room for
+// them ("shiftId"), or, on a form with a waitlist, full builds to wait for
+// ("waitlistShiftId"), but not both: with room somewhere they're simply
+// signed up there. Signing up again after cancelling counts as a new
+// signup, but someone already signed up (or waiting) can't sign up again
+// over it.
 export async function submitSignup(
   formId: string,
   _prev: SignupFormState,
@@ -86,8 +92,16 @@ export async function submitSignup(
   const values = formValues(formData);
   const parsed = detailsSchema.safeParse(values);
   const shiftIds = [...new Set(formData.getAll("shiftId").map(String))];
+  const waitlistIds = [...new Set(formData.getAll("waitlistShiftId").map(String))];
+  const joining = waitlistIds.length > 0;
   const errors: SignupFormState["errors"] = parsed.success ? {} : firstErrors(parsed.error);
-  if (shiftIds.length === 0) errors.shifts = "Choose at least one build you could work at.";
+  if (shiftIds.length === 0 && !joining) errors.shifts = "Choose at least one build you could work at.";
+  if (shiftIds.length > 0 && joining) {
+    errors.shifts = "Choose builds with room, or join waitlists, but not both.";
+  }
+  if (joining && !form.waitlist) {
+    errors.shifts = "This form's waitlist is closed. Refresh the page to see which builds have room.";
+  }
   if (parsed.success && !oldEnoughOn(parsed.data.dateOfBirth, form.day)) {
     errors.dateOfBirth = TOO_YOUNG;
   }
@@ -144,7 +158,9 @@ export async function submitSignup(
   const seats = carSeats?.success ? carSeats.data : null;
 
   const offered = new Map(form.shifts.map((shift) => [shift.id, shift]));
-  if (!shiftIds.every((id) => offered.has(id))) {
+  // The builds they chose, to work at or to wait for.
+  const chosenIds = joining ? waitlistIds : shiftIds;
+  if (!chosenIds.every((id) => offered.has(id))) {
     return {
       errors: {
         shifts: "One of the builds you chose is no longer offered that day. Refresh the page to see the current builds.",
@@ -173,13 +189,14 @@ export async function submitSignup(
         // both take its last spot. Its event may have been cancelled, or
         // its questions changed, since it was loaded.
         const [locked] = await tx.$queryRaw<
-          { status: string; askTransportation: boolean; askGroups: boolean }[]
+          { status: string; askTransportation: boolean; askGroups: boolean; waitlist: boolean }[]
         >`
-          SELECT status, "askTransportation", "askGroups" FROM "SignupForm" WHERE id = ${formId} FOR UPDATE`;
+          SELECT status, "askTransportation", "askGroups", waitlist FROM "SignupForm" WHERE id = ${formId} FOR UPDATE`;
         if (locked?.status !== "PUBLISHED") return { outcome: "closed" as const };
         if (locked.askTransportation !== form.askTransportation || locked.askGroups !== form.askGroups) {
           return { outcome: "changed" as const };
         }
+        if (joining && !locked.waitlist) return { outcome: "no-waitlist" as const };
 
         const active = await tx.formSignup.findFirst({
           where: { formId, volunteer: { email }, cancelledAt: null },
@@ -192,10 +209,13 @@ export async function submitSignup(
         if (sameDay) return { outcome: "same-day" as const, formName: sameDay.name };
 
         // There has to be a way to place everyone at a build they chose,
-        // them included, with a ride for everyone who needs one.
-        const day = await loadPlacementDay(tx, formId, form.shifts, asksTransportation);
-        if (!signupChecker(day)(newcomer)) {
-          return { outcome: "full" as const, rooms: Object.fromEntries(buildRoom(day)) };
+        // them included, with a ride for everyone who needs one. Anyone can
+        // join a waitlist.
+        if (!joining) {
+          const day = await loadPlacementDay(tx, formId, form.shifts, asksTransportation);
+          if (!signupChecker(day)(newcomer)) {
+            return { outcome: "full" as const, rooms: Object.fromEntries(buildRoom(day)) };
+          }
         }
 
         // Their latest details, for the next form they fill out. Saying
@@ -210,7 +230,13 @@ export async function submitSignup(
           create: { email, ...latest },
           update: latest,
         });
-        const answers = { ...details, transportation: transportation.data, carSeats: seats };
+        const answers = {
+          ...details,
+          transportation: transportation.data,
+          carSeats: seats,
+          // Joining again puts them at the back of the line.
+          waitlistedAt: joining ? new Date() : null,
+        };
         const signup = await tx.formSignup.upsert({
           where: { formId_volunteerId: { formId, volunteerId: volunteer.id } },
           create: { formId, volunteerId: volunteer.id, ...answers },
@@ -223,12 +249,18 @@ export async function submitSignup(
         // cancelled signup.
         await tx.shiftPreference.deleteMany({ where: { signupId: signup.id } });
         await tx.shiftPreference.createMany({
-          data: shiftIds.map((shiftId) => ({ signupId: signup.id, shiftId })),
+          data: chosenIds.map((shiftId) => ({ signupId: signup.id, shiftId })),
         });
         await tx.groupRequest.deleteMany({ where: { signupId: signup.id } });
         await tx.groupRequest.createMany({
           data: [...groupEmails].map((friend) => ({ signupId: signup.id, email: friend })),
         });
+
+        // Room may have opened up that nobody has been added to yet, such
+        // as from a build that was restored. Going through the waitlist in
+        // order adds them now if they fit, without jumping ahead of anyone
+        // who was waiting first.
+        if (joining) await fillFromWaitlist(tx, formId);
 
         return { outcome: "saved" as const };
       },
@@ -259,6 +291,12 @@ export async function submitSignup(
       },
     };
   }
+  if (result.outcome === "no-waitlist") {
+    revalidateSignup(formId);
+    return {
+      errors: { shifts: "This form's waitlist was just closed. Refresh the page to see which builds have room." },
+    };
+  }
   if (result.outcome === "same-day") {
     return { errors: { form: sameDayMessage(result.formName) } };
   }
@@ -267,7 +305,9 @@ export async function submitSignup(
     return {
       errors: {
         shifts:
-          "Sorry, the builds you chose just filled up. We've updated which builds still have room: choose another, or check the home page for other days.",
+          form.waitlist
+            ? "Sorry, the builds you chose just filled up. We've updated which builds still have room: choose another, or join a waitlist."
+            : "Sorry, the builds you chose just filled up. We've updated which builds still have room: choose another, or check the home page for other days.",
       },
       rooms: result.rooms,
     };
@@ -289,29 +329,34 @@ export async function cancelSignup(formId: string): Promise<ActionState> {
     return { error: "Signups for this day can't be cancelled here anymore. Please contact the organizers." };
   }
 
-  const signup = await prisma.formSignup.findFirst({
-    where: { formId, volunteer: { email }, cancelledAt: null },
-    select: { id: true },
-  });
   const NOTHING_TO_CANCEL = "You don't have a signup for this day to cancel.";
-  if (!signup) return { error: NOTHING_TO_CANCEL };
-
-  // Only cancels it if it's still active, in one statement, so several
-  // requests at the same moment can't each cancel it and each alert the
-  // admins.
-  const { count } = await prisma.formSignup.updateMany({
-    where: { id: signup.id, cancelledAt: null },
-    data: { cancelledAt: now },
-  });
-  if (count === 0) return { error: NOTHING_TO_CANCEL };
+  const cancelled = await prisma.$transaction(
+    async (tx) => {
+      // Lock the form until this transaction ends, as a signup does, so
+      // the spot freed up goes to the waitlist before anyone else.
+      await tx.$queryRaw`SELECT id FROM "SignupForm" WHERE id = ${formId} FOR UPDATE`;
+      const signup = await tx.formSignup.findFirst({
+        where: { formId, volunteer: { email }, cancelledAt: null },
+        select: { id: true, waitlistedAt: true },
+      });
+      if (!signup) return null;
+      await tx.formSignup.update({ where: { id: signup.id }, data: { cancelledAt: now } });
+      // While the form is open, whoever's waiting can have their spot.
+      if (!signup.waitlistedAt) await fillFromWaitlist(tx, formId);
+      return signup;
+    },
+    { timeout: 20_000 },
+  );
+  if (!cancelled) return { error: NOTHING_TO_CANCEL };
 
   // Volunteers aren't emailed about it: the form's page says it's cancelled.
+
   // After the form closes, admins may have set the assignments and sent
-  // the travel roster, so the form's creator and the owner hear
-  // about it.
-  if (formPhase(form, now) === "closed") {
+  // the travel roster, so the build's admins hear about it. Someone who
+  // was only waiting wasn't at any build.
+  if (formPhase(form, now) === "closed" && !cancelled.waitlistedAt) {
     try {
-      await alertAdminsOfCancellation(formId, signup.id);
+      await alertAdminsOfCancellation(formId, cancelled.id);
     } catch (error) {
       console.error("Failed to email admins about a cancellation", error);
     }

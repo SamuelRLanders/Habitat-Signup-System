@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import * as z from "zod";
 import { requireEditor } from "@/lib/auth/dal";
 import { sendEventCancelled } from "@/lib/form-signups/emails";
+import { SIGNED_UP } from "@/lib/form-signups/status";
+import { fillFromWaitlist } from "@/lib/form-signups/waitlist";
 import {
   firstErrors,
   formValues,
@@ -59,6 +61,7 @@ const signupFormSchema = z.object({
   listed: yesNo,
   askTransportation: yesNo,
   askGroups: yesNo,
+  waitlist: yesNo,
 });
 
 export type SignupFormField = keyof z.input<typeof signupFormSchema>;
@@ -207,7 +210,7 @@ export async function updateSignupForm(
 
     const existing = await tx.shift.findMany({
       where: { formId },
-      select: { id: true, cancelledAt: true, _count: { select: { preferences: true } } },
+      select: { id: true, cancelledAt: true, capacity: true, _count: { select: { preferences: true } } },
     });
     const byId = new Map(existing.map((shift) => [shift.id, shift]));
     const ids = parsed.builds.flatMap((build) => (build.id ? [build.id] : []));
@@ -246,8 +249,16 @@ export async function updateSignupForm(
       const cancelledAt = build.cancelled ? (byId.get(build.id)!.cancelledAt ?? now) : null;
       await tx.shift.update({ where: { id: build.id }, data: { ...data, cancelledAt } });
     }
+
+    // A build with more spots may have room for people on the waitlist,
+    // who are added while the form is open. Nobody is emailed.
+    const moreSpots = parsed.builds.some(
+      (build) => build.id && !build.cancelled && build.capacity > byId.get(build.id)!.capacity,
+    );
+    if (moreSpots) await fillFromWaitlist(tx, formId);
     return true;
-  });
+    // Placing the waitlist can take longer than the default 5 seconds.
+  }, { timeout: 20_000 });
   if (!saved) {
     return {
       errors: { form: "This form's builds were changed somewhere else. Refresh the page and make your changes again." },
@@ -332,8 +343,9 @@ export async function cancelSignupForm(formId: string): Promise<ActionState> {
         cancelledByName: admin.name || admin.email,
       },
     });
+    // Only those signed up: people on the waitlist aren't emailed.
     const signups = await tx.formSignup.findMany({
-      where: { formId, cancelledAt: null },
+      where: { formId, ...SIGNED_UP },
       select: { firstName: true, volunteer: { select: { email: true } } },
     });
     return {

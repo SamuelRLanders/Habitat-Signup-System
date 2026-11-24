@@ -31,14 +31,15 @@ export default async function AssignmentsPage({
 
   const loaded = await loadFormPlan(formId);
   if (!loaded) notFound();
-  const { form, active, custom, plan } = loaded;
+  const { form, active, waiting, custom, plan } = loaded;
   if (!assignmentsOpen(form.phase)) redirect(`/admin/forms/${form.id}`);
   const passed = form.phase === "passed";
   // Viewers see the board, but can't move anyone.
   const readOnly = passed || !canEdit(admin.role);
   const names = new Map(form.shifts.map((shift) => [shift.id, shift.name]));
 
-  const volunteers: BoardVolunteer[] = active.map((signup) => {
+  // Everyone signed up, then everyone waiting, in the order they joined.
+  const volunteers: BoardVolunteer[] = [...active, ...waiting].map((signup) => {
     const { travel, carSeats } = travelOf(
       signup.transportation,
       signup.carSeats,
@@ -54,6 +55,7 @@ export default async function AssignmentsPage({
       buildIds: signup.shiftIds,
       chose: signup.shiftIds.flatMap((id) => names.get(id) ?? []),
       builds: signup.builds,
+      waiting: signup.waitlistedAt !== null,
       travelLabel: !form.askTransportation
         ? null
         : travel === "driver"
@@ -84,6 +86,12 @@ export default async function AssignmentsPage({
                 ? "The Overview, Copy emails and the travel roster follow these. Volunteers who cancel are taken off; nobody else moves."
                 : "Move anyone and save to make custom assignments. The Overview, Copy emails and the travel roster will follow them."}
           </p>
+          {waiting.length > 0 && !readOnly && (
+            <p className="text-sm text-muted-foreground">
+              To add someone from the waitlist, check with them first, then
+              move them to a build and save. They aren&apos;t emailed.
+            </p>
+          )}
         </div>
         {custom && !readOnly && (
           <ActionButton
@@ -100,7 +108,7 @@ export default async function AssignmentsPage({
       </div>
 
       {volunteers.length === 0 ? (
-        <p className="text-muted-foreground">Nobody signed up through this form.</p>
+        <p className="text-muted-foreground">Nobody signed up or joined the waitlist through this form.</p>
       ) : (
         <AssignmentBoard
           // Starts over from the saved assignments after each save or revert.

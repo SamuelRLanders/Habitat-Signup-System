@@ -67,6 +67,7 @@ export default async function EditSignupFormPage({
           listed: form.listed ? "yes" : "no",
           askTransportation: form.askTransportation ? "yes" : "no",
           askGroups: form.askGroups ? "yes" : "no",
+          waitlist: form.waitlist ? "yes" : "no",
         }}
         builds={form.shifts.map((shift) => ({
           id: shift.id,

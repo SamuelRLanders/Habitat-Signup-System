@@ -7,10 +7,10 @@ import { getSignupForm, shiftLabel } from "@/lib/signup-forms/queries";
 import { toDay } from "@/lib/time";
 import { ageOn } from "@/lib/volunteers";
 
-// Downloads everyone who signed up through a form, cancelled or not, as a
-// CSV for placing volunteers at builds: their details from this signup,
-// then a column per build the form offers, marked "yes" if they could work
-// at it.
+// Downloads everyone who signed up through a form, cancelled, waiting or
+// not, as a CSV for placing volunteers at builds: their details from this
+// signup, then a column per build the form offers, marked "yes" if they
+// could work at it (or, on the waitlist, are waiting for it).
 const HEADER = [
   "email",
   "firstName",
@@ -64,7 +64,7 @@ export async function GET(
     signup.groupEmails.join("; "),
     signup.builds,
     EXPERIENCE_LABELS[experienceOf(signup.builds)],
-    signup.cancelledAt ? "cancelled" : "signed up",
+    signup.cancelledAt ? "cancelled" : signup.waitlistedAt ? "waitlist" : "signed up",
     signup.createdAt,
     signup.updatedAt,
     signup.cancelledAt,

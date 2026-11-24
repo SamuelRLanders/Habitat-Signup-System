@@ -36,13 +36,21 @@ export type BoardVolunteer = AssignmentVolunteer & {
   chose: string[];
   // How many builds they'd been on before this day.
   builds: number;
+  // On the waitlist: chose (buildIds) only full builds, to wait for. They're
+  // in the Waitlist column, in the order they joined, until moved to a
+  // build.
+  waiting: boolean;
 };
 
-// The column for volunteers who aren't at any build.
+// The columns for volunteers who aren't at any build: signed up but not
+// placed, and waiting.
 const NOT_PLACED = "not-placed";
+const WAITLIST = "waitlist";
 
-// The assignments as columns, one per build plus "Not placed", with each
-// volunteer as a card. Admins move people with each card's Move menu, which
+// The assignments as columns, one per build plus "Not placed" (and
+// "Waitlist", when anyone's waiting), with each volunteer as a card.
+// Moving someone from the waitlist to a build adds them to it when saved;
+// they aren't emailed, so admins check with them first. Admins move people with each card's Move menu, which
 // works the same with a mouse, a keyboard or a touch screen. Saving checks the
 // assignments and lists anything that breaks the placement rules, which the
 // admin can save anyway. Read-only once the event day is over.
@@ -72,14 +80,21 @@ export function AssignmentBoard({
 
   const changed = volunteers.filter((volunteer) => (assignments[volunteer.id] ?? null) !== (initial[volunteer.id] ?? null));
   const byName = (a: BoardVolunteer, b: BoardVolunteer) => a.name.localeCompare(b.name);
+  const anyWaiting = volunteers.some((volunteer) => volunteer.waiting);
   const columns = [
     ...builds.map((build) => ({ id: build.id, build })),
     { id: NOT_PLACED, build: null },
+    ...(anyWaiting ? [{ id: WAITLIST, build: null }] : []),
   ];
+  const columnOf = (volunteer: BoardVolunteer) =>
+    assignments[volunteer.id] ?? (volunteer.waiting ? WAITLIST : NOT_PLACED);
+  // Everyone the rules apply to: those still waiting aren't going anywhere.
+  const counted = volunteers.filter((volunteer) => columnOf(volunteer) !== WAITLIST);
 
   function move(volunteerId: string, columnId: string) {
     if (readOnly) return;
-    setAssignments((current) => ({ ...current, [volunteerId]: columnId === NOT_PLACED ? null : columnId }));
+    const away = columnId === NOT_PLACED || columnId === WAITLIST;
+    setAssignments((current) => ({ ...current, [volunteerId]: away ? null : columnId }));
     setError(null);
   }
 
@@ -94,7 +109,7 @@ export function AssignmentBoard({
 
   // Checks first; anything to warn about is shown before saving.
   function trySave() {
-    const found = assignmentWarnings(builds, volunteers, assignments, askTransportation);
+    const found = assignmentWarnings(builds, counted, assignments, askTransportation);
     if (found.length > 0) setWarnings(found);
     else save();
   }
@@ -128,15 +143,18 @@ export function AssignmentBoard({
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {columns.map(({ id, build }) => {
-          const here = volunteers.filter((volunteer) => (assignments[volunteer.id] ?? NOT_PLACED) === id).sort(byName);
-          const counts = build && buildCounts(build.id, volunteers, assignments);
+          // The waitlist stays in the order people joined.
+          const here = volunteers.filter((volunteer) => columnOf(volunteer) === id);
+          if (id !== WAITLIST) here.sort(byName);
+          const counts = build && buildCounts(build.id, counted, assignments);
+          const title = build ? build.name : id === WAITLIST ? "Waitlist" : "Not placed";
           const full = build && counts!.people > build.capacity;
           const short = build && askTransportation && counts!.riders > counts!.seats;
           const unled = build && here.length > 0 && !here.some((volunteer) => isHighlyExperienced(volunteer.builds));
           return (
             <section
               key={id}
-              aria-label={build ? build.name : "Not placed"}
+              aria-label={title}
               className={cn(
                 "flex min-h-40 flex-col gap-3 rounded-xl p-3 ring-1 ring-foreground/10",
                 !build && "bg-muted/40",
@@ -144,7 +162,7 @@ export function AssignmentBoard({
             >
               <header className="flex flex-col gap-0.5 px-1">
                 <div className="flex items-baseline justify-between gap-2">
-                  <h2 className="font-semibold">{build ? build.name : "Not placed"}</h2>
+                  <h2 className="font-semibold">{title}</h2>
                   {build && (
                     <span className={cn("text-sm tabular-nums", full && "font-medium text-destructive")}>
                       {counts!.people} / {build.capacity}
@@ -160,7 +178,9 @@ export function AssignmentBoard({
                       ]
                         .filter(Boolean)
                         .join(" · ")
-                    : "Not going to any build: left off the emails and travel roster."}
+                    : id === WAITLIST
+                      ? "Waiting for a spot, in the order they joined. Check with someone before moving them to a build: they aren't emailed."
+                      : "Not going to any build: left off the emails and travel roster."}
                 </p>
                 {short && (
                   <p className="text-xs font-medium text-destructive">
@@ -176,12 +196,17 @@ export function AssignmentBoard({
                     key={volunteer.id}
                     volunteer={volunteer}
                     buildId={build?.id ?? null}
+                    column={id}
                     moved={changed.includes(volunteer)}
                     readOnly={readOnly}
-                    columns={columns.map((column) => ({
-                      value: column.id,
-                      label: column.build ? column.build.name : "Not placed",
-                    }))}
+                    // Someone waiting can go to a build or stay waiting;
+                    // anyone else can't be put on the waitlist.
+                    columns={columns
+                      .filter((column) => column.id !== (volunteer.waiting ? NOT_PLACED : WAITLIST))
+                      .map((column) => ({
+                        value: column.id,
+                        label: column.build ? column.build.name : column.id === WAITLIST ? "Waitlist" : "Not placed",
+                      }))}
                     onMove={(columnId) => move(volunteer.id, columnId)}
                   />
                 ))}
@@ -227,6 +252,7 @@ export function AssignmentBoard({
 function PersonCard({
   volunteer,
   buildId,
+  column,
   moved,
   readOnly,
   columns,
@@ -235,6 +261,8 @@ function PersonCard({
   volunteer: BoardVolunteer;
   // The build they're in now, or null if not placed.
   buildId: string | null;
+  // The column they're in now.
+  column: string;
   moved: boolean;
   readOnly: boolean;
   columns: { value: string; label: string }[];
@@ -255,7 +283,13 @@ function PersonCard({
           {unchosen && <Badge variant="destructive">Didn&apos;t choose</Badge>}
         </span>
         <span className="text-xs text-muted-foreground">
-          {[volunteer.travelLabel, experienceLabel(volunteer.builds), volunteer.chose.length > 0 ? `Chose ${volunteer.chose.join(", ")}` : "Chose no current builds"]
+          {[
+            volunteer.travelLabel,
+            experienceLabel(volunteer.builds),
+            volunteer.chose.length > 0
+              ? `${volunteer.waiting ? "Waiting for" : "Chose"} ${volunteer.chose.join(", ")}`
+              : "Chose no current builds",
+          ]
             .filter(Boolean)
             .join(" · ")}
         </span>
@@ -263,7 +297,7 @@ function PersonCard({
       {!readOnly && (
         <Select
           items={columns}
-          value={buildId ?? NOT_PLACED}
+          value={column}
           onValueChange={(value) => value && onMove(value as string)}
         >
           <SelectTrigger size="sm" aria-label={`Move ${volunteer.name}`} className="shrink-0 text-xs">

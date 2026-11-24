@@ -2,6 +2,7 @@ import "server-only";
 import { connection } from "next/server";
 import { cache } from "react";
 import type { Prisma } from "@/generated/prisma/client";
+import { SIGNED_UP, WAITING } from "@/lib/form-signups/status";
 import { prisma } from "@/lib/prisma";
 import {
   DEFAULT_TIME_ZONE,
@@ -68,7 +69,7 @@ export async function listSignupForms(tab: FormListTab) {
     orderBy: [{ date: tab === "upcoming" ? "asc" : "desc" }, { name: "asc" }],
     include: {
       shifts: { where: offeredShifts.where, select: { capacity: true } },
-      _count: { select: { signups: { where: { cancelledAt: null } } } },
+      _count: { select: { signups: { where: SIGNED_UP } } },
     },
   });
 
@@ -82,7 +83,7 @@ export async function listSignupForms(tab: FormListTab) {
 }
 
 // A form with the builds it offers, and the cancelled ones (which admins
-// can restore), soonest first.
+// can restore), soonest first, and how many are signed up and waiting.
 export async function getSignupForm(formId: string) {
   const form = await prisma.signupForm.findUnique({
     where: { id: formId },
@@ -92,10 +93,11 @@ export async function getSignupForm(formId: string) {
         orderBy: { position: "asc" },
         select: { id: true, title: true, body: true },
       },
-      _count: { select: { signups: { where: { cancelledAt: null } } } },
+      _count: { select: { signups: { where: SIGNED_UP } } },
     },
   });
   if (!form) return null;
+  const waitingCount = await prisma.formSignup.count({ where: { formId, ...WAITING } });
 
   const { _count, shifts, ...rest } = form;
   return {
@@ -104,6 +106,7 @@ export async function getSignupForm(formId: string) {
     shifts: shifts.filter((shift) => !shift.cancelledAt),
     cancelledShifts: shifts.filter((shift) => shift.cancelledAt),
     signupCount: _count.signups,
+    waitingCount,
   };
 }
 
@@ -152,6 +155,7 @@ export const getPublicForm = cache(async (formId: string) => {
       closesAt: true,
       askTransportation: true,
       askGroups: true,
+      waitlist: true,
       shifts: offeredShifts,
       sections: {
         orderBy: { position: "asc" },

@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { PAGE_SIZE, type PeopleSearch } from "@/lib/admin/people-search";
 import { buildsDone } from "@/lib/form-signups/experience";
+import { SIGNED_UP } from "@/lib/form-signups/status";
 import { prisma } from "@/lib/prisma";
 import { addDays, DEFAULT_TIME_ZONE, formatDay, fromDay, toDateInput, toDay, zonedDateTime } from "@/lib/time";
 
@@ -93,9 +94,9 @@ const PEOPLE_ORDER: Prisma.VolunteerOrderByWithRelationInput[] = [
   { email: "asc" },
 ];
 
-// A signup that isn't cancelled, for a build day that hasn't passed.
+// A signup (not cancelled or waiting), for a build day that hasn't passed.
 function upcomingSignup(today: string): Prisma.FormSignupWhereInput {
-  return { cancelledAt: null, form: { date: { gte: fromDay(today) } } };
+  return { ...SIGNED_UP, form: { date: { gte: fromDay(today) } } };
 }
 
 function peopleWhere(search: PeopleSearch, today: string): Prisma.VolunteerWhereInput {
@@ -121,7 +122,7 @@ function peopleWhere(search: PeopleSearch, today: string): Prisma.VolunteerWhere
   if (search.upcoming === "no") and.push({ signups: { none: upcomingSignup(today) } });
 
   if (search.form) {
-    and.push({ signups: { some: { formId: search.form, cancelledAt: null } } });
+    and.push({ signups: { some: { formId: search.form, ...SIGNED_UP } } });
   }
 
   // When they first signed up: whole days in the admin time zone, both ends

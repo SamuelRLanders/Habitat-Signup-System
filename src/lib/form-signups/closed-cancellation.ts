@@ -36,7 +36,7 @@ export async function alertAdminsOfCancellation(formId: string, signupId: string
   const roster = await getFormRoster(form.id, form.day, form.shifts);
   const cancelled = roster.find((signup) => signup.id === signupId);
   if (!cancelled) return;
-  const active = roster.filter((signup) => !signup.cancelledAt);
+  const active = roster.filter((signup) => !signup.cancelledAt && !signup.waitlistedAt);
   const custom = form.assignmentsSavedAt !== null;
   const before = planForRoster(
     form.shifts,

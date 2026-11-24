@@ -16,17 +16,22 @@ export const loadForm = cache(async (formId: string) => {
   return { ...form, phase: adminPhase(form) };
 });
 
-// The form, everyone who signed up, and where they're going: a likely
+// The form, everyone signed up, waiting or cancelled, and where those
+// signed up are going: a likely
 // placement (src/lib/placement), or admins' custom assignments once saved.
 export const loadFormPlan = cache(async (formId: string) => {
   const form = await loadForm(formId);
   if (!form) return null;
   const roster = await getFormRoster(form.id, form.day, form.shifts);
-  const active = roster.filter((signup) => !signup.cancelledAt);
+  const active = roster.filter((signup) => !signup.cancelledAt && !signup.waitlistedAt);
+  // On the waitlist, in the order they joined.
+  const waiting = roster
+    .filter((signup) => !signup.cancelledAt && signup.waitlistedAt)
+    .sort((a, b) => a.waitlistedAt!.getTime() - b.waitlistedAt!.getTime());
   const cancelled = roster.filter((signup) => signup.cancelledAt);
   const custom = form.assignmentsSavedAt !== null;
   const plan = planForRoster(form.shifts, active, form, custom);
-  return { form, active, cancelled, custom, plan };
+  return { form, active, waiting, cancelled, custom, plan };
 });
 
 // "Volunteers: Delta Gamma build, Oct 24", for a tab's page title.
