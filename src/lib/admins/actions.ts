@@ -6,9 +6,10 @@ import * as z from "zod";
 import { requireAdmin, requireOwner } from "@/lib/auth/dal";
 import { ASSIGNABLE_ROLES, type AssignableRole } from "@/lib/auth/roles";
 import { firstErrors, type ActionState, type FormState } from "@/lib/forms";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sendAdminAdded, sendTransferDone, sendTransferLink } from "./emails";
-import { hashToken, newTransferToken, TRANSFER_DAYS } from "./queries";
+import { hashToken, newTransferToken, TRANSFER_DAYS, upcomingBuild } from "./queries";
 
 // The owner managing the admins on the Admins page, and an admin accepting
 // ownership from a transfer link. Every owner action calls requireOwner()
@@ -76,15 +77,20 @@ export async function addAdmin(_prev: AddAdminState, formData: FormData): Promis
   return { success: true };
 }
 
-// Makes an admin an editor or a viewer.
+// Makes an admin an editor or a viewer. A viewer can't organize builds, so
+// the owner takes over their upcoming ones.
 export async function setAdminRole(userId: string, role: AssignableRole): Promise<ActionState> {
-  await requireOwner();
+  const owner = await requireOwner();
   const parsed = roleSchema.safeParse(role);
   if (!parsed.success) return { error: "Choose editor or viewer." };
 
-  const { count } = await prisma.user.updateMany({
-    where: { id: userId, role: { not: "OWNER" } },
-    data: { role: parsed.data },
+  const count = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.user.updateMany({
+      where: { id: userId, role: { not: "OWNER" } },
+      data: { role: parsed.data },
+    });
+    if (count > 0 && parsed.data === "VIEWER") await handBuildsToOwner(tx, userId, owner.id);
+    return count;
   });
   if (count === 0) return { error: "This admin no longer exists, or is now the owner." };
 
@@ -94,17 +100,33 @@ export async function setAdminRole(userId: string, role: AssignableRole): Promis
 
 // Removes an admin. They're signed out everywhere at once, since their
 // sessions are deleted with them. The forms they created and the driver
-// decisions they made are kept, with their name.
+// decisions they made are kept, with their name. The owner takes over the
+// upcoming builds they were responsible for.
 export async function removeAdmin(userId: string): Promise<ActionState> {
-  await requireOwner();
+  const owner = await requireOwner();
 
-  const { count } = await prisma.user.deleteMany({
-    where: { id: userId, role: { not: "OWNER" } },
+  const { count } = await prisma.$transaction(async (tx) => {
+    const target = await tx.user.findFirst({
+      where: { id: userId, role: { not: "OWNER" } },
+      select: { id: true },
+    });
+    if (target) await handBuildsToOwner(tx, userId, owner.id);
+    return tx.user.deleteMany({ where: { id: userId, role: { not: "OWNER" } } });
   });
   if (count === 0) return { error: "This admin was already removed, or is now the owner." };
 
   revalidateAdmins();
   return {};
+}
+
+// Makes the owner responsible for the upcoming builds an admin was
+// responsible for. Past builds keep theirs as a record (or lose it, if
+// they're removed).
+async function handBuildsToOwner(tx: Prisma.TransactionClient, userId: string, ownerId: string) {
+  await tx.shift.updateMany({
+    where: { responsibleId: userId, ...upcomingBuild() },
+    data: { responsibleId: ownerId },
+  });
 }
 
 // ─── Transferring ownership ──────────────────────────────────────────────────

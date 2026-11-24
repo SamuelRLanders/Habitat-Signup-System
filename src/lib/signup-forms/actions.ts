@@ -119,6 +119,7 @@ function parseSignupForm(formData: FormData, previousDay?: string) {
 function shiftData(build: BuildInput, date: Date) {
   const day = toDay(date);
   return {
+    responsibleId: build.responsibleId,
     name: build.name,
     address: build.address,
     description: build.description,
@@ -127,6 +128,25 @@ function shiftData(build: BuildInput, date: Date) {
     startsAt: zonedDateTime(day, build.startTime, DEFAULT_TIME_ZONE),
     endsAt: zonedDateTime(day, build.endTime, DEFAULT_TIME_ZONE),
   };
+}
+
+// Problems with the builds' responsible admins, by position: each has to
+// be an editor or the owner (viewers can't organize a build), or null if
+// they all are.
+async function responsibleErrors(builds: BuildInput[]): Promise<SignupFormState | null> {
+  const ids = [...new Set(builds.map((build) => build.responsibleId))];
+  const editors = await prisma.user.findMany({
+    where: { id: { in: ids }, role: { in: ["OWNER", "EDITOR"] } },
+    select: { id: true },
+  });
+  const allowed = new Set(editors.map((editor) => editor.id));
+  const buildErrors: Record<number, BuildErrors> = {};
+  builds.forEach((build, index) => {
+    if (!allowed.has(build.responsibleId)) {
+      buildErrors[index] = { responsibleId: "Choose an editor or the owner. This admin may have been removed or made a viewer." };
+    }
+  });
+  return Object.keys(buildErrors).length > 0 ? { buildErrors } : null;
 }
 
 // The error for a name another form on the same day has, or null. Forms on
@@ -152,6 +172,8 @@ export async function createSignupForm(
 
   const parsed = parseSignupForm(formData);
   if (!parsed.ok) return parsed.state;
+  const badAdmins = await responsibleErrors(parsed.builds);
+  if (badAdmins) return badAdmins;
 
   const taken = await nameTaken(parsed.values.date, parsed.values.name);
   if (taken) return { errors: { name: taken } };
@@ -192,6 +214,8 @@ export async function updateSignupForm(
 
   const parsed = parseSignupForm(formData, toDay(existing.date));
   if (!parsed.ok) return parsed.state;
+  const badAdmins = await responsibleErrors(parsed.builds);
+  if (badAdmins) return badAdmins;
 
   // Volunteers chose builds on this day, so it has to stay put.
   if (existing._count.signups > 0 && parsed.values.date.getTime() !== existing.date.getTime()) {

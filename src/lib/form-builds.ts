@@ -31,6 +31,9 @@ const buildSchema = z
       .trim()
       .max(1000, "Keep the lunch note under 1,000 characters.")
       .transform((value) => value || null),
+    // The admin responsible for organizing it. Whether they're an editor
+    // or the owner is checked against the database when saving.
+    responsibleId: z.string().trim().min(1, "Choose the admin responsible for this build.").max(64),
     cancelled: z.string().transform((value) => value === "yes"),
   })
   .refine((build) => build.endTime > build.startTime, {
@@ -52,6 +55,7 @@ export function parseBuilds(formData: FormData) {
   const spots = field("buildSpots");
   const descriptions = field("buildDescription");
   const lunches = field("buildLunch");
+  const responsible = field("buildResponsible");
   const cancelled = field("buildCancelled");
   if (ids.length > MAX_BUILDS) {
     return { ok: false as const, form: `A form can have at most ${MAX_BUILDS} builds.` };
@@ -71,6 +75,7 @@ export function parseBuilds(formData: FormData) {
       capacity: spots[index] ?? "",
       description: descriptions[index] ?? "",
       lunch: lunches[index] ?? "",
+      responsibleId: responsible[index] ?? "",
       cancelled: cancelled[index] ?? "",
     });
     if (!parsed.success) {

@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { SignupFormField, SignupFormState } from "@/lib/signup-forms/actions";
 import { submitForm } from "@/lib/submit-form";
 import { FieldError } from "@/components/field-error";
-import { BuildFields, NEW_BUILD, type BuildDefaults } from "./build-fields";
+import { BuildFields, NEW_BUILD, type BuildDefaults, type ResponsibleAdmin } from "./build-fields";
 import { SectionFields, type SectionDefaults } from "./section-fields";
 
 type AriaProps = { "aria-invalid"?: boolean; "aria-describedby"?: string };
@@ -24,6 +24,10 @@ type FormEditorProps = {
   // every optional question.
   builds?: BuildDefaults[];
   sections?: SectionDefaults[];
+  // Who can be responsible for a build, and who new builds start with (the
+  // admin editing).
+  admins: ResponsibleAdmin[];
+  adminId: string;
   submitLabel: string;
   cancelHref: string;
 };
@@ -33,8 +37,10 @@ type FormEditorProps = {
 export function FormEditor({
   action,
   defaults = {},
-  builds = [NEW_BUILD],
+  builds,
   sections = [],
+  admins,
+  adminId,
   submitLabel,
   cancelHref,
 }: FormEditorProps) {
@@ -152,7 +158,12 @@ export function FormEditor({
         defaultChecked={defaults.waitlist !== "no"}
       />
 
-      <BuildFields defaults={builds} errors={buildErrors} />
+      <BuildFields
+        defaults={builds ?? [{ ...NEW_BUILD, responsibleId: adminId }]}
+        errors={buildErrors}
+        admins={admins}
+        newResponsibleId={adminId}
+      />
 
       <SectionFields defaults={sections} errors={sectionErrors} />
 

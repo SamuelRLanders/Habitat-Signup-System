@@ -85,6 +85,7 @@ model User {
 
   // Admin activity.
   formsCreated    SignupForm[]
+  buildsOrganized Shift[]
   driverDecisions DriverApproval[]
   messagesSent    Message[]
 
@@ -282,11 +283,19 @@ model Shift {
   formId String
   form   SignupForm @relation(fields: [formId], references: [id], onDelete: Cascade)
 
+  // The admin responsible for organizing the build: an editor or the
+  // owner, chosen in the form editor. When they're removed or made a
+  // viewer, their upcoming builds go to the owner. Null only when an
+  // admin's account is deleted some other way.
+  responsibleId String?
+  responsible   User?   @relation(fields: [responsibleId], references: [id], onDelete: SetNull)
+
   preferences ShiftPreference[]
   assigned    FormSignup[]      @relation("Assignment")
   messages    Message[]
 
   @@index([formId, startsAt])
+  @@index([responsibleId])
 }
 
 // A heading and text an admin adds to a signup form, such as instructions

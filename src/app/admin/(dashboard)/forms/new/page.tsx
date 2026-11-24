@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { listResponsibleAdmins } from "@/lib/admins/queries";
 import { requireEditorPage } from "@/lib/auth/dal";
 import { createSignupForm } from "@/lib/signup-forms/actions";
 import { BackLink } from "../../admin-parts";
@@ -7,7 +8,8 @@ import { FormEditor } from "../form-editor";
 export const metadata: Metadata = { title: "New signup form" };
 
 export default async function NewSignupFormPage() {
-  await requireEditorPage("/admin/forms/new", "/admin/forms");
+  const admin = await requireEditorPage("/admin/forms/new", "/admin/forms");
+  const admins = await listResponsibleAdmins();
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-6">
@@ -22,6 +24,8 @@ export default async function NewSignupFormPage() {
       </div>
       <FormEditor
         action={createSignupForm}
+        admins={admins}
+        adminId={admin.id}
         submitLabel="Create form"
         cancelHref="/admin/forms"
       />

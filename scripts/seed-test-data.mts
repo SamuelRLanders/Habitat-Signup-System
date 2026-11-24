@@ -85,6 +85,10 @@ async function seed() {
     console.error('No admin yet. Add one first: npm run admin:add -- you@example.org "Your Name"');
     process.exit(1);
   }
+  const organizer =
+    (await prisma.user.findFirst({ where: { role: "OWNER" } })) ??
+    (await prisma.user.findFirst({ where: { role: "EDITOR" }, orderBy: { createdAt: "asc" } })) ??
+    admin;
 
   // ── Signup forms, one per build day, each with its builds.
   const maple = {
@@ -134,6 +138,8 @@ async function seed() {
             startsAt: at(data.date, start),
             endsAt: at(data.date, end),
             cancelledAt: cancelled ? new Date() : null,
+            // Builds are organized by an editor or the owner.
+            responsibleId: organizer.id,
           })),
         },
         sections: { create: data.sections ?? [] },

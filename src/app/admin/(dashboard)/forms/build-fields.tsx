@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NumberField } from "@/components/ui/number-field";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { BuildErrors } from "@/lib/form-builds";
 
@@ -22,6 +23,8 @@ export type BuildDefaults = {
   capacity: string;
   description: string;
   lunch: string;
+  // The admin responsible for organizing it, or empty to choose one.
+  responsibleId: string;
   cancelled: boolean;
   // Volunteers have chosen it, so removing it cancels it instead of
   // deleting it.
@@ -37,9 +40,13 @@ export const NEW_BUILD: BuildDefaults = {
   capacity: "",
   description: "",
   lunch: "",
+  responsibleId: "",
   cancelled: false,
   chosen: false,
 };
+
+// An admin who can be responsible for a build: an editor or the owner.
+export type ResponsibleAdmin = { id: string; name: string };
 
 // The builds on a signup form: where groups are working that day, which
 // volunteers choose from. Sends one of each "build…" field per build, in
@@ -49,16 +56,24 @@ export const NEW_BUILD: BuildDefaults = {
 export function BuildFields({
   defaults,
   errors,
+  admins,
+  newResponsibleId,
 }: {
   defaults: BuildDefaults[];
   errors: Record<number, BuildErrors>;
+  admins: ResponsibleAdmin[];
+  // The responsible admin a new build starts with: the admin editing.
+  newResponsibleId: string;
 }) {
   const [builds, setBuilds] = useState(() =>
     defaults.map((build) => ({ ...build, key: crypto.randomUUID() })),
   );
 
   function add() {
-    setBuilds((current) => [...current, { ...NEW_BUILD, key: crypto.randomUUID() }]);
+    setBuilds((current) => [
+      ...current,
+      { ...NEW_BUILD, responsibleId: newResponsibleId, key: crypto.randomUUID() },
+    ]);
   }
 
   // A build volunteers chose is cancelled; any other is dropped, and
@@ -218,6 +233,32 @@ export function BuildFields({
                   {...aria("capacity")}
                 />
                 <FieldError field={`${id}-capacity`} error={buildErrors.capacity} />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label htmlFor={`${id}-responsible`}>Responsible admin</Label>
+                <Select
+                  name="buildResponsible"
+                  items={admins.map((admin) => ({ value: admin.id, label: admin.name }))}
+                  // An admin no longer allowed shows as unchosen.
+                  defaultValue={admins.some((admin) => admin.id === build.responsibleId) ? build.responsibleId : null}
+                >
+                  <SelectTrigger id={`${id}-responsible`} className="w-full" {...aria("responsibleId")}>
+                    <SelectValue placeholder="Choose an admin" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {admins.map((admin) => (
+                      <SelectItem key={admin.id} value={admin.id}>
+                        {admin.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  The editor organizing this build. Only editors and the owner
+                  can be chosen.
+                </p>
+                <FieldError field={`${id}-responsible`} error={buildErrors.responsibleId} />
               </div>
 
               <div className="flex flex-col gap-2">

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { requireEditorPage } from "@/lib/auth/dal";
+import { listResponsibleAdmins } from "@/lib/admins/queries";
 import { prisma } from "@/lib/prisma";
 import { updateSignupForm } from "@/lib/signup-forms/actions";
 import { offeredShifts } from "@/lib/signup-forms/queries";
@@ -21,7 +22,7 @@ export default async function EditSignupFormPage({
   params,
 }: PageProps<"/admin/forms/[formId]/edit">) {
   const { formId } = await params;
-  await requireEditorPage(`/admin/forms/${formId}/edit`, `/admin/forms/${formId}`);
+  const admin = await requireEditorPage(`/admin/forms/${formId}/edit`, `/admin/forms/${formId}`);
 
   const form = await prisma.signupForm.findUnique({
     where: { id: formId },
@@ -34,6 +35,7 @@ export default async function EditSignupFormPage({
     },
   });
   if (!form) notFound();
+  const admins = await listResponsibleAdmins();
 
   const formHref = `/admin/forms/${form.id}`;
   // A cancelled event's form is kept as it was.
@@ -78,12 +80,15 @@ export default async function EditSignupFormPage({
           capacity: String(shift.capacity),
           description: shift.description ?? "",
           lunch: shift.lunch ?? "",
+          responsibleId: shift.responsibleId ?? "",
           cancelled: shift.cancelledAt !== null,
           // Everyone who ever chose it, including cancelled signups, so the
           // record is kept.
           chosen: shift._count.preferences > 0,
         }))}
         sections={form.sections}
+        admins={admins}
+        adminId={admin.id}
         submitLabel="Save changes"
         cancelHref={formHref}
       />

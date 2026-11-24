@@ -69,6 +69,12 @@ export default async function AdminsPage() {
               {admins.map((admin) => {
                 const name = admin.name || admin.email;
                 const isOwner = admin.role === "OWNER";
+                // Removing them, or making them a viewer, hands their
+                // upcoming builds to the owner.
+                const builds =
+                  admin.upcomingBuilds > 0
+                    ? `${name} is the responsible admin for ${admin.upcomingBuilds} upcoming ${admin.upcomingBuilds === 1 ? "build" : "builds"}. You'll become responsible for ${admin.upcomingBuilds === 1 ? "it" : "them"} instead, and can choose someone else in each form's editor.`
+                    : null;
                 return (
                   <TableRow key={admin.id}>
                     <TableCell className="font-medium">
@@ -93,6 +99,15 @@ export default async function AdminsPage() {
                             action={setAdminRole.bind(null, admin.id, admin.role === "VIEWER" ? "EDITOR" : "VIEWER")}
                             label={admin.role === "VIEWER" ? "Make editor" : "Make viewer"}
                             variant="ghost"
+                            confirm={
+                              admin.role !== "VIEWER" && builds
+                                ? {
+                                    title: `Make ${name} a viewer?`,
+                                    description: `Viewers can't change anything or organize builds. ${builds} No email is sent.`,
+                                    confirmLabel: "Make viewer",
+                                  }
+                                : undefined
+                            }
                           />
                           <ActionButton
                             action={removeAdmin.bind(null, admin.id)}
@@ -100,7 +115,7 @@ export default async function AdminsPage() {
                             variant="ghost"
                             confirm={{
                               title: `Remove ${name}?`,
-                              description: `${name} won't be able to sign in to the admin pages, and is signed out everywhere now. The forms they created and the driver decisions they made are kept. No email is sent. You can add them again later.`,
+                              description: `${name} won't be able to sign in to the admin pages, and is signed out everywhere now. The forms they created and the driver decisions they made are kept.${builds ? ` ${builds}` : ""} No email is sent. You can add them again later.`,
                               confirmLabel: "Remove admin",
                             }}
                           />
