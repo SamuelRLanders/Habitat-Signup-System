@@ -203,6 +203,8 @@ async function seed() {
     builds: string[],
     transportation: "NEEDS_RIDE" | "OWN_WAY" | "CAN_DRIVE",
     cancelled = false,
+    // When they joined the waitlist, for someone waiting for the builds.
+    waitingSince: Date | null = null,
   ) => {
     if (!form) return;
     const shifts = builds.map((name) => form.shifts.find((shift) => shift.name === name)!);
@@ -220,6 +222,7 @@ async function seed() {
         formId: form.id,
         volunteerId: who.id,
         cancelledAt: cancelled ? new Date() : null,
+        waitlistedAt: waitingSince,
         preferences: { create: shifts.map((s) => ({ shiftId: s.id })) },
       },
     });
@@ -455,6 +458,34 @@ async function seed() {
     sections: waivers,
   });
 
+  // Closed, with the day still to come: both builds are full and people
+  // are waiting, so admins add them on the Assignments tab. A volunteer
+  // cancelling here emails the responsible admin and the owner, with the
+  // build's waitlist.
+  const REDBUD = "Redbud Lane Home";
+  const QUARRY = "Quarry Road Rehab";
+  const waitlisted = await createForm({
+    date: fromToday(4),
+    status: "PUBLISHED",
+    opens: [fromToday(-7), 9],
+    closes: [fromToday(-1), 22],
+    name: "Test: closed with a waitlist",
+    description: "Signups have closed and the day is still to come. Both builds are full, and four people are on the waitlist: add them on the Assignments tab.",
+    builds: [
+      { name: REDBUD, address: "410 Redbud Ln, Lafayette, IN 47905", description: "Roofing.", hours: [8, 12], capacity: 4 },
+      { name: QUARRY, address: "1200 Quarry Rd, West Lafayette, IN 47906", description: "Window replacement.", hours: [9, 13], capacity: 3 },
+    ],
+  });
+  await signUpAll(["Ada Finch", "Bram Cole", "Cleo Hart", "Dov Price"], waitlisted, [REDBUD], "OWN_WAY");
+  await signUpAll(["Esme Ward", "Felix Ruiz", "Gus Teller"], waitlisted, [QUARRY], "OWN_WAY");
+  // On the waitlist, in the order they joined.
+  const wait = (name: string, builds: string[], transportation: "NEEDS_RIDE" | "OWN_WAY", days: number) =>
+    person(name).then((who) => signUp(who, waitlisted, builds, transportation, false, daysAgo(days)));
+  await wait("Hana Webb", [REDBUD, QUARRY], "OWN_WAY", 5);
+  await wait("Ivo Grant", [REDBUD], "OWN_WAY", 4);
+  await wait("Juno Pike", [QUARRY], "NEEDS_RIDE", 3);
+  await wait("Kit Moss", [REDBUD], "OWN_WAY", 2);
+
   console.log(`
 Test data created. See it at ${SITE}/admin/forms and
 ${SITE}/admin/people. Volunteers see published forms at ${SITE}/.
@@ -472,6 +503,8 @@ Signup forms:
                 sign up there
   Wed, Oct 14   closed, still to come; Ash Street and Pine Ridge each have
                 a "Copy emails" pill (Flo cancelled, so she's left out)
+  ${fromToday(4)}  "Closed with a waitlist": closed, still to come, both
+                builds full, 4 people waiting to add on the Assignments tab
 
 Open now, for trying why options are greyed out on the signup form:
   ${fromToday(10)}  "Every reason a build is full": one full, one only
