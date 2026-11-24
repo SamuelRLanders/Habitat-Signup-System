@@ -158,6 +158,13 @@ export function FormEditor({
         defaultChecked={defaults.waitlist !== "no"}
       />
 
+      <OptionSwitch
+        name="cancellationEmails"
+        label="Email admins when a volunteer cancels after the form closes"
+        hint="Each email goes to the responsible admin of the build the volunteer was going to and to the owner. It says who cancelled, what it changes for rides, and who's on that build's waitlist. Turn off to send no emails."
+        defaultChecked={defaults.cancellationEmails !== "no"}
+      />
+
       <BuildFields
         defaults={builds ?? [{ ...NEW_BUILD, responsibleId: adminId }]}
         errors={buildErrors}

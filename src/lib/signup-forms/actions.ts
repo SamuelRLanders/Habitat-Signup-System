@@ -62,6 +62,7 @@ const signupFormSchema = z.object({
   askTransportation: yesNo,
   askGroups: yesNo,
   waitlist: yesNo,
+  cancellationEmails: yesNo,
 });
 
 export type SignupFormField = keyof z.input<typeof signupFormSchema>;

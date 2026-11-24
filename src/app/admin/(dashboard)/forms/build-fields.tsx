@@ -255,8 +255,9 @@ export function BuildFields({
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground">
-                  The editor organizing this build. Only editors and the owner
-                  can be chosen.
+                  The editor organizing this build. If the form emails admins
+                  about cancellations, they get those for this build. Only
+                  editors and the owner can be chosen.
                 </p>
                 <FieldError field={`${id}-responsible`} error={buildErrors.responsibleId} />
               </div>

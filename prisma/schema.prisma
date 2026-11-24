@@ -242,6 +242,11 @@ model SignupForm {
   // anyone already waiting stays, and is still added when room opens up.
   waitlist Boolean @default(true)
 
+  // Whether a volunteer cancelling after the form closes (they can until
+  // the day's first build starts) emails the responsible admin of the
+  // build they were going to and the owner. Off, nobody is emailed.
+  cancellationEmails Boolean @default(true)
+
   // When an admin saved custom assignments, after the form closed, and
   // their name, copied as above. Until then (or after reverting), each
   // volunteer's build comes from the app's placement (src/lib/placement);

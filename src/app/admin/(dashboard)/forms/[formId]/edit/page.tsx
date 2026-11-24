@@ -70,6 +70,7 @@ export default async function EditSignupFormPage({
           askTransportation: form.askTransportation ? "yes" : "no",
           askGroups: form.askGroups ? "yes" : "no",
           waitlist: form.waitlist ? "yes" : "no",
+          cancellationEmails: form.cancellationEmails ? "yes" : "no",
         }}
         builds={form.shifts.map((shift) => ({
           id: shift.id,
