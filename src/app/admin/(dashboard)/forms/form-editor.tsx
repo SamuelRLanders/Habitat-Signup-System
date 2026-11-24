@@ -128,15 +128,14 @@ export function FormEditor({
         <FieldError field="description" error={errors.description} />
       </div>
 
-      <OptionSwitch
-        name="listed"
-        label="List on the home page"
-        hint="Turn off for an outside group's form, so only people you share the link with can find it."
-        defaultChecked={defaults.listed !== "no"}
-      />
-
       <fieldset className="flex flex-col gap-4">
-        <legend className="mb-1 text-sm font-medium">Optional questions</legend>
+        <legend className="mb-1 text-sm font-medium">Options</legend>
+        <OptionSwitch
+          name="listed"
+          label="List on the home page"
+          hint="Turn off for an outside group's form, so only people you share the link with can find it."
+          defaultChecked={defaults.listed !== "no"}
+        />
         <OptionSwitch
           name="askTransportation"
           label="Ask how volunteers are getting there"
@@ -149,21 +148,19 @@ export function FormEditor({
           hint="Only asked on a day with more than one build. Turning it off ignores requests volunteers have already made."
           defaultChecked={defaults.askGroups !== "no"}
         />
+        <OptionSwitch
+          name="waitlist"
+          label="Let volunteers join a waitlist for full builds"
+          hint="Volunteers can choose full builds to wait for. While the form is open, they're added in the order they joined when someone cancels or a build gets more spots, without an email. After it closes, you add them on the Assignments tab. Turning it off stops new people joining; anyone already waiting stays on the list."
+          defaultChecked={defaults.waitlist !== "no"}
+        />
+        <OptionSwitch
+          name="cancellationEmails"
+          label="Email admins when a volunteer cancels after the form closes"
+          hint="Each email goes to the responsible admin of the build the volunteer was going to and to the owner. It says who cancelled, what it changes for rides, and who's on that build's waitlist. Turn off to send no emails."
+          defaultChecked={defaults.cancellationEmails !== "no"}
+        />
       </fieldset>
-
-      <OptionSwitch
-        name="waitlist"
-        label="Let volunteers join a waitlist for full builds"
-        hint="Volunteers can choose full builds to wait for. While the form is open, they're added in the order they joined when someone cancels or a build gets more spots, without an email. After it closes, you add them on the Assignments tab. Turning it off stops new people joining; anyone already waiting stays on the list."
-        defaultChecked={defaults.waitlist !== "no"}
-      />
-
-      <OptionSwitch
-        name="cancellationEmails"
-        label="Email admins when a volunteer cancels after the form closes"
-        hint="Each email goes to the responsible admin of the build the volunteer was going to and to the owner. It says who cancelled, what it changes for rides, and who's on that build's waitlist. Turn off to send no emails."
-        defaultChecked={defaults.cancellationEmails !== "no"}
-      />
 
       <BuildFields
         defaults={builds ?? [{ ...NEW_BUILD, responsibleId: adminId }]}
