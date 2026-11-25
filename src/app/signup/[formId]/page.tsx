@@ -120,13 +120,7 @@ export default async function SignupFormPage({
             <Notice>Come back once signups open to sign up.</Notice>
           )}
           {phase === "closed" && (
-            <Notice>
-              This form has closed, so you can&apos;t join this build day.{" "}
-              <Link href="/" className="underline underline-offset-4">
-                See other build days
-              </Link>
-              .
-            </Notice>
+            <Notice>This form has closed.</Notice>
           )}
         </Panel>
 
