@@ -532,7 +532,10 @@ export function SignupFields({
         "How are you getting to the build site?",
         <>
           {error("transportation")}
-          {anyRoom && !(travelHasRoom.NEEDS_RIDE && travelHasRoom.OWN_WAY) && (
+          {/* With a waitlist every way can be chosen, and the builds (or
+              the one build) say which are full, so there's nothing to warn
+              about here. */}
+          {!waitlist && anyRoom && !(travelHasRoom.NEEDS_RIDE && travelHasRoom.OWN_WAY) && (
             <p className="rounded-2xl bg-muted/60 px-4 py-3 text-sm">
               {onlyDrivers
                 ? `The spots left ${onlyBuild ? "are" : "at every build are"} held for volunteers who can drive others, so everyone who needs a ride has one.${canDrive ? "" : " Check back later, or see the home page for other days."}`
@@ -549,9 +552,10 @@ export function SignupFields({
                   onClick={() => setTransport(option.value)}
                   title={option.label}
                   // Full when no build has room for one more volunteer
-                  // getting there this way, unless they can wait.
+                  // getting there this way. With a waitlist they can still
+                  // choose it, and the builds say what's full.
                   disabled={!waitlist && !travelHasRoom[option.value]}
-                  note={waitNote(travelNote(option.value), waitlist)}
+                  note={waitlist ? null : travelNote(option.value)}
                 />
               ),
             )}
