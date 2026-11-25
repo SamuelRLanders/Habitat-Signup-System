@@ -30,6 +30,7 @@ import { shiftLabel, shiftTime, type OfferedShift } from "@/lib/signup-forms/que
 import { formatDay, fromDay } from "@/lib/time";
 import { seatsLabel, shirtLabel, TRANSPORTATION_OPTIONS } from "@/lib/volunteers";
 import type { Transportation } from "@/generated/prisma/enums";
+import { Reveal } from "./reveal";
 import { SignupFields, type BuildChoice, type DetailsDefaults } from "./signup-fields";
 
 type SignupAreaProps = {
@@ -45,42 +46,60 @@ type SignupAreaProps = {
     sections: { id: string; title: string; body: string }[];
   };
   phase: FormPhase;
+  // On a closed form, show signing in to cancel without its button first.
+  startOpen?: boolean;
 };
 
 // Everything on a form's page below the build details, as a panel for each
 // step: confirming an email, then the signed-in email, then the form (or
 // the volunteer's signup, with Cancel). Signups can't be changed; to change
 // one, volunteers cancel and sign up again. While the form is open, anyone
-// can sign up. After it closes, volunteers who signed up can still cancel
-// until the day's first build starts.
-export async function SignupArea({ form, phase }: SignupAreaProps) {
+// can sign up. After it closes, volunteers who signed up can still see and
+// cancel their signup until the day's first build starts; signing in for
+// that is behind a button, since most visitors to a closed form aren't
+// signed up.
+export async function SignupArea({ form, phase, startOpen = false }: SignupAreaProps) {
   const canCancel = new Date() < cancelDeadline(form.day, form.shifts);
   if (phase !== "open" && !(phase === "closed" && canCancel)) return null;
   const open = phase === "open";
 
   const email = await getVerifiedEmail();
   if (!email) {
-    return (
-      <Panel
-        title={open ? "Sign in with your Purdue email" : "Already signed up?"}
-        description={
+    const signIn = (
+      <EmailCodeForm
+        sendAction={sendSignupCode.bind(null, form.id)}
+        verifyAction={verifySignupCode}
+        verifyLabels={{ idle: "Continue", pending: "Checking…" }}
+        // Starting over on a closed form comes back to signing in, not
+        // the button.
+        restartHref={open ? `/signup/${form.id}` : `/signup/${form.id}?cancel`}
+        emailLabel="Purdue email"
+        emailHint={
           open
-            ? "We'll send you a 6-digit code to confirm it's you. You don't need an account."
-            : "Confirm your email address to see or cancel your signup. We'll send you a 6-digit code."
+            ? "Use your @purdue.edu email. It's how we match you to Purdue's records, such as its approved driver list."
+            : "Use the @purdue.edu email you signed up with."
         }
+      />
+    );
+    return open ? (
+      <Panel
+        title="Sign in with your Purdue email"
+        description="We'll send you a 6-digit code to confirm it's you. You don't need an account."
       >
-        <EmailCodeForm
-          sendAction={sendSignupCode.bind(null, form.id)}
-          verifyAction={verifySignupCode}
-          verifyLabels={{ idle: "Continue", pending: "Checking…" }}
-          restartHref={`/signup/${form.id}`}
-          emailLabel="Purdue email"
-          emailHint={
-            open
-              ? "Use your @purdue.edu email. It's how we match you to Purdue's records, such as its approved driver list."
-              : "Use the @purdue.edu email you signed up with."
-          }
-        />
+        {signIn}
+      </Panel>
+    ) : (
+      <Panel>
+        <Reveal label="Cancel your signup if you signed up for this build" startOpen={startOpen}>
+          <div className="flex flex-col gap-1">
+            <h2 className="text-lg font-semibold">Sign in to see your signup</h2>
+            <p className="text-sm text-muted-foreground">
+              Confirm your email address to see your signup and cancel it if
+              you need to. We&apos;ll send you a 6-digit code.
+            </p>
+          </div>
+          {signIn}
+        </Reveal>
       </Panel>
     );
   }
@@ -150,9 +169,10 @@ export async function SignupArea({ form, phase }: SignupAreaProps) {
     content = mine?.signup ? (
       <Cancelled>The form has closed, so you can&apos;t sign up again.</Cancelled>
     ) : (
-      <Panel title="Your signup">
+      <Panel title="You're not signed up">
         <p className="text-sm text-muted-foreground">
-          We don&apos;t have a signup for {email} on this day.
+          We don&apos;t have a signup for {email} on this day. The form has
+          closed, so you can&apos;t join this build day.
         </p>
       </Panel>
     );

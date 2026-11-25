@@ -2,6 +2,7 @@ import "server-only";
 import { connection } from "next/server";
 import { cache } from "react";
 import type { Prisma } from "@/generated/prisma/client";
+import { cancelDeadline } from "@/lib/form-signups/queries";
 import { SIGNED_UP, WAITING } from "@/lib/form-signups/status";
 import { prisma } from "@/lib/prisma";
 import {
@@ -114,12 +115,20 @@ export async function getSignupForm(formId: string) {
 // Whether a form is open depends on the time, so these wait for a request
 // rather than being rendered once at build time.
 
-// Published forms listed on the home page that haven't closed, soonest
-// first, with the names of their builds.
+// Published forms listed on the home page, soonest first, with the names
+// of their builds. A form stays listed after it closes, so volunteers who
+// signed up can find it to see or cancel their signup, until its day's
+// first build starts (cancelDeadline). Those are on its day, so only forms
+// for today or later can still be listed once closed.
 export async function listPublicForms() {
   await connection();
+  const now = new Date();
   const forms = await prisma.signupForm.findMany({
-    where: { status: "PUBLISHED", listed: true, closesAt: { gt: new Date() } },
+    where: {
+      status: "PUBLISHED",
+      listed: true,
+      OR: [{ closesAt: { gt: now } }, { date: { gte: fromDay(today()) } }],
+    },
     orderBy: [{ date: "asc" }, { name: "asc" }],
     select: {
       id: true,
@@ -128,15 +137,17 @@ export async function listPublicForms() {
       status: true,
       opensAt: true,
       closesAt: true,
-      shifts: { where: offeredShifts.where, orderBy: offeredShifts.orderBy, select: { name: true } },
+      shifts: { where: offeredShifts.where, orderBy: offeredShifts.orderBy, select: { name: true, startsAt: true } },
     },
   });
 
-  return forms.map(({ shifts, ...form }) => ({
-    ...form,
-    day: toDay(form.date),
-    buildNames: [...new Set(shifts.map((shift) => shift.name))],
-  }));
+  return forms
+    .map(({ shifts, ...form }) => ({ ...form, day: toDay(form.date), shifts }))
+    .filter((form) => now < form.closesAt || now < cancelDeadline(form.day, form.shifts))
+    .map(({ shifts, ...form }) => ({
+      ...form,
+      buildNames: [...new Set(shifts.map((shift) => shift.name))],
+    }));
 }
 
 // A published or cancelled form and its builds, or null for a draft or an

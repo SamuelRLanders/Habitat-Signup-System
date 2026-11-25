@@ -7,7 +7,9 @@ import { listPublicForms } from "@/lib/signup-forms/queries";
 import { DEFAULT_TIME_ZONE, formatDay, formatWeekdayTime } from "@/lib/time";
 
 // The public home page, where volunteers find a build day's signup form
-// without signing in. Lists published forms until they close.
+// without signing in. Lists published forms until they close, and closed
+// ones until their day's first build starts, so volunteers who signed up
+// can still find them to see or cancel their signup.
 export default async function HomePage() {
   const forms = await listPublicForms();
   const now = new Date();
@@ -39,7 +41,7 @@ export default async function HomePage() {
           ) : (
             <ul className="flex flex-col gap-3">
               {forms.map((form) => {
-                const open = formPhase(form, now) === "open";
+                const phase = formPhase(form, now);
                 const at = (date: Date) => formatWeekdayTime(date, DEFAULT_TIME_ZONE);
                 return (
                   <li key={form.id}>
@@ -50,8 +52,10 @@ export default async function HomePage() {
                       <span className="flex flex-wrap items-center gap-2">
                         <span className="font-medium">{formatDay(form.day)}</span>
                         <span className="text-muted-foreground">· {form.name}</span>
-                        {open ? (
+                        {phase === "open" ? (
                           <Badge className="bg-gold text-black">Open</Badge>
+                        ) : phase === "closed" ? (
+                          <Badge variant="secondary">Closed</Badge>
                         ) : (
                           <Badge variant="outline">Opens soon</Badge>
                         )}
@@ -60,9 +64,11 @@ export default async function HomePage() {
                         <span className="text-sm">{form.buildNames.join(" · ")}</span>
                       )}
                       <span className="text-sm text-muted-foreground">
-                        {open
+                        {phase === "open"
                           ? `Sign up by ${at(form.closesAt)}`
-                          : `Signups open ${at(form.opensAt)}`}
+                          : phase === "closed"
+                            ? "Signups have closed. Signed up? Open it to see or cancel your signup."
+                            : `Signups open ${at(form.opensAt)}`}
                       </span>
                     </Link>
                   </li>

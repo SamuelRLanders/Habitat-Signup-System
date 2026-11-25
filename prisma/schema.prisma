@@ -25,7 +25,7 @@ enum Role {
 // by its open and close times.
 enum FormStatus {
   DRAFT // admins only
-  PUBLISHED // listed on the home page until it closes
+  PUBLISHED // listed on the home page until it closes, or after it closes until its day's first build starts
   CANCELLED // the event is off: volunteers are told on the form's page; final
 }
 

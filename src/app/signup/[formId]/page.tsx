@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Panel } from "@/components/panel";
 import { PublicHeader } from "@/components/public-header";
+import { cancelDeadline } from "@/lib/form-signups/queries";
 import { formPhase } from "@/lib/signup-forms/phase";
 import { getPublicForm } from "@/lib/signup-forms/queries";
 import { openGraphDefaults } from "@/lib/site-metadata";
@@ -30,8 +31,9 @@ export async function generateMetadata({
 // Avenue · Sign up by Tue, Oct 20 at 5:00 PM."
 function previewDescription(form: NonNullable<Awaited<ReturnType<typeof getPublicForm>>>) {
   const day = formatDay(form.day);
-  const phase = formPhase(form);
+  const phase = publicPhase(form);
   if (phase === "cancelled") return `${day} · This build day has been cancelled.`;
+  if (phase === "started") return `${day} · This build day has already started.`;
 
   const at = (date: Date) => formatWeekdayTime(date, DEFAULT_TIME_ZONE);
   const builds = [...new Set(form.shifts.map((shift) => shift.name))].join(", ");
@@ -44,21 +46,33 @@ function previewDescription(form: NonNullable<Awaited<ReturnType<typeof getPubli
   return [day, builds, when].filter(Boolean).join(" · ");
 }
 
+// Where a form is for volunteers: its phase, or "started" once a closed
+// form's first build has started (cancelDeadline), when signups can't be
+// seen or cancelled here anymore and it's off the home page.
+function publicPhase(form: NonNullable<Awaited<ReturnType<typeof getPublicForm>>>) {
+  const phase = formPhase(form);
+  if (phase === "closed" && new Date() >= cancelDeadline(form.day, form.shifts)) return "started";
+  return phase;
+}
+
 // A build day's public signup form, as a column of panels: the build
 // details (always shown), then signing in with an email, then the form.
 // Volunteers can look it over once it's published and sign up while it's
-// open. After it closes it says so, and those who signed up can still
-// cancel until the day's first shift. A cancelled event's form only says
-// so. The day's builds and shifts are shown once the volunteer has signed
-// in, where they choose them.
+// open. After it closes it says so, and those who signed up can still see
+// and cancel their signup until the day's first build starts; after that
+// it only says the day has started. A cancelled event's form only says so.
+// The day's builds and shifts are shown once the volunteer has signed in,
+// where they choose them. ?cancel opens signing in on a closed form.
 export default async function SignupFormPage({
   params,
+  searchParams,
 }: PageProps<"/signup/[formId]">) {
   const { formId } = await params;
+  const { cancel } = await searchParams;
   const form = await getPublicForm(formId);
   if (!form) notFound();
 
-  const phase = formPhase(form);
+  const phase = publicPhase(form);
   const at = (date: Date) => formatWeekdayTime(date, DEFAULT_TIME_ZONE);
 
   return (
@@ -70,7 +84,7 @@ export default async function SignupFormPage({
           <div className="flex flex-col gap-1">
             <h1 className="text-3xl font-semibold">{form.name}</h1>
             <p className="text-lg font-medium">{formatDay(form.day)}</p>
-            {phase !== "cancelled" && (
+            {phase !== "cancelled" && phase !== "started" && (
               <p className="text-sm text-muted-foreground">
                 {phase === "not-open"
                   ? `Signups open ${at(form.opensAt)} and close ${at(form.closesAt)}.`
@@ -89,6 +103,15 @@ export default async function SignupFormPage({
               </Link>
               .
             </Notice>
+          ) : phase === "started" ? (
+            <Notice>
+              This build day has already started, so signups for it
+              can&apos;t be seen or cancelled here anymore.{" "}
+              <Link href="/" className="underline underline-offset-4">
+                See other build days
+              </Link>
+              .
+            </Notice>
           ) : (
             form.description && <p className="whitespace-pre-line">{form.description}</p>
           )}
@@ -98,7 +121,7 @@ export default async function SignupFormPage({
           )}
           {phase === "closed" && (
             <Notice>
-              This form has closed.{" "}
+              This form has closed, so you can&apos;t join this build day.{" "}
               <Link href="/" className="underline underline-offset-4">
                 See other build days
               </Link>
@@ -107,7 +130,9 @@ export default async function SignupFormPage({
           )}
         </Panel>
 
-        <SignupArea form={form} phase={phase} />
+        {phase !== "started" && (
+          <SignupArea form={form} phase={phase} startOpen={cancel !== undefined} />
+        )}
       </main>
     </div>
   );
