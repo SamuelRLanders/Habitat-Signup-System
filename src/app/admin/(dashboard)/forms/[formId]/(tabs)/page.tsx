@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/auth/dal";
 import { placedAt, type BuildPlan } from "@/lib/placement/solver";
+import { assignmentsTab } from "@/lib/signup-forms/attendance";
 import { assignmentsOpen } from "@/lib/signup-forms/phase";
 import { shiftTime } from "@/lib/signup-forms/queries";
 import { SpotsMeter } from "../../../admin-parts";
@@ -29,6 +30,7 @@ export default async function SignupFormPage({
   if (!loaded) notFound();
   const { form, active, custom, saved, plan } = loaded;
   const { phase } = form;
+  const tab = assignmentsTab(form.confirming);
 
   // The emails of the volunteers going to each shift (by ID), A–Z, for
   // emailing a build's volunteers once the form has closed and nobody new
@@ -51,11 +53,13 @@ export default async function SignupFormPage({
           Builds
         </h2>
         <p className="text-sm text-muted-foreground">
-          {custom
-            ? `Volunteers say which builds they could work at. Each build shows the custom assignments saved by ${form.assignmentsSavedByName ?? "an admin"}; change them on the Assignments tab.`
-            : assignmentsOpen(phase)
-              ? "Volunteers say which builds they could work at. Each build shows the app's placement; change it on the Assignments tab."
-              : "Volunteers say which builds they could work at. Each build shows a likely placement; it isn't final."}{" "}
+          {form.confirming
+            ? `Volunteers say which builds they could work at. The first build has started, so each build shows who went there; correct it on the ${tab} tab.`
+            : custom
+              ? `Volunteers say which builds they could work at. Each build shows the custom assignments saved by ${form.assignmentsSavedByName ?? "an admin"}; change them on the ${tab} tab.`
+              : assignmentsOpen(phase)
+                ? `Volunteers say which builds they could work at. Each build shows the app's placement; change it on the ${tab} tab.`
+                : "Volunteers say which builds they could work at. Each build shows a likely placement; it isn't final."}{" "}
           Once the form closes, copy a build&apos;s emails to write to the
           volunteers going there.
         </p>

@@ -7,11 +7,11 @@ import { SIGNED_UP } from "./status";
 // How many builds each volunteer has done, for how experienced they are
 // (src/lib/experience.ts): their signups through the app for earlier event
 // days, plus any adjustment an admin made by editing the number
-// (Volunteer.buildsAdjustment). Attendance isn't taken, so a signup counts
-// unless it was cancelled, was only on the waitlist, its event was
-// cancelled, or the saved assignments (admins' custom ones, or the app's
-// placement saved after the day: src/lib/data/final-placement.ts) didn't
-// place them at a build. Callers must run requireAdmin() first.
+// (Volunteer.buildsAdjustment). A signup counts unless it was cancelled,
+// was only on the waitlist, its event was cancelled, or the saved
+// assignments (admins' custom ones, or the confirmed ones once the first
+// build started: src/lib/data/final-placement.ts) don't have them at a
+// build, as for a no-show. Callers must run requireAdmin() first.
 
 // A signup for an event day before this one that they went to, as far as
 // the app knows.

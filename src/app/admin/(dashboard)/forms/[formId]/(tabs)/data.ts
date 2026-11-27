@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { placementStored, savePastPlacements } from "@/lib/data/final-placement";
+import { confirmingAttendance, placementStored, saveStartedPlacements } from "@/lib/data/final-placement";
 import { getFormRoster } from "@/lib/form-signups/rosters";
 import { planForRoster } from "@/lib/placement/load";
 import { prisma } from "@/lib/prisma";
@@ -11,21 +11,23 @@ import { formatDay, toDay } from "@/lib/time";
 // What a signup form's tabs show, loaded once per request and shared by the
 // layout and the tab's page. Callers must run requireAdmin() first.
 
+// The form, its phase, and whether its Assignments tab shows the confirmed
+// assignments (once its first build has started) rather than the planned
+// ones.
 export const loadForm = cache(async (formId: string) => {
+  // So an event that has started shows its confirmed assignments.
+  await saveStartedPlacements();
   const form = await getSignupForm(formId);
   if (!form) return null;
-  return { ...form, phase: adminPhase(form) };
+  return { ...form, phase: adminPhase(form), confirming: confirmingAttendance(form) };
 });
 
 // The form, everyone signed up, waiting or cancelled, and where those
-// signed up are going: a likely
-// placement (src/lib/placement), or admins' custom assignments once saved.
-// Once the day is over, it's the placement saved then (custom is still
-// whether admins made custom assignments; saved is whether either is
-// stored).
+// signed up are going: a likely placement (src/lib/placement), or admins'
+// custom assignments once saved. Once the first build has started, it's
+// the confirmed assignments (custom is still whether admins made custom
+// assignments; saved is whether either is stored).
 export const loadFormPlan = cache(async (formId: string) => {
-  // So a day that's over shows the placement the Data page counts.
-  await savePastPlacements();
   const form = await loadForm(formId);
   if (!form) return null;
   const roster = await getFormRoster(form.id, form.day, form.shifts);

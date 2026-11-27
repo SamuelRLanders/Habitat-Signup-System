@@ -1,30 +1,47 @@
 import "server-only";
 import { cache } from "react";
+import { cancelDeadline } from "@/lib/form-signups/queries";
 import { getFormRoster } from "@/lib/form-signups/rosters";
 import { planForRoster } from "@/lib/placement/load";
 import { prisma } from "@/lib/prisma";
 import { getSignupForm, today } from "@/lib/signup-forms/queries";
-import { fromDay } from "@/lib/time";
+import { fromDay, toDay } from "@/lib/time";
 
-// Saves where everyone went on each event day that's over
-// (SignupForm.placementSavedAt), so the Data page's numbers don't shift
-// later: until it's saved, a form without custom assignments is placed
-// afresh each time, from details (such as driver approvals) that change
-// after the day. Admins' custom assignments are kept as they are; otherwise
-// the app's placement is saved. Nobody is emailed.
+// Saves the planned assignments of each event whose form has closed and
+// whose day's first build has started (SignupForm.placementSavedAt), when
+// volunteers can no longer cancel. From then on the Assignments tab shows
+// the confirmed assignments: where everyone went, which admins correct for
+// the Data page, starting from this copy. Until it's saved, a form without
+// custom assignments is placed afresh each time, from details (such as
+// driver approvals) that change later. Admins' custom assignments are kept
+// as they are; otherwise the app's placement is saved. Each signup's
+// plannedShift keeps a copy, for reverting. Nobody is emailed.
 //
-// It runs when an admin page that counts from it loads, rather than on a
-// schedule, so it's done for every day that's over before it's needed.
-// Callers must run requireAdmin() first.
+// It runs when an admin page that shows assignments or counts from them
+// loads, rather than on a schedule, so it's done for every event that has
+// started before it's needed. Callers must run requireAdmin() first.
 
-// Every published form whose day is over and whose placement isn't saved
-// yet. Once per request.
-export const savePastPlacements = cache(async () => {
+// Every published form that has closed and started, and whose placement
+// isn't saved yet. Once per request.
+export const saveStartedPlacements = cache(async () => {
+  const now = new Date();
   const forms = await prisma.signupForm.findMany({
-    where: { status: "PUBLISHED", date: { lt: fromDay(today()) }, placementSavedAt: null },
-    select: { id: true },
+    where: {
+      status: "PUBLISHED",
+      placementSavedAt: null,
+      closesAt: { lte: now },
+      // The first build is on the form's day.
+      date: { lte: fromDay(today()) },
+    },
+    select: {
+      id: true,
+      date: true,
+      shifts: { where: { cancelledAt: null }, select: { startsAt: true } },
+    },
   });
-  for (const { id } of forms) await savePlacement(id);
+  for (const form of forms) {
+    if (now >= cancelDeadline(toDay(form.date), form.shifts)) await savePlacement(form.id);
+  }
 });
 
 async function savePlacement(formId: string) {
@@ -60,14 +77,36 @@ async function savePlacement(formId: string) {
         data: { assignedShiftId },
       });
     }
+    // Nobody cancelled or waiting is going anywhere, and a build that's
+    // been cancelled isn't somewhere to go.
+    await tx.formSignup.updateMany({
+      where: {
+        formId: form.id,
+        OR: [
+          { cancelledAt: { not: null } },
+          { waitlistedAt: { not: null } },
+          { assignedShift: { cancelledAt: { not: null } } },
+        ],
+      },
+      data: { assignedShiftId: null },
+    });
+    await tx.$executeRaw`UPDATE "FormSignup" SET "plannedShiftId" = "assignedShiftId" WHERE "formId" = ${form.id}`;
   });
 }
 
 // Whether a form's signups' assignedShift says where they're going: admins
-// saved custom assignments, or the app saved its placement after the day.
+// saved custom assignments, or the app saved the planned ones when the
+// first build started.
 export function placementStored(form: {
   assignmentsSavedAt: Date | null;
   placementSavedAt: Date | null;
 }) {
   return form.assignmentsSavedAt !== null || form.placementSavedAt !== null;
+}
+
+// Whether a form's Assignments tab shows the confirmed assignments: its
+// planned ones were saved when its first build started, and the event
+// wasn't cancelled.
+export function confirmingAttendance(form: { status: string; placementSavedAt: Date | null }) {
+  return form.status === "PUBLISHED" && form.placementSavedAt !== null;
 }

@@ -20,7 +20,7 @@ import { ShareDialog } from "../../share-dialog";
 import { loadForm } from "./data";
 
 // A signup form's admin pages: its name, day and actions, then tabs for its
-// overview, volunteers, waitlist, assignments and travel roster.
+// overview, volunteers, waitlist and assignments (with the travel roster).
 export default async function SignupFormLayout({
   params,
   children,
@@ -97,7 +97,7 @@ export default async function SignupFormLayout({
         <QuestionsNote questions={form} />
         <FormTabs
           formId={form.id}
-          phase={phase}
+          confirming={form.confirming}
           volunteerCount={form.signupCount}
           waitingCount={form.waitingCount}
           waitlist={form.waitlist}

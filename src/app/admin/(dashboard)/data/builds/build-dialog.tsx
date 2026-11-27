@@ -88,21 +88,17 @@ export function BuildDialog({
               {plural(build.capacity, "spot", "spots")}
               {build.volunteerHours !== null &&
                 ` · ${Math.round(build.volunteerHours).toLocaleString("en-US")} volunteer hours`}
-              {past && build.assigned > 0 && " (attendance isn't taken, so everyone placed here counts)"}.
+              {past && build.assigned > 0 && " (from the event's confirmed assignments)"}.
             </p>
-            {build.volunteers.length > 0 && (
-              <ul className="flex flex-col divide-y rounded-lg ring-1 ring-foreground/10">
-                {build.volunteers.map((volunteer) => (
-                  <li key={volunteer.id} className="px-3 py-1.5">
-                    <Link
-                      href={`/admin/data/people?person=${volunteer.id}`}
-                      className="hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                    >
-                      {volunteer.name}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
+            <People people={build.volunteers} />
+            {build.noShows > 0 && (
+              <>
+                <p className="text-muted-foreground">
+                  No-shows: {plural(build.noShows, "volunteer", "volunteers")} planned for here didn&apos;t come or
+                  cancel.
+                </p>
+                <People people={build.noShowPeople} />
+              </>
             )}
           </>
         ) : (
@@ -127,5 +123,24 @@ export function BuildDialog({
         )}
       </section>
     </UrlDialog>
+  );
+}
+
+// A list of people, each linking to their popup on the People tab.
+function People({ people }: { people: { id: string; name: string }[] }) {
+  if (people.length === 0) return null;
+  return (
+    <ul className="flex flex-col divide-y rounded-lg ring-1 ring-foreground/10">
+      {people.map((person) => (
+        <li key={person.id} className="px-3 py-1.5">
+          <Link
+            href={`/admin/data/people?person=${person.id}`}
+            className="hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            {person.name}
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }

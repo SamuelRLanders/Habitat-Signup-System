@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { parsePeopleSearch } from "@/lib/admin/people-search";
 import { exportPeople } from "@/lib/admin/queries";
 import { getAdmin } from "@/lib/auth/dal";
-import { savePastPlacements } from "@/lib/data/final-placement";
+import { saveStartedPlacements } from "@/lib/data/final-placement";
 import { toCsv } from "@/lib/csv";
 import { DEFAULT_TIME_ZONE, toDateInput, toDay } from "@/lib/time";
 
@@ -19,6 +19,7 @@ const HEADER = [
   "tShirtSize",
   "hasDriversLicense",
   "builds", // builds they've done, counting any admin edits
+  "noShows", // events they didn't come to or cancel, as admins confirmed
   "createdAt",
   "updatedAt",
 ];
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
   }
 
   // So builds are counted as on the rest of the Data page.
-  await savePastPlacements();
+  await saveStartedPlacements();
   const people = await exportPeople(parsePeopleSearch(request.nextUrl.searchParams));
   const rows = people.map((person) => [
     person.email,
@@ -43,6 +44,7 @@ export async function GET(request: NextRequest) {
     person.tShirtSize,
     person.hasDriversLicense,
     person.builds,
+    person.noShows,
     person.createdAt,
     person.updatedAt,
   ]);

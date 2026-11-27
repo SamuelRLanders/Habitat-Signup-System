@@ -4,12 +4,16 @@ import { revalidatePath } from "next/cache";
 import { requireEditor } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/forms";
 import type { Assignments } from "@/lib/placement/assignments";
+import { cancelDeadline } from "@/lib/form-signups/queries";
 import { prisma } from "@/lib/prisma";
-import { adminPhase } from "./phase";
+import { toDay } from "@/lib/time";
+import { formPhase } from "./phase";
 
 // Admins' custom assignments of volunteers to builds (src/lib/placement/
-// assignments.ts). They can only be changed once the form has closed and
-// before its event day is over. Admins are warned about anything that
+// assignments.ts), the planned assignments. They can only be changed once
+// the form has closed and before the day's first build starts: then
+// they're saved (src/lib/data/final-placement.ts), and admins confirm who
+// went instead (./attendance-actions.ts). Admins are warned about anything that
 // breaks the placement rules before saving, so these only check that the
 // volunteers and builds belong to the form. Every action calls
 // requireEditor() first, and treats the IDs it's sent as untrusted.
@@ -25,12 +29,26 @@ async function lockForEditing(tx: Parameters<Parameters<typeof prisma.$transacti
   await tx.$queryRaw`SELECT id FROM "SignupForm" WHERE id = ${formId} FOR UPDATE`;
   const form = await tx.signupForm.findUnique({
     where: { id: formId },
-    select: { status: true, opensAt: true, closesAt: true, date: true, assignmentsSavedAt: true },
+    select: {
+      status: true,
+      opensAt: true,
+      closesAt: true,
+      date: true,
+      assignmentsSavedAt: true,
+      placementSavedAt: true,
+      shifts: { where: { cancelledAt: null }, select: { startsAt: true } },
+    },
   });
   if (!form) return { error: "This form no longer exists." };
-  const phase = adminPhase(form);
-  if (phase === "passed") return { error: "This event day is over, so its assignments can't be changed." };
+  const phase = formPhase(form);
+  if (phase === "cancelled") return { error: "This event was cancelled, so its assignments can't be changed." };
   if (phase !== "closed") return { error: "Assignments can only be changed once the form has closed." };
+  if (form.placementSavedAt || new Date() >= cancelDeadline(toDay(form.date), form.shifts)) {
+    return {
+      error:
+        "The first build has started, so these are now the confirmed assignments. Refresh the page to change those instead.",
+    };
+  }
   return { form };
 }
 

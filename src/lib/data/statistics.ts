@@ -8,14 +8,16 @@ import { prisma } from "@/lib/prisma";
 import { today as todayDay } from "@/lib/signup-forms/queries";
 import { fromDay, toDay } from "@/lib/time";
 import { ageOn, T_SHIRT_SIZES } from "@/lib/volunteers";
-import { savePastPlacements } from "./final-placement";
+import { saveStartedPlacements } from "./final-placement";
 import type { StatsRange } from "./stats-range";
 
 // The Statistics tab: what happened at the events in a time range. Only
 // events that are over count, and only published ones (not drafts or
-// cancelled events). Attendance isn't taken, so everyone placed at a build
-// counts as having gone: each event's placement is saved once its day is
-// over (./final-placement.ts). Callers must run requireAdmin() first.
+// cancelled events). Everyone at a build on an event's confirmed
+// assignments counts as having gone: its planned assignments are saved when
+// its first build starts (./final-placement.ts), and admins correct them,
+// marking no-shows and adding people who came without signing up. Callers
+// must run requireAdmin() first.
 
 export type TransportKind = "ride" | "ownWay" | "drive" | "notAsked";
 
@@ -33,7 +35,7 @@ const TRANSPORT_OF: Record<Transportation, TransportKind> = {
 };
 
 export async function getStatistics(range: StatsRange) {
-  await savePastPlacements();
+  await saveStartedPlacements();
   const today = todayDay();
 
   const date: Prisma.DateTimeFilter = { lt: fromDay(today) };
@@ -57,6 +59,8 @@ export async function getStatistics(range: StatsRange) {
           cancelledAt: true,
           waitlistedAt: true,
           assignedShiftId: true,
+          noShow: true,
+          addedAt: true,
         },
       },
     },
@@ -73,25 +77,33 @@ export async function getStatistics(range: StatsRange) {
     const shifts = new Map(form.shifts.map((shift) => [shift.id, shift]));
     const offered = form.shifts.filter((shift) => !shift.cancelledAt);
     let went = 0;
-    let notPlaced = 0;
+    // Signed up (not only waiting), whether they went or not. People admins
+    // added on the day didn't sign up.
+    let signedUp = 0;
+    let noShows = 0;
     let waiting = 0;
     let cancelled = 0;
 
     for (const signup of form.signups) {
       if (signup.cancelledAt) {
         // Cancelling from the waitlist didn't give up a spot.
-        if (!signup.waitlistedAt) cancelled++;
+        if (!signup.waitlistedAt) {
+          cancelled++;
+          signedUp++;
+        }
         continue;
       }
       if (signup.waitlistedAt) {
         waiting++;
         continue;
       }
-      const shift = signup.assignedShiftId ? shifts.get(signup.assignedShiftId) : undefined;
-      if (!shift) {
-        notPlaced++;
+      if (!signup.addedAt) signedUp++;
+      if (signup.noShow) {
+        noShows++;
         continue;
       }
+      const shift = signup.assignedShiftId ? shifts.get(signup.assignedShiftId) : undefined;
+      if (!shift) continue;
 
       went++;
       const shiftHours = (shift.endsAt.getTime() - shift.startsAt.getTime()) / 3_600_000;
@@ -108,7 +120,18 @@ export async function getStatistics(range: StatsRange) {
     }
 
     const spots = offered.reduce((sum, shift) => sum + shift.capacity, 0);
-    return { id: form.id, name: form.name, day, builds: offered.length, spots, went, notPlaced, waiting, cancelled };
+    return {
+      id: form.id,
+      name: form.name,
+      day,
+      builds: offered.length,
+      spots,
+      went,
+      signedUp,
+      noShows,
+      waiting,
+      cancelled,
+    };
   });
 
   const ids = [...people.keys()];
@@ -147,7 +170,7 @@ export async function getStatistics(range: StatsRange) {
     .sort((a, b) => b.builds - a.builds || b.hours - a.hours || a.name.localeCompare(b.name))
     .slice(0, 10);
 
-  const sum = (key: "went" | "spots" | "builds" | "notPlaced" | "waiting" | "cancelled") =>
+  const sum = (key: "went" | "spots" | "builds" | "signedUp" | "noShows" | "waiting" | "cancelled") =>
     events.reduce((total, event) => total + event[key], 0);
 
   return {
@@ -156,7 +179,8 @@ export async function getStatistics(range: StatsRange) {
     buildCount: sum("builds"),
     spots: sum("spots"),
     went: sum("went"),
-    notPlaced: sum("notPlaced"),
+    signedUp: sum("signedUp"),
+    noShows: sum("noShows"),
     waiting: sum("waiting"),
     cancelled: sum("cancelled"),
     people: people.size,

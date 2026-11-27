@@ -22,6 +22,10 @@ const rosterSelect = {
   createdAt: true,
   updatedAt: true,
   assignedShiftId: true,
+  plannedShiftId: true,
+  noShow: true,
+  addedAt: true,
+  addedByName: true,
   volunteer: { select: { id: true, email: true } },
   preferences: { select: { shiftId: true } },
 } as const;
@@ -29,8 +33,10 @@ const rosterSelect = {
 // Everyone who has signed up through a form, cancelled or not, by last
 // name. shiftIds only has the builds the form still offers; groupEmails are
 // the people they asked to be placed with. assignedShiftId is the build an
-// admin assigned them to (on a form with custom assignments), if the form
-// still offers it. builds is how many builds they'd been on before the
+// admin assigned them to (on a form with custom assignments), or where they
+// went (once the first build has started), if the form still offers it;
+// plannedShiftId, noShow and addedAt are for the confirmed assignments
+// (see FormSignup). builds is how many builds they'd been on before the
 // form's day ("2026-10-24").
 export async function getFormRoster(formId: string, day: string, shifts: OfferedShift[]) {
   const offered = new Set(shifts.map((shift) => shift.id));

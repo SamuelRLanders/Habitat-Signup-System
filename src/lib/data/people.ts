@@ -4,13 +4,13 @@ import { buildsDone } from "@/lib/form-signups/experience";
 import { prisma } from "@/lib/prisma";
 import { today as todayDay } from "@/lib/signup-forms/queries";
 import { toDay } from "@/lib/time";
-import { placementStored, savePastPlacements } from "./final-placement";
+import { placementStored, saveStartedPlacements } from "./final-placement";
 
 // One volunteer's details and every event they signed up for, for their
 // popup on the Data page's People tab. Null if there's no such volunteer.
 // Callers must run requireAdmin() first.
 export async function getPersonDetails(volunteerId: string) {
-  await savePastPlacements();
+  await saveStartedPlacements();
   const today = todayDay();
   const volunteer = await prisma.volunteer.findUnique({
     where: { id: volunteerId },
@@ -32,7 +32,10 @@ export async function getPersonDetails(volunteerId: string) {
           id: true,
           cancelledAt: true,
           waitlistedAt: true,
+          noShow: true,
+          addedAt: true,
           assignedShift: { select: { name: true } },
+          plannedShift: { select: { name: true } },
           preferences: { select: { shift: { select: { name: true, cancelledAt: true } } } },
           form: {
             select: {
@@ -57,6 +60,8 @@ export async function getPersonDetails(volunteerId: string) {
     ...details,
     driver: drivers.get(volunteer.id) ?? { status: "none" as const },
     builds: builds.get(volunteer.id) ?? 0,
+    // Events they didn't come to, and didn't cancel, as admins confirmed.
+    noShows: signups.filter((signup) => signup.noShow && signup.form.status === "PUBLISHED").length,
     signups: signups.map((signup) => {
       const day = toDay(signup.form.date);
       const past = day < today;
@@ -65,19 +70,21 @@ export async function getPersonDetails(volunteerId: string) {
       const status: string =
         signup.form.status === "CANCELLED"
           ? "Event cancelled"
-          : signup.cancelledAt
-            ? "Cancelled"
-            : signup.waitlistedAt
-              ? past
-                ? "Was on the waitlist"
-                : "On the waitlist"
-              : build
+          : stored && signup.noShow
+            ? "No-show"
+            : signup.cancelledAt
+              ? "Cancelled"
+              : signup.waitlistedAt
                 ? past
-                  ? "Went"
-                  : "Assigned"
-                : stored
-                  ? "Not placed"
-                  : "Signed up";
+                  ? "Was on the waitlist"
+                  : "On the waitlist"
+                : build
+                  ? past
+                    ? "Went"
+                    : "Assigned"
+                  : stored
+                    ? "Not placed"
+                    : "Signed up";
       return {
         id: signup.id,
         formId: signup.form.id,
@@ -85,7 +92,15 @@ export async function getPersonDetails(volunteerId: string) {
         day,
         past,
         status,
-        build: status === "Went" || status === "Assigned" ? build : null,
+        // Where they went or are going, or the build a no-show missed.
+        build:
+          status === "Went" || status === "Assigned"
+            ? build
+            : status === "No-show"
+              ? (signup.plannedShift?.name ?? null)
+              : null,
+        // An admin added them on the day, without a signup.
+        added: signup.addedAt !== null,
         // The builds they said they could work at, while where they're
         // going isn't decided yet.
         chose:

@@ -22,8 +22,10 @@ const HEADER = [
   "responsibleAdmin",
   "responsibleEmail",
   // Signed up and placed there, once that's saved (custom assignments, or
-  // after the day): who went, for a past build. Empty until then.
+  // once the first build starts): who went, from the confirmed assignments,
+  // for a past build. Empty until then.
   "volunteers",
+  "noShows", // planned to go there, but didn't come or cancel
   "chose", // signed-up volunteers who said they could work there
   "waitlisted", // waiting volunteers who chose it
   "volunteerHours", // past builds: volunteers × its length in hours
@@ -55,6 +57,7 @@ export async function GET(request: NextRequest) {
     build.responsible?.name ?? "",
     build.responsible?.email ?? "",
     build.assigned,
+    build.noShows,
     build.chose,
     build.waiting,
     build.volunteerHours === null ? null : Math.round(build.volunteerHours * 100) / 100,

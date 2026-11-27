@@ -36,8 +36,8 @@ export function adminPhase(
   return phase;
 }
 
-// Whether admins can open a form's assignments: once it has closed, so
-// nobody new can sign up. After the event day they're read-only.
+// Whether a form has closed, so nobody new can sign up and admins can set
+// its assignments.
 export function assignmentsOpen(phase: AdminPhase) {
   return phase === "closed" || phase === "passed";
 }

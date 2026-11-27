@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireAdmin } from "@/lib/auth/dal";
+import { assignmentsTab } from "@/lib/signup-forms/attendance";
 import { assignmentsOpen } from "@/lib/signup-forms/phase";
 import { VolunteerTable } from "../../../../volunteer-table";
 import { formTitle, loadFormPlan } from "../data";
@@ -38,12 +39,21 @@ export default async function WaitlistPage({
           them, and is waiting for a spot at any of them.
         </p>
         <p>
-          {closed ? (
+          {form.confirming ? (
+            <>
+              The first build has started. If anyone waiting came, move them to
+              the build they went to on the{" "}
+              <Link href={`/admin/forms/${form.id}/assignments`} className="underline underline-offset-4">
+                {assignmentsTab(true)} tab
+              </Link>
+              .
+            </>
+          ) : closed ? (
             <>
               The form has closed, so nobody is added automatically. To add
               someone, check with them, then move them to a build on the{" "}
               <Link href={`/admin/forms/${form.id}/assignments`} className="underline underline-offset-4">
-                Assignments tab
+                {assignmentsTab(false)} tab
               </Link>
               .
             </>

@@ -1,24 +1,24 @@
 "use client";
 
-import { LockIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
-import { assignmentsOpen, type AdminPhase } from "@/lib/signup-forms/phase";
+import { assignmentsTab } from "@/lib/signup-forms/attendance";
 
 // The tabs on a signup form's admin pages: its overview, who signed up,
 // who's on the waitlist (when the form has one, or anyone is still on it),
-// their assignments to builds (locked until the form closes), and Purdue's
-// travel roster. The open tab comes from the address.
+// and their assignments to builds: planned until the day's first build
+// starts, then confirmed. The open tab comes from the address.
 export function FormTabs({
   formId,
-  phase,
+  confirming,
   volunteerCount,
   waitingCount,
   waitlist,
 }: {
   formId: string;
-  phase: AdminPhase;
+  // The Assignments tab shows the confirmed assignments.
+  confirming: boolean;
   volunteerCount: number;
   waitingCount: number;
   // The form lets volunteers join its waitlist.
@@ -26,50 +26,32 @@ export function FormTabs({
 }) {
   const pathname = usePathname();
   const base = `/admin/forms/${formId}`;
-  const locked = !assignmentsOpen(phase);
   const tabs = [
     { href: base, label: "Overview" },
     { href: `${base}/volunteers`, label: `Volunteers (${volunteerCount})` },
     ...(waitlist || waitingCount > 0 ? [{ href: `${base}/waitlist`, label: `Waitlist (${waitingCount})` }] : []),
-    { href: `${base}/assignments`, label: "Assignments", locked },
-    { href: `${base}/travel-roster`, label: "Travel roster" },
+    { href: `${base}/assignments`, label: assignmentsTab(confirming) },
   ];
   const tab = "rounded-full px-3.5 py-1 text-sm font-medium whitespace-nowrap transition-colors";
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      <nav aria-label="Form" className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-full bg-muted p-1">
-        {tabs.map(({ href, label, locked }) =>
-          locked ? (
-            <span
-              key={href}
-              aria-disabled="true"
-              title="Opens once the form closes"
-              className={cn(tab, "flex cursor-not-allowed items-center gap-1.5 text-muted-foreground/60")}
-            >
-              <LockIcon className="size-3.5" aria-hidden="true" />
-              {label}
-            </span>
-          ) : (
-            <Link
-              key={href}
-              href={href}
-              aria-current={pathname === href ? "page" : undefined}
-              className={cn(
-                tab,
-                pathname === href
-                  ? "bg-background text-foreground shadow-sm"
-                  : "hover-gold text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {label}
-            </Link>
-          ),
-        )}
-      </nav>
-      {locked && phase !== "cancelled" && (
-        <span className="text-sm text-muted-foreground">Assignments open once the form closes.</span>
-      )}
-    </div>
+    <nav aria-label="Form" className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-full bg-muted p-1">
+      {tabs.map(({ href, label }) => (
+        <Link
+          key={href}
+          href={href}
+          aria-current={pathname === href ? "page" : undefined}
+          className={cn(
+            tab,
+            pathname === href
+              ? "bg-background text-foreground shadow-sm"
+              : "hover-gold text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {label}
+        </Link>
+      ))}
+    </nav>
   );
 }
+

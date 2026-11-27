@@ -244,12 +244,21 @@ model SignupForm {
   assignmentsSavedAt     DateTime?
   assignmentsSavedByName String?
 
-  // When the app saved where everyone went, once the event day was over
-  // (src/lib/data/final-placement.ts). From then on each signup's
-  // assignedShift is final: admins' custom assignments if they saved any,
-  // or else the app's placement as it was then. Attendance isn't taken, so
-  // the Data page counts everyone placed as having gone.
+  // When the app saved the planned assignments, once the form had closed
+  // and the day's first build had started (src/lib/data/final-placement.ts;
+  // before then, forms were saved once their day was over). Each signup's
+  // plannedShift is a copy of where they were going then: admins' custom
+  // assignments if they saved any, or else the app's placement. From then
+  // on the Assignments tab shows the confirmed assignments, and each
+  // signup's assignedShift is where they went (null, with noShow, for a
+  // no-show), which admins correct for the Data page.
   placementSavedAt DateTime?
+
+  // When an admin last saved the confirmed assignments, and their name,
+  // copied as above. Null until then, or after reverting to the planned
+  // ones.
+  attendanceConfirmedAt     DateTime?
+  attendanceConfirmedByName String?
 
   shifts   Shift[]
   sections FormSection[]
@@ -294,6 +303,7 @@ model Shift {
 
   preferences ShiftPreference[]
   assigned    FormSignup[]      @relation("Assignment")
+  planned     FormSignup[]      @relation("Planned")
   messages    Message[]
 
   @@index([formId, startsAt])
@@ -407,9 +417,28 @@ model FormSignup {
   updatedAt         DateTime        @updatedAt
 
   // The build an admin assigned them to, on a form with custom assignments
-  // (see SignupForm.assignmentsSavedAt). Null there means not placed.
+  // (see SignupForm.assignmentsSavedAt), or where they went, once the
+  // planned assignments are saved (SignupForm.placementSavedAt). Null there
+  // means not placed, or a no-show.
   assignedShiftId String?
   assignedShift   Shift?  @relation("Assignment", fields: [assignedShiftId], references: [id], onDelete: SetNull)
+
+  // Where they were going when the day's first build started (see
+  // SignupForm.placementSavedAt), for reverting the confirmed assignments.
+  plannedShiftId String?
+  plannedShift   Shift?  @relation("Planned", fields: [plannedShiftId], references: [id], onDelete: SetNull)
+
+  // Didn't come to the build they were going to, and didn't cancel: marked
+  // by an admin on the confirmed assignments. assignedShift is null then,
+  // and plannedShift is the build they missed.
+  noShow Boolean @default(false)
+
+  // When an admin added them on the confirmed assignments, and the admin's
+  // name, copied as on SignupForm: they came without signing up, or after
+  // cancelling (then their cancelled signup is reused). A new signup's
+  // details are copied from the volunteer, and its createdAt is addedAt.
+  addedAt     DateTime?
+  addedByName String?
 
   // Forms with signups can't be deleted, so this never cascades.
   formId String
@@ -424,6 +453,7 @@ model FormSignup {
   @@unique([formId, volunteerId])
   @@index([volunteerId])
   @@index([assignedShiftId])
+  @@index([plannedShiftId])
 }
 
 // A build a volunteer said they could work at. Admins use these to place

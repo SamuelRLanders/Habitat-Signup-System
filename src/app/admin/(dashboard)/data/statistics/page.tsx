@@ -42,9 +42,10 @@ export default async function StatisticsPage({ searchParams }: PageProps<"/admin
         <p className="flex max-w-3xl gap-2 text-sm text-muted-foreground">
           <InfoIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <span>
-            Counts events that are over. Attendance isn&apos;t taken, so everyone
-            signed up and placed at a build is counted as having gone; anyone who
-            cancelled or was still on the waitlist isn&apos;t.
+            Counts events that are over. Everyone at a build on an event&apos;s
+            confirmed assignments is counted as having gone: admins mark
+            no-shows and add anyone who came without signing up there. Until
+            they do, everyone placed is counted.
           </span>
         </p>
       </div>
@@ -149,7 +150,6 @@ export default async function StatisticsPage({ searchParams }: PageProps<"/admin
 
 // The headline number, then the other totals.
 function Headline({ stats }: { stats: Statistics }) {
-  const signedUp = stats.went + stats.notPlaced + stats.cancelled;
   const tiles = [
     {
       label: "Spots filled",
@@ -163,12 +163,14 @@ function Headline({ stats }: { stats: Statistics }) {
     {
       label: "Cancellations",
       value: stats.cancelled,
-      note: `${percent(stats.cancelled, signedUp)} of signups`,
+      note: `${percent(stats.cancelled, stats.signedUp)} of signups`,
     },
     { label: "Left on the waitlist", value: stats.waiting, note: "still waiting on the day" },
-    ...(stats.notPlaced > 0
-      ? [{ label: "Signed up, not placed", value: stats.notPlaced, note: "left out of the placement" }]
-      : []),
+    {
+      label: "No-shows",
+      value: stats.noShows,
+      note: `didn't come or cancel · ${percent(stats.noShows, stats.went + stats.noShows)} of those placed`,
+    },
   ];
 
   return (
@@ -253,6 +255,7 @@ function EventsTable({ events }: { events: Statistics["events"] }) {
               <TableHead className="text-right">Builds</TableHead>
               <TableHead className="text-right">Went</TableHead>
               <TableHead>Full</TableHead>
+              <TableHead className="text-right">No-shows</TableHead>
               <TableHead className="text-right">Waitlist</TableHead>
               <TableHead className="text-right">Cancelled</TableHead>
             </TableRow>
@@ -293,6 +296,7 @@ function EventsTable({ events }: { events: Statistics["events"] }) {
                       </span>
                     </div>
                   </TableCell>
+                  <TableCell className="text-right tabular-nums">{event.noShows}</TableCell>
                   <TableCell className="text-right tabular-nums">{event.waiting}</TableCell>
                   <TableCell className="text-right tabular-nums">{event.cancelled}</TableCell>
                 </TableRow>

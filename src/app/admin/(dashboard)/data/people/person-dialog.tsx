@@ -62,6 +62,10 @@ export function PersonDialog({
             {editor && <BuildsDialog volunteerId={person.id} name={name} builds={person.builds} />}
           </span>
         </Detail>
+        <Detail label="No-shows">
+          {person.noShows === 0 ? "None" : person.noShows}
+          <span className="text-muted-foreground"> (didn&apos;t come or cancel)</span>
+        </Detail>
         <Detail label="First signed up">{formatDate(person.createdAt, DEFAULT_TIME_ZONE)}</Detail>
         <Detail label="Details last changed">{formatDate(person.updatedAt, DEFAULT_TIME_ZONE)}</Detail>
       </dl>
@@ -83,13 +87,22 @@ export function PersonDialog({
                   >
                     {signup.event}
                   </Link>
-                  <Badge variant={signup.status === "Went" || signup.status === "Assigned" ? "default" : "secondary"}>
+                  <Badge
+                    variant={
+                      signup.status === "Went" || signup.status === "Assigned"
+                        ? "default"
+                        : signup.status === "No-show"
+                          ? "destructive"
+                          : "secondary"
+                    }
+                  >
                     {signup.status}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {formatDay(signup.day, "short")}
-                  {signup.build && ` · ${signup.build}`}
+                  {signup.build && (signup.status === "No-show" ? ` · Missed ${signup.build}` : ` · ${signup.build}`)}
+                  {signup.added && " · Added by an admin on the day"}
                   {signup.chose.length > 0 && ` · Could work at ${signup.chose.join(", ")}`}
                 </p>
               </li>

@@ -151,7 +151,7 @@ export function FormEditor({
         <OptionSwitch
           name="waitlist"
           label="Let volunteers join a waitlist for full builds"
-          hint="Volunteers can choose full builds to wait for. While the form is open, they're added in the order they joined when someone cancels or a build gets more spots, without an email. After it closes, you add them on the Assignments tab. Turning it off stops new people joining; anyone already waiting stays on the list."
+          hint="Volunteers can choose full builds to wait for. While the form is open, they're added in the order they joined when someone cancels or a build gets more spots, without an email. After it closes, you add them on the Planned assignments tab. Turning it off stops new people joining; anyone already waiting stays on the list."
           defaultChecked={defaults.waitlist !== "no"}
         />
         <OptionSwitch

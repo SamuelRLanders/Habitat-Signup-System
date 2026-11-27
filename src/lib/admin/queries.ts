@@ -70,10 +70,16 @@ export async function exportPeople(search: PeopleSearch) {
       hasDriversLicense: true,
       createdAt: true,
       updatedAt: true,
+      // No-shows admins confirmed.
+      _count: { select: { signups: { where: { noShow: true, form: { status: "PUBLISHED" } } } } },
     },
   });
   const builds = await buildsDone(volunteers.map((volunteer) => volunteer.id));
-  return volunteers.map(({ id, ...volunteer }) => ({ ...volunteer, builds: builds.get(id) ?? 0 }));
+  return volunteers.map(({ id, _count, ...volunteer }) => ({
+    ...volunteer,
+    builds: builds.get(id) ?? 0,
+    noShows: _count.signups,
+  }));
 }
 
 // Every signup form, newest day first, for the "Signed up for" filter.

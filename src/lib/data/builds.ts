@@ -6,11 +6,14 @@ import { prisma } from "@/lib/prisma";
 import { today as todayDay } from "@/lib/signup-forms/queries";
 import { fromDay, toDay } from "@/lib/time";
 import { BUILD_PAGE_SIZE, type BuildSearch, type BuildStatus } from "./build-search";
-import { placementStored, savePastPlacements } from "./final-placement";
+import { placementStored, saveStartedPlacements } from "./final-placement";
 
 // Read queries for the Data page's Builds tab: every build (one day at one
 // address) on any signup form, past or upcoming. Callers must run
 // requireAdmin() first.
+
+// Signups planned for a build who didn't come, and didn't cancel.
+const NO_SHOWS = { noShow: true, cancelledAt: null } satisfies Prisma.FormSignupWhereInput;
 
 const BUILD_ORDER: Prisma.ShiftOrderByWithRelationInput[] = [
   { form: { date: "desc" } },
@@ -43,21 +46,24 @@ export async function searchBuilds(search: BuildSearch) {
 // Everything about the builds matching the search, on every page, for the
 // CSV download.
 export async function exportBuilds(search: BuildSearch) {
-  await savePastPlacements();
+  await saveStartedPlacements();
   const today = todayDay();
   const shifts = await prisma.shift.findMany({
     where: buildsWhere(search, today),
     orderBy: BUILD_ORDER,
-    select: { ...detailSelect, _count: { select: { assigned: { where: SIGNED_UP } } } },
+    select: {
+      ...detailSelect,
+      _count: { select: { assigned: { where: SIGNED_UP }, planned: { where: NO_SHOWS } } },
+    },
   });
   const counts = await preferenceCounts(shifts.map((shift) => shift.id));
-  return shifts.map(({ _count, ...shift }) => describe(shift, _count.assigned, counts, today));
+  return shifts.map(({ _count, ...shift }) => describe(shift, _count.assigned, _count.planned, counts, today));
 }
 
 // One build, with who's going (or went) there, for its popup. Null if
 // there's no such build.
 export async function getBuildDetails(shiftId: string) {
-  await savePastPlacements();
+  await saveStartedPlacements();
   const today = todayDay();
   const shift = await prisma.shift.findUnique({
     where: { id: shiftId },
@@ -68,18 +74,25 @@ export async function getBuildDetails(shiftId: string) {
         orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
         select: { firstName: true, lastName: true, volunteerId: true },
       },
+      planned: {
+        where: NO_SHOWS,
+        orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+        select: { firstName: true, lastName: true, volunteerId: true },
+      },
     },
   });
   if (!shift) return null;
   const counts = await preferenceCounts([shift.id]);
-  const { assigned, ...rest } = shift;
-  const details = describe(rest, assigned.length, counts, today);
+  const { assigned, planned, ...rest } = shift;
+  const details = describe(rest, assigned.length, planned.length, counts, today);
+  const people = (signups: typeof assigned) =>
+    signups.map((signup) => ({ id: signup.volunteerId, name: `${signup.firstName} ${signup.lastName}` }));
   return {
     ...details,
-    // Who's assigned there, once that's stored (see placementStored).
-    volunteers: details.stored
-      ? assigned.map((signup) => ({ id: signup.volunteerId, name: `${signup.firstName} ${signup.lastName}` }))
-      : [],
+    // Who's assigned there, once that's stored (see placementStored), and
+    // who was going but didn't come.
+    volunteers: details.stored ? people(assigned) : [],
+    noShowPeople: people(planned),
   };
 }
 
@@ -145,6 +158,7 @@ async function preferenceCounts(shiftIds: string[]) {
 function describe(
   shift: DetailShift,
   assigned: number,
+  noShows: number,
   counts: Awaited<ReturnType<typeof preferenceCounts>>,
   today: string,
 ) {
@@ -162,6 +176,8 @@ function describe(
     // Signed up and assigned there, when that's stored: who went, once the
     // day is over.
     assigned: stored ? assigned : null,
+    // Planned to go there, but didn't come or cancel, as admins confirmed.
+    noShows,
     // Signed-up and waiting volunteers who said they could work there.
     chose: counts.chose.get(shift.id) ?? 0,
     waiting: counts.waiting.get(shift.id) ?? 0,

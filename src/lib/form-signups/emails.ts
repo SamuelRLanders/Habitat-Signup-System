@@ -39,7 +39,6 @@ export async function sendClosedFormCancellation({
 }) {
   const date = formatDay(day);
   const assignmentsUrl = absoluteUrl(`/admin/forms/${formId}/assignments`);
-  const rosterUrl = absoluteUrl(`/admin/forms/${formId}/travel-roster`);
   const intro = `${volunteer.name} (${volunteer.email}) cancelled their signup for ${formName} on ${date}, after the form closed.`;
   const assignments = custom
     ? "They've been taken off the custom assignments; nobody else was moved."
@@ -48,14 +47,15 @@ export async function sendClosedFormCancellation({
     effects.length > 0
       ? "What this changes for travel:"
       : "Nobody else's build or ride changes because of this.";
-  const roster = "If you've already sent Purdue the travel roster, send the updated one.";
+  const roster =
+    "If you've already sent Purdue the travel roster, copy the updated one from the Planned assignments tab and send it.";
   const waitlistUrl = absoluteUrl(`/admin/forms/${formId}/waitlist`);
   const waiting =
     waitlist.people.length > 0
       ? `On the waitlist for ${waitlist.for}, in the order they joined:`
       : `Nobody is on the waitlist for ${waitlist.for}.`;
   const addThem =
-    "The form has closed, so nobody is added from the waitlist automatically. Please check with the first person who can make it, then move them to the build on the Assignments tab and save. They aren't emailed.";
+    "The form has closed, so nobody is added from the waitlist automatically. Please check with the first person who can make it, then move them to the build on the Planned assignments tab and save. They aren't emailed.";
 
   await sendEmails(
     admins.map(({ to, name }) => ({
@@ -69,7 +69,7 @@ export async function sendClosedFormCancellation({
         waitlist.people.length > 0
           ? `${waiting}\n${waitlist.people.map((person, index) => `${index + 1}. ${person}`).join("\n")}\n\n${addThem}\nWaitlist: ${waitlistUrl}`
           : waiting,
-        `${roster}\n\nAssignments: ${assignmentsUrl}\nTravel roster: ${rosterUrl}`,
+        `${roster}\n\nPlanned assignments: ${assignmentsUrl}`,
       ].join("\n\n"),
       html: [
         `<p>Hi ${escapeHtml(name)},</p>`,
@@ -81,7 +81,7 @@ export async function sendClosedFormCancellation({
         waitlist.people.length > 0
           ? `<ol>${waitlist.people.map((person) => `<li>${escapeHtml(person)}</li>`).join("")}</ol><p>${escapeHtml(addThem)} See the <a href="${waitlistUrl}">waitlist</a>.</p>`
           : "",
-        `<p>${escapeHtml(roster)} See the <a href="${assignmentsUrl}">assignments</a> and the <a href="${rosterUrl}">travel roster</a>.</p>`,
+        `<p>${escapeHtml(roster)} See the <a href="${assignmentsUrl}">planned assignments</a>.</p>`,
       ].join(""),
     })),
   );
