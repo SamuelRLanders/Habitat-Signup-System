@@ -1,13 +1,38 @@
 import * as z from "zod";
+import { groupEmailSchema } from "@/lib/form-signups/details";
 import { firstErrors } from "@/lib/forms";
 
 // The builds on a signup form, as the form editor sends them: one of each
 // field per build, in order. "buildId" is empty for a new build, and
 // "buildCancelled" is "yes" for a build that's cancelled (one volunteers
 // chose, which is kept rather than deleted). Times are on the form's day,
-// in Indiana time.
+// in Indiana time. "buildReservations" is a JSON list of the spots reserved
+// at the build, each for a named volunteer.
 
 export const MAX_BUILDS = 30;
+const MAX_SPOTS = 500;
+
+// A volunteer a spot is reserved for: their Purdue email, and their name as
+// the editor gave it.
+const reservationSchema = z.object({
+  email: groupEmailSchema,
+  firstName: z.string().trim().min(1, "Enter their first name.").max(100, "Keep the name under 100 characters."),
+  lastName: z.string().trim().min(1, "Enter their last name.").max(100, "Keep the name under 100 characters."),
+});
+
+export type ReservationInput = z.output<typeof reservationSchema>;
+
+const reservationsSchema = z
+  .string()
+  .transform((value, ctx) => {
+    try {
+      return value ? JSON.parse(value) : [];
+    } catch {
+      ctx.addIssue({ code: "custom", message: "The reserved spots couldn't be read. Refresh the page." });
+      return z.NEVER;
+    }
+  })
+  .pipe(z.array(reservationSchema, "The reserved spots couldn't be read. Refresh the page.").max(MAX_SPOTS));
 
 const buildSchema = z
   .object({
@@ -20,7 +45,7 @@ const buildSchema = z
       .number<string>("Enter the number of spots.")
       .int("Enter a whole number.")
       .min(1, "A build needs at least 1 spot.")
-      .max(500, "A build can have at most 500 spots."),
+      .max(MAX_SPOTS, `A build can have at most ${MAX_SPOTS} spots.`),
     description: z
       .string()
       .trim()
@@ -34,11 +59,17 @@ const buildSchema = z
     // The admin responsible for organizing it. Whether they're an editor
     // or the owner is checked against the database when saving.
     responsibleId: z.string().trim().min(1, "Choose the admin responsible for this build.").max(64),
+    reservations: reservationsSchema,
     cancelled: z.string().transform((value) => value === "yes"),
   })
   .refine((build) => build.endTime > build.startTime, {
     message: "The build must end after it starts.",
     path: ["endTime"],
+  })
+  // Reserved spots are some of the build's spots.
+  .refine((build) => build.reservations.length <= build.capacity, {
+    message: "A build can't have more reserved spots than volunteer spots.",
+    path: ["reservations"],
   });
 
 export type BuildInput = z.output<typeof buildSchema>;
@@ -56,6 +87,7 @@ export function parseBuilds(formData: FormData) {
   const descriptions = field("buildDescription");
   const lunches = field("buildLunch");
   const responsible = field("buildResponsible");
+  const reservations = field("buildReservations");
   const cancelled = field("buildCancelled");
   if (ids.length > MAX_BUILDS) {
     return { ok: false as const, form: `A form can have at most ${MAX_BUILDS} builds.` };
@@ -65,6 +97,8 @@ export function parseBuilds(formData: FormData) {
   const errors: Record<number, BuildErrors> = {};
   // Volunteers tell builds apart by name, so each needs its own.
   const usedNames = new Set<string>();
+  // A volunteer can only have one reserved spot on a form.
+  const reserved = new Set<string>();
   ids.forEach((id, index) => {
     const parsed = buildSchema.safeParse({
       id,
@@ -76,6 +110,7 @@ export function parseBuilds(formData: FormData) {
       description: descriptions[index] ?? "",
       lunch: lunches[index] ?? "",
       responsibleId: responsible[index] ?? "",
+      reservations: reservations[index] ?? "",
       cancelled: cancelled[index] ?? "",
     });
     if (!parsed.success) {
@@ -85,6 +120,15 @@ export function parseBuilds(formData: FormData) {
     const name = parsed.data.name.toLowerCase();
     if (usedNames.has(name)) errors[index] = { name: "Another build on this form has this name." };
     usedNames.add(name);
+    for (const reservation of parsed.data.reservations) {
+      if (reserved.has(reservation.email)) {
+        errors[index] = {
+          ...errors[index],
+          reservations: `${reservation.firstName} ${reservation.lastName} has more than one reserved spot on this form.`,
+        };
+      }
+      reserved.add(reservation.email);
+    }
     builds.push(parsed.data);
   });
 

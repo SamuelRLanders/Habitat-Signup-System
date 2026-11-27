@@ -12,7 +12,10 @@ import {
   type FormState,
 } from "@/lib/forms";
 import { parseBuilds, type BuildErrors, type BuildInput } from "@/lib/form-builds";
+import { loadPlacementDay } from "@/lib/placement/load";
+import { leftOutCount } from "@/lib/placement/solver";
 import { prisma } from "@/lib/prisma";
+import { ReservationProblem, reservationConflicts, saveReservations } from "@/lib/reservations/save";
 import { parseSections, type SectionErrors } from "@/lib/sections";
 import {
   addDays,
@@ -22,7 +25,7 @@ import {
   toDay,
   zonedDateTime,
 } from "@/lib/time";
-import { today } from "./queries";
+import { offeredShifts, today } from "./queries";
 
 // Every action calls requireEditor() first: Server Actions can be called by
 // anyone who sends a POST request, not only through our forms. IDs bound to
@@ -176,21 +179,47 @@ export async function createSignupForm(
 
   const taken = await nameTaken(parsed.values.date, parsed.values.name);
   if (taken) return { errors: { name: taken } };
+  const conflicts = await reservationConflicts(prisma, parsed.builds, parsed.values.date);
+  if (conflicts) return { buildErrors: conflicts };
 
-  const form = await prisma.signupForm.create({
-    data: {
-      ...parsed.values,
-      // A copy of the name, kept even if the admin's account changes.
-      createdByName: admin.name || admin.email,
-      createdById: admin.id,
+  // A copy of the name, kept even if the admin's account changes.
+  const createdByName = admin.name || admin.email;
+  let form;
+  try {
+    form = await prisma.$transaction(async (tx) => {
+      const form = await tx.signupForm.create({
+        data: {
+          ...parsed.values,
+          createdByName,
+          createdById: admin.id,
+          sections: { create: parsed.sections },
+        },
+      });
       // Every build is new, so any IDs or cancellations sent are ignored.
-      shifts: { create: parsed.builds.map((build) => shiftData(build, parsed.values.date)) },
-      sections: { create: parsed.sections },
-    },
-  });
+      const builds = parsed.builds.map((build) => ({ ...build, cancelled: false }));
+      const shiftIds: string[] = [];
+      for (const build of builds) {
+        const shift = await tx.shift.create({
+          data: { ...shiftData(build, parsed.values.date), formId: form.id },
+          select: { id: true },
+        });
+        shiftIds.push(shift.id);
+      }
+      await saveReservations(tx, form.id, builds, shiftIds, { createdByName, locked: false, assignmentsSaved: false });
+      return form;
+    });
+  } catch (error) {
+    if (error instanceof ReservationProblem) return problemState(error);
+    throw error;
+  }
 
   revalidateForms();
   redirect(`/admin/forms/${form.id}`);
+}
+
+// The form editor's state for reserved spots that couldn't be saved.
+function problemState(problem: ReservationProblem): SignupFormState {
+  return problem.buildErrors ? { buildErrors: problem.buildErrors } : { errors: { form: problem.message } };
 }
 
 export async function updateSignupForm(
@@ -198,7 +227,7 @@ export async function updateSignupForm(
   _prev: SignupFormState,
   formData: FormData,
 ): Promise<SignupFormState> {
-  await requireEditor();
+  const admin = await requireEditor();
 
   const existing = await prisma.signupForm.findUnique({
     where: { id: formId },
@@ -225,11 +254,32 @@ export async function updateSignupForm(
 
   const taken = await nameTaken(parsed.values.date, parsed.values.name, formId);
   if (taken) return { errors: { name: taken } };
+  const conflicts = await reservationConflicts(prisma, parsed.builds, parsed.values.date, formId);
+  if (conflicts) return { buildErrors: conflicts };
 
-  const saved = await prisma.$transaction(async (tx) => {
+  const anySignups = existing._count.signups > 0;
+  let saved;
+  try {
+    saved = await prisma.$transaction(async (tx) => {
     // Lock the form until this transaction ends, as a signup does, so its
     // builds don't change while someone is signing up for them.
     await tx.$queryRaw`SELECT id FROM "SignupForm" WHERE id = ${formId} FOR UPDATE`;
+    const before = await tx.signupForm.findUniqueOrThrow({
+      where: { id: formId },
+      select: {
+        askTransportation: true,
+        assignmentsSavedAt: true,
+        placementSavedAt: true,
+        shifts: { where: offeredShifts.where, select: { id: true, capacity: true, _count: offeredShifts.select._count } },
+      },
+    });
+    // How many signed-up volunteers can't be placed before this edit, to
+    // check that new reserved spots have room. Only worth working out
+    // with someone signed up.
+    const leftOutBefore =
+      anySignups
+        ? leftOutCount(await loadPlacementDay(tx, formId, before.shifts, before.askTransportation))
+        : 0;
 
     const existing = await tx.shift.findMany({
       where: { formId },
@@ -263,25 +313,60 @@ export async function updateSignupForm(
         await tx.shift.update({ where: { id: shift.id }, data: { cancelledAt: now } });
       }
     }
+    const shiftIds: string[] = [];
     for (const build of parsed.builds) {
       const data = shiftData(build, parsed.values.date);
       if (!build.id) {
-        await tx.shift.create({ data: { ...data, formId } });
+        const created = await tx.shift.create({ data: { ...data, formId }, select: { id: true } });
+        shiftIds.push(created.id);
         continue;
       }
       const cancelledAt = build.cancelled ? (byId.get(build.id)!.cancelledAt ?? now) : null;
       await tx.shift.update({ where: { id: build.id }, data: { ...data, cancelledAt } });
+      shiftIds.push(build.id);
     }
 
-    // A build with more spots may have room for people on the waitlist,
-    // who are added while the form is open. Nobody is emailed.
+    const reservations = await saveReservations(tx, formId, parsed.builds, shiftIds, {
+      createdByName: admin.name || admin.email,
+      locked: before.placementSavedAt !== null,
+      assignmentsSaved: before.assignmentsSavedAt !== null,
+    });
+    // A new reserved spot needs room: it can't leave out anyone signed up
+    // who could be placed before.
+    if (reservations.added.size > 0 && anySignups) {
+      const shifts = await tx.shift.findMany({
+        where: { formId, ...offeredShifts.where },
+        select: { id: true, capacity: true, _count: offeredShifts.select._count },
+      });
+      const leftOutAfter = leftOutCount(await loadPlacementDay(tx, formId, shifts, parsed.values.askTransportation));
+      if (leftOutBefore !== null && leftOutAfter !== null && leftOutAfter > leftOutBefore) {
+        const buildErrors: Record<number, BuildErrors> = {};
+        shiftIds.forEach((id, index) => {
+          if (reservations.added.has(id)) {
+            buildErrors[index] = {
+              reservations:
+                "There isn't room for this reserved spot: the volunteers already signed up need the build's other spots. Add spots to the build first.",
+            };
+          }
+        });
+        throw new ReservationProblem("", buildErrors);
+      }
+    }
+
+    // A build with more spots, or a reserved spot given back, may have
+    // room for people on the waitlist, who are added while the form is
+    // open. Nobody is emailed.
     const moreSpots = parsed.builds.some(
       (build) => build.id && !build.cancelled && build.capacity > byId.get(build.id)!.capacity,
     );
-    if (moreSpots) await fillFromWaitlist(tx, formId);
+    if (moreSpots || reservations.released) await fillFromWaitlist(tx, formId);
     return true;
     // Placing the waitlist can take longer than the default 5 seconds.
-  }, { timeout: 20_000 });
+    }, { timeout: 20_000 });
+  } catch (error) {
+    if (error instanceof ReservationProblem) return problemState(error);
+    throw error;
+  }
   if (!saved) {
     return {
       errors: { form: "This form's builds were changed somewhere else. Refresh the page and make your changes again." },

@@ -28,6 +28,10 @@ type FormEditorProps = {
   // admin editing).
   admins: ResponsibleAdmin[];
   adminId: string;
+  // Whether reserved spots can no longer change, and the public form's path
+  // for volunteers with one (see BuildFields). Only for a form that exists.
+  reservationsLocked?: boolean;
+  formPath?: string;
   submitLabel: string;
   cancelHref: string;
 };
@@ -41,6 +45,8 @@ export function FormEditor({
   sections = [],
   admins,
   adminId,
+  reservationsLocked,
+  formPath,
   submitLabel,
   cancelHref,
 }: FormEditorProps) {
@@ -167,6 +173,8 @@ export function FormEditor({
         errors={buildErrors}
         admins={admins}
         newResponsibleId={adminId}
+        reservationsLocked={reservationsLocked}
+        formPath={formPath}
       />
 
       <SectionFields defaults={sections} errors={sectionErrors} />

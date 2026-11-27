@@ -1,6 +1,6 @@
 "use client";
 
-import { PlusIcon, Trash2Icon } from "lucide-react";
+import { PlusIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useState } from "react";
 import { cn } from "cn";
 import { FieldError } from "@/components/field-error";
@@ -13,6 +13,7 @@ import { NumberField } from "@/components/ui/number-field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { BuildErrors } from "@/lib/form-builds";
+import { FormLinkDialog, ReserveDialog, type ReservedSpot } from "./reserve-dialog";
 
 export type BuildDefaults = {
   id: string; // empty for a new build
@@ -25,6 +26,8 @@ export type BuildDefaults = {
   lunch: string;
   // The admin responsible for organizing it, or empty to choose one.
   responsibleId: string;
+  // Spots held for named volunteers, out of its spots.
+  reservations: ReservedSpot[];
   cancelled: boolean;
   // Volunteers have chosen it, so removing it cancels it instead of
   // deleting it.
@@ -41,6 +44,7 @@ export const NEW_BUILD: BuildDefaults = {
   description: "",
   lunch: "",
   responsibleId: "",
+  reservations: [],
   cancelled: false,
   chosen: false,
 };
@@ -52,28 +56,46 @@ export type ResponsibleAdmin = { id: string; name: string };
 // volunteers choose from. Sends one of each "build…" field per build, in
 // order (see src/lib/form-builds.ts). A cancelled build keeps its fields,
 // hidden, so they're sent unchanged. The inputs are uncontrolled and keyed,
-// so removing a build doesn't move what's been typed into another.
+// so removing a build doesn't move what's been typed into another. Each
+// build's reserved spots are sent as JSON ("buildReservations").
 export function BuildFields({
   defaults,
   errors,
   admins,
   newResponsibleId,
+  reservationsLocked = false,
+  formPath = null,
 }: {
   defaults: BuildDefaults[];
   errors: Record<number, BuildErrors>;
   admins: ResponsibleAdmin[];
   // The responsible admin a new build starts with: the admin editing.
   newResponsibleId: string;
+  // The first build has started, so reserved spots can't change.
+  reservationsLocked?: boolean;
+  // The public form's path, once the form exists, to send to volunteers
+  // with reserved spots.
+  formPath?: string | null;
 }) {
   const [builds, setBuilds] = useState(() =>
-    defaults.map((build) => ({ ...build, key: crypto.randomUUID() })),
+    defaults.map((build) => ({
+      ...build,
+      spots: Number(build.capacity) || null,
+      key: crypto.randomUUID(),
+    })),
   );
+  // Everyone with a reserved spot on the form: one each.
+  const reservedEmails = new Set(builds.flatMap((build) => build.reservations.map((spot) => spot.email)));
 
   function add() {
     setBuilds((current) => [
       ...current,
-      { ...NEW_BUILD, responsibleId: newResponsibleId, key: crypto.randomUUID() },
+      { ...NEW_BUILD, responsibleId: newResponsibleId, spots: null, key: crypto.randomUUID() },
     ]);
+  }
+
+  function update(index: number, change: Partial<(typeof builds)[number]>) {
+    setBuilds((current) => current.map((build, i) => (i === index ? { ...build, ...change } : build)));
   }
 
   // A build volunteers chose is cancelled; any other is dropped, and
@@ -125,6 +147,13 @@ export function BuildFields({
           >
             <input type="hidden" name="buildId" value={build.id} />
             <input type="hidden" name="buildCancelled" value={build.cancelled ? "yes" : "no"} />
+            <input
+              type="hidden"
+              name="buildReservations"
+              value={JSON.stringify(
+                build.reservations.map(({ email, firstName, lastName }) => ({ email, firstName, lastName })),
+              )}
+            />
 
             <div className="flex items-center justify-between gap-2">
               <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-muted-foreground">
@@ -222,18 +251,44 @@ export function BuildFields({
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2">
-                <Label htmlFor={`${id}-capacity`}>Volunteer spots</Label>
-                <NumberField
-                  id={`${id}-capacity`}
-                  name="buildSpots"
-                  defaultValue={Number(build.capacity) || undefined}
-                  min={1}
-                  max={500}
-                  {...aria("capacity")}
-                />
-                <FieldError field={`${id}-capacity`} error={buildErrors.capacity} />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor={`${id}-capacity`}>Volunteer spots</Label>
+                  <NumberField
+                    id={`${id}-capacity`}
+                    name="buildSpots"
+                    defaultValue={Number(build.capacity) || undefined}
+                    onValueChange={(value) => update(index, { spots: value })}
+                    // Reserved spots are some of its spots.
+                    min={Math.max(1, build.reservations.length)}
+                    max={500}
+                    {...aria("capacity")}
+                  />
+                  <FieldError field={`${id}-capacity`} error={buildErrors.capacity} />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <p id={`${id}-reserved`} className="text-sm leading-none font-medium select-none">
+                    Reserved spots
+                  </p>
+                  <p className="flex h-8 items-center text-sm tabular-nums">
+                    {build.reservations.length}
+                    {build.spots !== null &&
+                      ` · ${Math.max(0, build.spots - build.reservations.length)} for everyone else`}
+                  </p>
+                </div>
               </div>
+
+              <Reservations
+                id={id}
+                buildName={label}
+                spots={build.reservations}
+                full={build.spots !== null && build.reservations.length >= build.spots}
+                locked={reservationsLocked}
+                reservedEmails={reservedEmails}
+                formPath={formPath}
+                error={buildErrors.reservations}
+                onChange={(reservations) => update(index, { reservations })}
+              />
 
               <div className="flex flex-col gap-2">
                 <Label htmlFor={`${id}-responsible`}>Responsible admin</Label>
@@ -300,6 +355,91 @@ export function BuildFields({
         <PlusIcon data-icon="inline-start" />
         Add build
       </Button>
+    </div>
+  );
+}
+
+// The volunteers a build's reserved spots are held for, with buttons to
+// reserve another and to copy the form's link for them. A spot someone has
+// signed up with can't be removed: it's released if they cancel.
+function Reservations({
+  id,
+  buildName,
+  spots,
+  full,
+  locked,
+  reservedEmails,
+  formPath,
+  error,
+  onChange,
+}: {
+  id: string;
+  buildName: string;
+  spots: ReservedSpot[];
+  // Every spot is reserved.
+  full: boolean;
+  locked: boolean;
+  reservedEmails: Set<string>;
+  formPath: string | null;
+  error?: string;
+  onChange: (spots: ReservedSpot[]) => void;
+}) {
+  return (
+    <div role="group" aria-labelledby={`${id}-reserved`} className="flex flex-col gap-2">
+      {spots.length > 0 && (
+        <ul aria-label={`Reserved spots at ${buildName}`} className="flex flex-wrap gap-2">
+          {spots.map((spot) => (
+            <li
+              key={spot.email}
+              title={spot.email}
+              className="flex items-center gap-1.5 rounded-full py-1 pr-1 pl-3 text-sm ring-1 ring-foreground/10"
+            >
+              <span className="flex flex-col leading-tight">
+                <span className="font-medium">
+                  {spot.firstName} {spot.lastName}
+                </span>
+                <span className="text-xs text-muted-foreground">{spot.email}</span>
+              </span>
+              {spot.signedUp ? (
+                <Badge variant="secondary" className="mr-1">
+                  Signed up
+                </Badge>
+              ) : (
+                !locked && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => onChange(spots.filter((other) => other.email !== spot.email))}
+                    aria-label={`Remove ${spot.firstName} ${spot.lastName}'s reserved spot`}
+                  >
+                    <XIcon />
+                  </Button>
+                )
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!locked && (
+        <div className="flex flex-wrap gap-2">
+          <ReserveDialog
+            buildName={buildName}
+            reservedEmails={reservedEmails}
+            disabled={full}
+            onReserve={(spot) => onChange([...spots, spot])}
+          />
+          {formPath && spots.length > 0 && <FormLinkDialog path={formPath} />}
+        </div>
+      )}
+      <p className="text-sm text-muted-foreground">
+        {locked
+          ? "The first build has started, so reserved spots can't change."
+          : full
+            ? "Every spot is reserved. Add spots to reserve another."
+            : "Each holds one of the build's spots for the volunteer named, who can sign up for it once the form is published, even before it opens. They aren't emailed: send them the form's link."}
+      </p>
+      <FieldError field={`${id}-reservations`} error={error} />
     </div>
   );
 }

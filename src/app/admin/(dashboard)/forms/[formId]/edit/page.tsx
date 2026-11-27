@@ -29,7 +29,13 @@ export default async function EditSignupFormPage({
     include: {
       shifts: {
         orderBy: offeredShifts.orderBy,
-        include: { _count: { select: { preferences: true } } },
+        include: {
+          _count: { select: { preferences: true } },
+          reservations: {
+            orderBy: { createdAt: "asc" },
+            select: { email: true, firstName: true, lastName: true, signupId: true },
+          },
+        },
       },
       sections: { orderBy: { position: "asc" }, select: { title: true, body: true } },
     },
@@ -82,6 +88,7 @@ export default async function EditSignupFormPage({
           description: shift.description ?? "",
           lunch: shift.lunch ?? "",
           responsibleId: shift.responsibleId ?? "",
+          reservations: shift.reservations.map(({ signupId, ...spot }) => ({ ...spot, signedUp: signupId !== null })),
           cancelled: shift.cancelledAt !== null,
           // Everyone who ever chose it, including cancelled signups, so the
           // record is kept.
@@ -90,6 +97,9 @@ export default async function EditSignupFormPage({
         sections={form.sections}
         admins={admins}
         adminId={admin.id}
+        // Once the first build has started, the event is under way.
+        reservationsLocked={form.placementSavedAt !== null}
+        formPath={`/signup/${form.id}`}
         submitLabel="Save changes"
         cancelHref={formHref}
       />
