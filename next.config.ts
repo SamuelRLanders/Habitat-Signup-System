@@ -39,6 +39,12 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  // CONTEXT.md is read from disk by the Help page and its download
+  // (src/app/admin/(dashboard)/help/context-file.ts), so deploy it with them.
+  outputFileTracingIncludes: {
+    "/admin/help": ["./CONTEXT.md"],
+    "/admin/help/CONTEXT.md": ["./CONTEXT.md"],
+  },
   experimental: {
     serverActions: {
       // Room for Purdue's approved driver spreadsheet, uploaded on the

@@ -1,6 +1,6 @@
 "use client";
 
-import { CarIcon, ChartColumnIcon, ClipboardListIcon, ShieldIcon } from "lucide-react";
+import { CarIcon, ChartColumnIcon, CircleHelpIcon, ClipboardListIcon, ShieldIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
@@ -14,6 +14,9 @@ const tabs = [
 // Only the owner sees this tab (the page checks too).
 const adminsTab = { href: "/admin/admins", label: "Admins", icon: ShieldIcon };
 
+// Last for everyone: CONTEXT.md for AI assistants, and the code on GitHub.
+const helpTab = { href: "/admin/help", label: "Help", icon: CircleHelpIcon };
+
 // The admin sections. A tab stays highlighted on the pages beneath it, so
 // "Forms" is active on /admin/forms/123/edit too.
 export function AdminNav({ showAdmins }: { showAdmins: boolean }) {
@@ -21,7 +24,7 @@ export function AdminNav({ showAdmins }: { showAdmins: boolean }) {
 
   return (
     <nav aria-label="Admin sections" className="flex gap-1">
-      {(showAdmins ? [...tabs, adminsTab] : tabs).map(({ href, label, icon: Icon }) => {
+      {[...tabs, ...(showAdmins ? [adminsTab] : []), helpTab].map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link

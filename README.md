@@ -2,6 +2,8 @@
 
 A web app for the Purdue Habitat for Humanity chapter. Volunteer organization leaders (the admins) publish one signup form per build day, listing the day's builds. Volunteers open the form from the home page or a shared link, confirm their email with a 6-digit code, and say which of the day's builds they could work at. Volunteers don't need an account, and only admins sign in.
 
+> **Questions about the app?** [CONTEXT.md](CONTEXT.md) describes what it's for, how it's set up and how every feature is meant to be used. Upload it to an AI assistant (ChatGPT, Claude, Gemini…) and ask away. Admins can also download it from the admin **Help** page. Keep it up to date when features change.
+
 ## Features
 
 **For volunteers (no account needed)**
@@ -118,6 +120,7 @@ npm run dev                # http://localhost:3000
 - `src/app/signup/[formId]/`: a form's public page: the email step, the form itself, and a volunteer's signup with Update and Cancel
 - `src/app/login/`: admin sign-in (email, then code)
 - `src/app/admin/`: admin dashboard; `(dashboard)/` holds the pages that require signing in
+- `src/app/admin/(dashboard)/help/`: the Help page: downloading `CONTEXT.md` (read from the repository root) and the GitHub link
 - `src/lib/signup-forms/`: forms: when they're open, the builds they offer, and the admin Server Actions (which save a form's builds)
 - `src/lib/form-builds.ts`, `src/lib/sections.ts`: validating the builds and sections the form editor sends
 - `src/lib/form-signups/`: volunteers' signups: validation, the submit and cancel Server Actions, emails, and the admin rosters
