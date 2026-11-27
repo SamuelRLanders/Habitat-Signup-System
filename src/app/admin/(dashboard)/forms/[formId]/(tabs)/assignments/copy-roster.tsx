@@ -14,10 +14,13 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
-// Purdue's travel roster, copied for an email with one button, with
-// anything to check before sending it. When the browser won't copy, a
-// popup shows the roster to copy by hand.
-export function CopyRoster({ text, warnings }: { text: string | null; warnings: string[] }) {
+// Purdue's travel roster (text), or null when nobody's at a build, with
+// anything to check before sending it.
+export type Roster = { text: string | null; warnings: string[] };
+
+// Copies Purdue's travel roster for an email with one button. When the
+// browser won't copy, a popup shows the roster to copy by hand.
+export function CopyRosterButton({ text }: { text: string | null }) {
   const [copied, setCopied] = useState(false);
   const [manual, setManual] = useState(false);
 
@@ -34,35 +37,27 @@ export function CopyRoster({ text, warnings }: { text: string | null; warnings: 
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" variant="outline" size="sm" onClick={copy} disabled={!text} className="w-44">
-          {copied ? (
-            <>
-              <CheckIcon data-icon="inline-start" />
-              Copied
-            </>
-          ) : (
-            <>
-              <CopyIcon data-icon="inline-start" />
-              Copy travel roster
-            </>
-          )}
-        </Button>
-        {!text && (
-          <p className="text-sm text-muted-foreground">Nobody is going to a build yet, so there&apos;s no travel roster.</p>
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={copy}
+        disabled={!text}
+        title={text ? undefined : "Nobody is going to a build yet, so there's no travel roster."}
+      >
+        {copied ? (
+          <>
+            <CheckIcon data-icon="inline-start" />
+            Copied
+          </>
+        ) : (
+          <>
+            <CopyIcon data-icon="inline-start" />
+            Copy travel roster
+          </>
         )}
-      </div>
-      {text && warnings.length > 0 && (
-        <ul className="flex flex-col gap-1 rounded-2xl border-l-4 border-gold bg-gold/15 px-4 py-3 text-sm">
-          {warnings.map((warning) => (
-            <li key={warning} className="flex gap-2">
-              <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              {warning}
-            </li>
-          ))}
-        </ul>
-      )}
+      </Button>
 
       <Dialog open={manual} onOpenChange={setManual}>
         <DialogContent className="sm:max-w-2xl">
@@ -85,6 +80,21 @@ export function CopyRoster({ text, warnings }: { text: string | null; warnings: 
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
+  );
+}
+
+// What to check about the travel roster before sending it.
+export function RosterWarnings({ warnings }: { warnings: string[] }) {
+  if (warnings.length === 0) return null;
+  return (
+    <ul className="flex flex-col gap-1 rounded-2xl border-l-4 border-gold bg-gold/15 px-4 py-3 text-sm">
+      {warnings.map((warning) => (
+        <li key={warning} className="flex gap-2">
+          <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          {warning}
+        </li>
+      ))}
+    </ul>
   );
 }

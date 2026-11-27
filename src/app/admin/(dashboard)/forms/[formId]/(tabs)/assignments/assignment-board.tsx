@@ -27,6 +27,7 @@ import { saveAssignments } from "@/lib/signup-forms/assignment-actions";
 import { NO_SHOW, type Attendance } from "@/lib/signup-forms/attendance";
 import { removeAdded, saveAttendance } from "@/lib/signup-forms/attendance-actions";
 import { AddVolunteer } from "./add-volunteer";
+import { CopyRosterButton, RosterWarnings, type Roster } from "./copy-roster";
 
 export type BoardBuild = AssignmentBuild & { time: string };
 
@@ -76,6 +77,7 @@ export function AssignmentBoard({
   savedAt,
   askTransportation,
   readOnly,
+  roster,
 }: {
   formId: string;
   mode: "planned" | "confirmed";
@@ -88,6 +90,9 @@ export function AssignmentBoard({
   savedAt: string | null;
   askTransportation: boolean;
   readOnly: boolean;
+  // Purdue's travel roster from the saved assignments, copied from the
+  // button bar, with its warnings below it.
+  roster: Roster;
 }) {
   const confirmed = mode === "confirmed";
   // Each moved volunteer's column, by signup ID. Someone added since the
@@ -180,25 +185,31 @@ export function AssignmentBoard({
 
   return (
     <div className="flex flex-col gap-4">
-      {!readOnly && (
-        <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-background/95 px-1 py-2 backdrop-blur">
-          <p className="text-sm text-muted-foreground">
-            {changed.length > 0 &&
-              `${changed.length} ${changed.length === 1 ? "person" : "people"} moved. Not saved yet.`}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {confirmed && <AddVolunteer formId={formId} />}
-            {changed.length > 0 && (
-              <Button type="button" variant="outline" size="sm" onClick={() => setMoves({})} disabled={pending}>
-                Discard changes
+      {/* The buttons, kept in view while scrolling. Viewers, and anyone
+          before the form closes, only get the travel roster. */}
+      <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-background/95 px-1 py-2 backdrop-blur">
+        <p className="text-sm text-muted-foreground">
+          {changed.length > 0 &&
+            `${changed.length} ${changed.length === 1 ? "person" : "people"} moved. Not saved yet.`}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <CopyRosterButton text={roster.text} />
+          {!readOnly && (
+            <>
+              {confirmed && <AddVolunteer formId={formId} />}
+              {changed.length > 0 && (
+                <Button type="button" variant="outline" size="sm" onClick={() => setMoves({})} disabled={pending}>
+                  Discard changes
+                </Button>
+              )}
+              <Button type="button" size="sm" onClick={trySave} loading={pending} disabled={changed.length === 0}>
+                {pending ? "Saving…" : "Save assignments"}
               </Button>
-            )}
-            <Button type="button" size="sm" onClick={trySave} loading={pending} disabled={changed.length === 0}>
-              {pending ? "Saving…" : "Save assignments"}
-            </Button>
-          </div>
+            </>
+          )}
         </div>
-      )}
+      </div>
+      {roster.text && <RosterWarnings warnings={roster.warnings} />}
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}

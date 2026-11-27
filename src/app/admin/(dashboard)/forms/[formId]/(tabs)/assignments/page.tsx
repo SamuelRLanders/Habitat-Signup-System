@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ActionButton } from "@/components/action-button";
-import { Badge } from "@/components/ui/badge";
 import { requireAdmin } from "@/lib/auth/dal";
 import { canEdit } from "@/lib/auth/roles";
 import { cancelDeadline } from "@/lib/form-signups/queries";
@@ -15,7 +14,7 @@ import { DEFAULT_TIME_ZONE, formatDateTime } from "@/lib/time";
 import { seatsLabel } from "@/lib/volunteers";
 import { formTitle, loadForm, loadFormPlan } from "../data";
 import { AssignmentBoard, type BoardVolunteer } from "./assignment-board";
-import { CopyRoster } from "./copy-roster";
+import type { Roster } from "./copy-roster";
 
 export async function generateMetadata({
   params,
@@ -135,8 +134,6 @@ export default async function AssignmentsPage({
         )}
       </div>
 
-      <CopyRoster {...rosterFor(form, active, plan, custom)} />
-
       {/* A confirmed board shows even when empty, to add people who came. */}
       {volunteers.length === 0 && !confirmed ? (
         <p className="text-muted-foreground">Nobody signed up or joined the waitlist through this form.</p>
@@ -157,6 +154,7 @@ export default async function AssignmentsPage({
           savedAt={savedAt}
           askTransportation={form.askTransportation}
           readOnly={readOnly}
+          roster={rosterFor(form, active, plan, custom)}
         />
       )}
     </div>
@@ -181,11 +179,10 @@ function PlannedNote({
   const closed = form.phase === "closed";
   return (
     <>
-      <p className="flex flex-wrap items-center gap-2 text-sm">
-        {custom ? <Badge>Custom</Badge> : <Badge variant="secondary">Default</Badge>}
+      <p className="text-sm text-muted-foreground">
         {custom
-          ? `Saved by ${form.assignmentsSavedByName ?? "an admin"} on ${at(form.assignmentsSavedAt!)}.`
-          : "Placed by the app, following the placement rules, then sending someone highly experienced to each build and keeping friends together where it can."}
+          ? `These are custom assignments saved by ${form.assignmentsSavedByName ?? "an admin"} on ${at(form.assignmentsSavedAt!)}.`
+          : "These are assignments made by the algorithm—they haven't been modified."}
       </p>
       <p className="text-sm text-muted-foreground">
         {form.phase === "cancelled"
@@ -235,7 +232,12 @@ function ConfirmedNote({ form, readOnly }: { form: LoadedPlan["form"]; readOnly:
 
 // Purdue's travel roster from the saved assignments, with anything to check
 // before sending it. No roster when nobody's at a build.
-function rosterFor(form: LoadedPlan["form"], active: RosterSignup[], plan: LoadedPlan["plan"], custom: boolean) {
+function rosterFor(
+  form: LoadedPlan["form"],
+  active: RosterSignup[],
+  plan: LoadedPlan["plan"],
+  custom: boolean,
+): Roster {
   if (plan.placement.size === 0) return { text: null, warnings: [] };
   const travel = travelRosterFor(form.day, form.shifts, active, plan.placement, form);
   const pendingDrivers = [...plan.pendingDrivers.values()].reduce((sum, n) => sum + n, 0);
