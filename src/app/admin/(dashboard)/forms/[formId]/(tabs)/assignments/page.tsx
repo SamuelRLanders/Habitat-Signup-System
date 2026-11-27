@@ -41,7 +41,7 @@ export default async function AssignmentsPage({
 
   const loaded = await loadFormPlan(formId);
   if (!loaded) notFound();
-  const { form, active, waiting, custom, plan } = loaded;
+  const { form, active, waiting, custom, plan, reservations } = loaded;
   const editor = canEdit(admin.role);
   const confirmed = form.confirming;
   // Nobody can be moved until the form has closed, or on a cancelled event.
@@ -69,6 +69,7 @@ export default async function AssignmentsPage({
       builds: signup.builds,
       waiting: signup.waitlistedAt !== null,
       addedBy: signup.addedAt ? (signup.addedByName ?? "an admin") : null,
+      reserved: signup.reservedShiftId !== null,
       planned:
         confirmed && signup.plannedShiftId
           ? { id: signup.plannedShiftId, name: allNames.get(signup.plannedShiftId) ?? "a cancelled build" }
@@ -102,7 +103,7 @@ export default async function AssignmentsPage({
       </div>
 
       {/* A confirmed board shows even when empty, to add people who came. */}
-      {volunteers.length === 0 && !confirmed ? (
+      {volunteers.length === 0 && reservations.length === 0 && !confirmed ? (
         <p className="text-muted-foreground">Nobody signed up or joined the waitlist through this form.</p>
       ) : (
         <AssignmentBoard
@@ -125,6 +126,20 @@ export default async function AssignmentsPage({
           // or confirmed ones that were saved or have people added.
           revertable={confirmed ? form.attendanceConfirmedAt !== null || anyAdded : custom}
           roster={rosterFor(form, active, plan, custom)}
+          // Only until the first build starts: then who came is what counts.
+          reservations={
+            confirmed
+              ? []
+              : reservations
+                  .filter((reservation) => !reservation.signupId)
+                  .map((reservation) => ({
+                    id: reservation.id,
+                    name: `${reservation.firstName} ${reservation.lastName}`,
+                    email: reservation.email,
+                    buildId: reservation.shiftId,
+                    known: reservation.known,
+                  }))
+          }
         />
       )}
     </div>

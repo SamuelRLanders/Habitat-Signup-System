@@ -28,7 +28,7 @@ export default async function SignupFormPage({
 
   const loaded = await loadFormPlan(formId);
   if (!loaded) notFound();
-  const { form, active, custom, saved, plan } = loaded;
+  const { form, active, custom, saved, plan, reservations } = loaded;
   const { phase } = form;
   const tab = assignmentsTab(form.confirming);
 
@@ -107,9 +107,14 @@ export default async function SignupFormPage({
                 build={plan.builds.get(shift.id)!}
                 pendingDrivers={plan.pendingDrivers.get(shift.id) ?? 0}
               />
+              <ReservedHere reservations={reservations.filter((reservation) => reservation.shiftId === shift.id)} />
             </div>
             <div className="flex flex-col items-end gap-3">
-              <SpotsMeter willing={willing.get(shift.id) ?? 0} capacity={shift.capacity} />
+              <SpotsMeter
+                willing={willing.get(shift.id) ?? 0}
+                capacity={shift.capacity}
+                reserved={shift._count.reservations}
+              />
               {(phase === "closed" || phase === "passed") && placedEmails.has(shift.id) && (
                 <CopyEmailsButton emails={placedEmails.get(shift.id)!} buildName={shift.name} />
               )}
@@ -183,3 +188,21 @@ function ShiftPlan({
     </p>
   );
 }
+
+// "Reserved for: Jane Doe (signed up), Sam Lee (not signed up yet)".
+function ReservedHere({ reservations }: { reservations: LoadedPlan["reservations"] }) {
+  if (reservations.length === 0) return null;
+  return (
+    <p className="text-sm text-muted-foreground">
+      <span className="text-foreground">Reserved for:</span>{" "}
+      {reservations
+        .map(
+          (reservation) =>
+            `${reservation.firstName} ${reservation.lastName} (${reservation.signupId ? "signed up" : "not signed up yet"})`,
+        )
+        .join(", ")}
+    </p>
+  );
+}
+
+type LoadedPlan = NonNullable<Awaited<ReturnType<typeof loadFormPlan>>>;

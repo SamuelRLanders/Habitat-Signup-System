@@ -16,14 +16,17 @@ export function BackLink({ href, children }: { href: string; children: React.Rea
 
 // "6 willing · 10 spots" with a bar underneath. Willing means volunteers
 // who said on the signup form that they could work at the build; a
-// volunteer can be willing to work at several.
+// volunteer can be willing to work at several. Reserved spots, if any, are
+// shown too: "(2 reserved)".
 export function SpotsMeter({
   willing,
   capacity,
+  reserved = 0,
   className,
 }: {
   willing: number;
   capacity: number;
+  reserved?: number;
   className?: string;
 }) {
   const percent = capacity > 0 ? Math.min(100, (willing / capacity) * 100) : 0;
@@ -32,6 +35,7 @@ export function SpotsMeter({
     <div className={cn("flex min-w-32 flex-col gap-1", className)}>
       <span className="text-sm tabular-nums">
         {willing} willing · {capacity} {capacity === 1 ? "spot" : "spots"}
+        {reserved > 0 && <span className="text-muted-foreground"> ({reserved} reserved)</span>}
       </span>
       <div
         className="h-1.5 overflow-hidden rounded-full bg-muted"

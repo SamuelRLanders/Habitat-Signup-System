@@ -26,6 +26,7 @@ import {
 } from "@/lib/placement/assignments";
 import { revertAssignments, saveAssignments } from "@/lib/signup-forms/assignment-actions";
 import { NO_SHOW, type Attendance } from "@/lib/signup-forms/attendance";
+import { addReserved } from "@/lib/reservations/actions";
 import { removeAdded, revertAttendance, saveAttendance } from "@/lib/signup-forms/attendance-actions";
 import { AddVolunteer } from "./add-volunteer";
 import { CopyRosterButton, RosterWarnings, type Roster } from "./copy-roster";
@@ -49,7 +50,14 @@ export type BoardVolunteer = AssignmentVolunteer & {
   // signup, or null; and the build they were planned for, if any.
   addedBy: string | null;
   planned: { id: string; name: string } | null;
+  // Signed up with a spot reserved for them at the build they chose.
+  reserved: boolean;
 };
+
+// A spot reserved at a build for a volunteer who hasn't signed up with it
+// (see Reservation). known: they've signed up for something before, so the
+// app has their details to add them.
+export type BoardReservation = { id: string; name: string; email: string; buildId: string; known: boolean };
 
 // The columns for volunteers who aren't at any build: signed up but not
 // placed, waiting, and (on the confirmed assignments) no-shows.
@@ -65,6 +73,9 @@ const WAITLIST = "waitlist";
 //     check with them first. Saving checks the assignments and lists
 //     anything that breaks the placement rules, which the admin can save
 //     anyway.
+//     Spots reserved for volunteers who haven't signed up with them show
+//     faded at their build; once the form has closed, editors can add them
+//     there.
 //   - confirmed: where everyone went, once the first build has started,
 //     with a "No-shows" column for people who didn't come and didn't
 //     cancel. Admins can add people who came without signing up, who start
@@ -80,11 +91,14 @@ export function AssignmentBoard({
   readOnly,
   revertable,
   roster,
+  reservations = [],
 }: {
   formId: string;
   mode: "planned" | "confirmed";
   builds: BoardBuild[];
   volunteers: BoardVolunteer[];
+  // Reserved spots nobody has signed up with yet (planned only).
+  reservations?: BoardReservation[];
   // Signup ID → their build, NO_SHOW (confirmed only), or null for none.
   initial: Attendance;
   // When the assignments being shown were saved: planned ones by an admin
@@ -180,6 +194,14 @@ export function AssignmentBoard({
     else save();
   }
 
+  function addToSpot(reservation: BoardReservation) {
+    setError(null);
+    startTransition(async () => {
+      const result = await addReserved(formId, reservation.id);
+      if (result.error) setError(result.error);
+    });
+  }
+
   function remove(volunteer: BoardVolunteer) {
     setError(null);
     startTransition(async () => {
@@ -253,6 +275,7 @@ export function AssignmentBoard({
           const full = build && counts!.people > build.capacity;
           const short = build && !confirmed && askTransportation && counts!.riders > counts!.seats;
           const unled = build && here.length > 0 && !here.some((volunteer) => isHighlyExperienced(volunteer.builds));
+          const reservedHere = build ? reservations.filter((reservation) => reservation.buildId === build.id) : [];
           return (
             <section
               key={id}
@@ -291,6 +314,13 @@ export function AssignmentBoard({
                   </p>
                 )}
                 {unled && !confirmed && <p className="text-xs font-medium">Nobody highly experienced</p>}
+                {reservedHere.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {reservedHere.length === 1
+                      ? "1 reserved spot not taken yet"
+                      : `${reservedHere.length} reserved spots not taken yet`}
+                  </p>
+                )}
               </header>
 
               <ul className="flex flex-col gap-2">
@@ -315,7 +345,16 @@ export function AssignmentBoard({
                     pending={pending}
                   />
                 ))}
-                {here.length === 0 && (
+                {reservedHere.map((reservation) => (
+                  <ReservedCard
+                    key={reservation.id}
+                    reservation={reservation}
+                    onAdd={!readOnly && reservation.known ? () => addToSpot(reservation) : undefined}
+                    readOnly={readOnly}
+                    pending={pending}
+                  />
+                ))}
+                {here.length === 0 && reservedHere.length === 0 && (
                   <li className="rounded-lg border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">
                     Nobody
                   </li>
@@ -409,6 +448,7 @@ function PersonCard({
         <span className="flex flex-wrap items-center gap-1.5 font-medium">
           {volunteer.name}
           {added && <Badge variant="secondary">Added</Badge>}
+          {volunteer.reserved && <Badge variant="outline">Reserved</Badge>}
           {unchosen && <Badge variant="destructive">Didn&apos;t choose</Badge>}
         </span>
         <span className="text-xs text-muted-foreground">
@@ -454,6 +494,45 @@ function PersonCard({
             ))}
           </SelectContent>
         </Select>
+      )}
+    </li>
+  );
+}
+
+// A reserved spot nobody has signed up with, faded at its build. Once the
+// form has closed, editors can add its volunteer (onAdd), if the app has
+// their details.
+function ReservedCard({
+  reservation,
+  onAdd,
+  readOnly,
+  pending,
+}: {
+  reservation: BoardReservation;
+  onAdd?: () => void;
+  readOnly: boolean;
+  pending: boolean;
+}) {
+  return (
+    <li
+      title={reservation.email}
+      className="flex items-start gap-2 rounded-lg border border-dashed p-2 text-sm text-muted-foreground"
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex flex-wrap items-center gap-1.5 font-medium">
+          {reservation.name}
+          <Badge variant="outline">Reserved</Badge>
+        </span>
+        <span className="text-xs">
+          {readOnly || reservation.known
+            ? "Not signed up yet"
+            : "Not signed up yet · Has never signed up, so can't be added here"}
+        </span>
+      </div>
+      {onAdd && (
+        <Button type="button" variant="outline" size="sm" onClick={onAdd} disabled={pending} className="shrink-0 text-xs">
+          Add
+        </Button>
       )}
     </li>
   );

@@ -26,7 +26,10 @@ export const loadForm = cache(async (formId: string) => {
 // signed up are going: a likely placement (src/lib/placement), or admins'
 // custom assignments once saved. Once the first build has started, it's
 // the confirmed assignments (custom is still whether admins made custom
-// assignments; saved is whether either is stored).
+// assignments; saved is whether either is stored). reservations are the
+// spots reserved at the builds the form offers, oldest first, with whether
+// their volunteer has signed up with them, and has ever signed up at all
+// (known), so admins can add them after the form closes.
 export const loadFormPlan = cache(async (formId: string) => {
   const form = await loadForm(formId);
   if (!form) return null;
@@ -40,7 +43,29 @@ export const loadFormPlan = cache(async (formId: string) => {
   const custom = form.assignmentsSavedAt !== null;
   const saved = placementStored(form);
   const plan = planForRoster(form.shifts, active, form, saved);
-  return { form, active, waiting, cancelled, custom, saved, plan };
+  const reservations = await prisma.reservation.findMany({
+    where: { formId, shiftId: { in: form.shifts.map((shift) => shift.id) } },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, email: true, firstName: true, lastName: true, shiftId: true, signupId: true },
+  });
+  const known = new Set(
+    (
+      await prisma.volunteer.findMany({
+        where: { email: { in: reservations.map((reservation) => reservation.email) } },
+        select: { email: true },
+      })
+    ).map((volunteer) => volunteer.email),
+  );
+  return {
+    form,
+    active,
+    waiting,
+    cancelled,
+    custom,
+    saved,
+    plan,
+    reservations: reservations.map((reservation) => ({ ...reservation, known: known.has(reservation.email) })),
+  };
 });
 
 // "Volunteers: Delta Gamma build, Oct 24", for a tab's page title.
