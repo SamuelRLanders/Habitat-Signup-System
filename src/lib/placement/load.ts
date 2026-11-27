@@ -8,7 +8,9 @@ import { SIGNED_UP, WAITING } from "@/lib/form-signups/status";
 import { prisma } from "@/lib/prisma";
 import type { OfferedShift } from "@/lib/signup-forms/queries";
 import {
+  netSeats,
   planDay,
+  settleReserved,
   tallyPlacement,
   type Day,
   type DayPlan,
@@ -20,6 +22,13 @@ import { travelRoster } from "./travel-roster";
 // A form's signups, ready for the placement solver (./solver.ts). Its
 // builds are the ones the form offers, and its volunteers are the signed-up
 // signups: not cancelled, and not waiting (src/lib/form-signups/status.ts).
+//
+// Reserved spots (see Reservation) come out of each build's spots, whether
+// or not their volunteer has signed up yet: the solver only places general
+// volunteers, in what's left. A volunteer who signed up with a reserved
+// spot is fixed at that build, outside the solver, and only counts there
+// for rides (PlacementBuild.reservedSeats). If their build is cancelled,
+// they're like anyone else whose builds were all cancelled.
 
 type Db = typeof prisma | Prisma.TransactionClient;
 
@@ -57,34 +66,66 @@ export type SignupForPlacement = {
   canDriveOthers: boolean;
   // The shifts they chose that the form still offers.
   shiftIds: string[];
+  // The build of the reserved spot they signed up with, if the form still
+  // offers it.
+  reservedShiftId: string | null;
   // Highly experienced, for the plan for admins.
   experienced?: boolean;
 };
 
+// A build the form offers, with how many spots are reserved there.
+export type ShiftForPlacement = { id: string; capacity: number; _count: { reservations: number } };
+
 // Which of a form's optional questions it asks (see SignupForm).
 export type FormQuestions = { askTransportation: boolean; askGroups: boolean };
 
-// The solver's view of a day. Signups whose chosen shifts have all been
-// cancelled are left out: they can't be placed and don't take a spot.
+// The solver's view of a day: general volunteers, in the spots left after
+// the reserved ones. Signups whose chosen shifts have all been cancelled
+// are left out: they can't be placed and don't take a spot. Reserved
+// volunteers' riders are given seats where they can be (settleReserved()).
 export function placementDay(
-  shifts: { id: string; capacity: number }[],
+  shifts: ShiftForPlacement[],
   signups: SignupForPlacement[],
   askTransportation: boolean,
 ): Day {
+  const reservedSeats = new Map<string, number>();
+  const volunteers: PlacementVolunteer[] = [];
+  for (const signup of signups) {
+    const travel = travelOf(signup.transportation, signup.carSeats, signup.canDriveOthers, askTransportation);
+    if (signup.reservedShiftId) {
+      const shiftId = signup.reservedShiftId;
+      reservedSeats.set(shiftId, (reservedSeats.get(shiftId) ?? 0) + netSeats(travel));
+    } else if (signup.shiftIds.length > 0) {
+      volunteers.push({ id: signup.id, ...travel, buildIds: signup.shiftIds, experienced: signup.experienced });
+    }
+  }
+  return settleReserved({
+    builds: shifts.map((shift) => ({
+      id: shift.id,
+      capacity: generalSpots(shift),
+      reservedSeats: reservedSeats.get(shift.id) ?? 0,
+    })),
+    volunteers,
+  });
+}
+
+// A build's spots for general volunteers: those that aren't reserved.
+export function generalSpots(shift: ShiftForPlacement) {
+  return Math.max(0, shift.capacity - shift._count.reservations);
+}
+
+// The whole day, as admins see it: every signup at the build they're
+// placed at, in every spot. Reserved volunteers can only go to their
+// reserved build.
+function wholeDay(shifts: ShiftForPlacement[], signups: SignupForPlacement[], askTransportation: boolean): Day {
   return {
     builds: shifts.map(({ id, capacity }) => ({ id, capacity })),
-    volunteers: signups.flatMap((signup) =>
-      signup.shiftIds.length === 0
-        ? []
-        : [
-            {
-              id: signup.id,
-              ...travelOf(signup.transportation, signup.carSeats, signup.canDriveOthers, askTransportation),
-              buildIds: signup.shiftIds,
-              experienced: signup.experienced,
-            },
-          ],
-    ),
+    volunteers: signups.map((signup) => ({
+      id: signup.id,
+      ...travelOf(signup.transportation, signup.carSeats, signup.canDriveOthers, askTransportation),
+      buildIds: signup.reservedShiftId ? [signup.reservedShiftId] : signup.shiftIds,
+      experienced: signup.experienced,
+    })),
   };
 }
 
@@ -94,7 +135,7 @@ export function placementDay(
 export async function loadPlacementDay(
   db: Db,
   formId: string,
-  shifts: { id: string; capacity: number }[],
+  shifts: ShiftForPlacement[],
   askTransportation: boolean,
 ): Promise<Day> {
   const signups = await loadForPlacement(db, formId, shifts, SIGNED_UP);
@@ -121,6 +162,7 @@ async function loadForPlacement(
       transportation: true,
       carSeats: true,
       preferences: { select: { shiftId: true } },
+      reservation: { select: { shiftId: true } },
       volunteer: {
         select: {
           driverRequestedAt: true,
@@ -138,7 +180,13 @@ async function loadForPlacement(
       signup.volunteer.driverRequestedAt !== null || signup.volunteer.driverApprovals.length > 0,
     // A cancelled build isn't offered.
     shiftIds: signup.preferences.map((p) => p.shiftId).filter((id) => offered.has(id)),
+    reservedShiftId: reservedAt(signup.reservation, offered),
   }));
+}
+
+// The build of a signup's reserved spot, if the form still offers it.
+export function reservedAt(reservation: { shiftId: string } | null, offered: Set<string>) {
+  return reservation && offered.has(reservation.shiftId) ? reservation.shiftId : null;
 }
 
 // Pairs of signups (by ID) who asked to be placed together: one asked for
@@ -166,51 +214,51 @@ export function requestedPairs(
 // and how many placed drivers are still waiting for approval. Until an
 // admin saves custom assignments, it's the app's likely plan, sending
 // someone highly experienced to each build and keeping friends who asked
-// to be together where it can. With custom assignments
+// to be together where it can, with everyone who signed up with a reserved
+// spot at its build. With custom assignments
 // (custom is true), it's those, whatever the rules say: anyone not
-// assigned a build is left out.
+// assigned a build is left out. Either way, builds counts everyone placed
+// at each build, in all of its spots, so a reserved volunteer's ride that
+// couldn't be covered shows as a spot held for a driver beyond its spots.
 export function planForRoster(
-  shifts: { id: string; capacity: number }[],
+  shifts: ShiftForPlacement[],
   signups: RosterSignup[],
   questions: FormQuestions,
   custom = false,
 ) {
-  const day = placementDay(
-    shifts,
-    signups.map((signup) => ({
-      ...signup,
-      canDriveOthers: signup.driver.status !== "none",
-      experienced: isHighlyExperienced(signup.builds),
-    })),
-    questions.askTransportation,
-  );
+  const forPlacement = signups.map((signup) => ({
+    ...signup,
+    canDriveOthers: signup.driver.status !== "none",
+    experienced: isHighlyExperienced(signup.builds),
+  }));
+  const whole = wholeDay(shifts, forPlacement, questions.askTransportation);
   let plan: Pick<DayPlan, "placement" | "builds" | "proven" | "leftOut">;
   if (custom) {
-    // Admins can assign anyone, even someone whose builds were all
-    // cancelled, so every signup counts.
-    day.volunteers = signups.map((signup) => ({
-      id: signup.id,
-      ...travelOf(signup.transportation, signup.carSeats, signup.driver.status !== "none", questions.askTransportation),
-      buildIds: signup.shiftIds,
-      experienced: isHighlyExperienced(signup.builds),
-    }));
     const placement: Placement = new Map(
       signups.flatMap((signup) => (signup.assignedShiftId ? [[signup.id, signup.assignedShiftId]] : [])),
     );
     plan = {
       placement,
-      builds: tallyPlacement(day, placement),
+      // Admins can assign anyone, even someone whose builds were all
+      // cancelled, so every signup counts.
+      builds: tallyPlacement(whole, placement),
       proven: true,
       leftOut: signups.filter((signup) => !placement.has(signup.id)).map((signup) => signup.id),
     };
   } else {
+    const day = placementDay(shifts, forPlacement, questions.askTransportation);
     day.together = requestedPairs(signups, questions.askGroups);
-    plan = planDay(day);
+    const general = planDay(day);
+    const placement: Placement = new Map(general.placement);
+    for (const signup of signups) {
+      if (signup.reservedShiftId) placement.set(signup.id, signup.reservedShiftId);
+    }
+    plan = { ...general, placement, builds: tallyPlacement(whole, placement) };
   }
 
   const byId = new Map(signups.map((signup) => [signup.id, signup]));
   const pendingDrivers = new Map<string, number>(); // by shift ID
-  for (const volunteer of day.volunteers) {
+  for (const volunteer of whole.volunteers) {
     const shiftId = plan.placement.get(volunteer.id);
     if (volunteer.travel !== "driver" || !shiftId) continue;
     if (byId.get(volunteer.id)!.driver.status === "pending") {

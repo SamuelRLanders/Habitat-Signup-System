@@ -1,5 +1,6 @@
 import "server-only";
 import { driverStatuses } from "@/lib/drivers/status";
+import { reservedAt } from "@/lib/placement/load";
 import { prisma } from "@/lib/prisma";
 import { buildsDone } from "./experience";
 import type { OfferedShift } from "@/lib/signup-forms/queries";
@@ -28,6 +29,7 @@ const rosterSelect = {
   addedByName: true,
   volunteer: { select: { id: true, email: true } },
   preferences: { select: { shiftId: true } },
+  reservation: { select: { shiftId: true } },
 } as const;
 
 // Everyone who has signed up through a form, cancelled or not, by last
@@ -36,8 +38,9 @@ const rosterSelect = {
 // admin assigned them to (on a form with custom assignments), or where they
 // went (once the first build has started), if the form still offers it;
 // plannedShiftId, noShow and addedAt are for the confirmed assignments
-// (see FormSignup). builds is how many builds they'd been on before the
-// form's day ("2026-10-24").
+// (see FormSignup). reservedShiftId is the build of the reserved spot they
+// signed up with, if the form still offers it. builds is how many builds
+// they'd been on before the form's day ("2026-10-24").
 export async function getFormRoster(formId: string, day: string, shifts: OfferedShift[]) {
   const offered = new Set(shifts.map((shift) => shift.id));
   const signups = await prisma.formSignup.findMany({
@@ -47,8 +50,9 @@ export async function getFormRoster(formId: string, day: string, shifts: Offered
   });
   const volunteerIds = signups.map((s) => s.volunteer.id);
   const [drivers, builds] = await Promise.all([driverStatuses(volunteerIds), buildsDone(volunteerIds, day)]);
-  return signups.map(({ volunteer, preferences, groupRequests, assignedShiftId, ...signup }) => ({
+  return signups.map(({ volunteer, preferences, groupRequests, assignedShiftId, reservation, ...signup }) => ({
     ...signup,
+    reservedShiftId: reservedAt(reservation, offered),
     assignedShiftId: assignedShiftId && offered.has(assignedShiftId) ? assignedShiftId : null,
     email: volunteer.email,
     driver: drivers.get(volunteer.id)!,

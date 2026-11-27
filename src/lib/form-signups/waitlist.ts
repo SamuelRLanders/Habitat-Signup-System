@@ -26,7 +26,10 @@ export async function fillFromWaitlist(tx: Prisma.TransactionClient, formId: str
       opensAt: true,
       closesAt: true,
       askTransportation: true,
-      shifts: { where: offeredShifts.where, select: { id: true, capacity: true } },
+      shifts: {
+        where: offeredShifts.where,
+        select: { id: true, capacity: true, _count: offeredShifts.select._count },
+      },
     },
   });
   if (!form || formPhase(form) !== "open") return 0;

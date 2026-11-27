@@ -18,7 +18,7 @@ import {
 // return published forms.
 
 // The builds a form offers, for including with it: the ones that aren't
-// cancelled, soonest first.
+// cancelled, soonest first, with how many of their spots are reserved.
 export const offeredShifts = {
   where: { cancelledAt: null },
   orderBy: [{ startsAt: "asc" }, { endsAt: "asc" }, { name: "asc" }],
@@ -31,6 +31,7 @@ export const offeredShifts = {
     startsAt: true,
     endsAt: true,
     capacity: true,
+    _count: { select: { reservations: true } },
   },
 } satisfies Prisma.SignupForm$shiftsArgs;
 

@@ -4,7 +4,9 @@ import {
   buildRoom,
   checkPlacement,
   heldDriverSpots,
+  leftOutCount,
   planDay,
+  settleReserved,
   signupChecker,
   type Day,
   type PlacementVolunteer,
@@ -33,6 +35,62 @@ describe("held driver spots", () => {
     assert.equal(heldDriverSpots(4, 0), 2);
     assert.equal(heldDriverSpots(7, 2), 2);
     assert.equal(heldDriverSpots(2, 6), 0);
+  });
+});
+
+describe("reserved volunteers' seats", () => {
+  it("holds a spot for a driver for a reserved rider", () => {
+    // 4 general spots and a reserved rider: a driver's spot is held for
+    // them, so only 3 own-way volunteers fit.
+    const day: Day = { builds: [{ id: "A", capacity: 4, reservedSeats: -1 }], volunteers: ownWay(3, ["A"]) };
+    assert.equal(signupChecker(day)({ travel: "ownWay", carSeats: 0, buildIds: ["A"] }), false);
+    assert.equal(checkPlacement(day, new Map(day.volunteers.map((v) => [v.id, "A"])))!.get("A")!.heldDriverSpots, 1);
+  });
+
+  it("lets general riders use a reserved driver's seats", () => {
+    // A reserved driver with a 4-seat car carries 3 riders.
+    const day: Day = { builds: [{ id: "A", capacity: 3, reservedSeats: 3 }], volunteers: riders(3, ["A"]) };
+    assert.equal(leftOutCount(day), 0);
+  });
+
+  it("leaves reserved riders' seats alone when they fit", () => {
+    const day: Day = { builds: [{ id: "A", capacity: 4, reservedSeats: -2 }], volunteers: ownWay(3, ["A"]) };
+    assert.equal(settleReserved(day), day);
+  });
+
+  it("stops counting reserved riders' seats rather than leave someone out", () => {
+    // The build's 4 general spots were all taken before the reserved rider
+    // signed up: no spot is left to hold for a driver.
+    const day: Day = { builds: [{ id: "A", capacity: 4, reservedSeats: -1 }], volunteers: ownWay(4, ["A"]) };
+    assert.equal(leftOutCount(day), 1);
+    const settled = settleReserved(day);
+    assert.equal(settled.builds[0].reservedSeats, 0);
+    assert.equal(leftOutCount(settled), 0);
+  });
+
+  it("only stops counting as many seats as it has to", () => {
+    // 2 reserved riders at A and 1 at B. A's general spots are full, but B
+    // has room to hold a driver's spot.
+    const day: Day = {
+      builds: [
+        { id: "A", capacity: 2, reservedSeats: -2 },
+        { id: "B", capacity: 3, reservedSeats: -1 },
+      ],
+      volunteers: [...ownWay(2, ["A"]), ...ownWay(1, ["B"])],
+    };
+    const settled = settleReserved(day);
+    assert.deepEqual(
+      settled.builds.map((build) => build.reservedSeats),
+      [0, -1],
+    );
+  });
+
+  it("plans a day whose reserved riders need more than its spots", () => {
+    // Every spot is reserved, so none can be held for a driver.
+    const day: Day = { builds: [{ id: "A", capacity: 0, reservedSeats: -2 }], volunteers: [] };
+    const settled = settleReserved(day);
+    assert.equal(settled.builds[0].reservedSeats, 0);
+    assert.equal(planDay(day).leftOut.length, 0);
   });
 });
 

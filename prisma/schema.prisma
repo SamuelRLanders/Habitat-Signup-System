@@ -260,9 +260,10 @@ model SignupForm {
   attendanceConfirmedAt     DateTime?
   attendanceConfirmedByName String?
 
-  shifts   Shift[]
-  sections FormSection[]
-  signups  FormSignup[]
+  shifts       Shift[]
+  sections     FormSection[]
+  signups      FormSignup[]
+  reservations Reservation[]
 
   @@index([status, date])
   @@index([date])
@@ -301,10 +302,13 @@ model Shift {
   responsibleId String?
   responsible   User?   @relation(fields: [responsibleId], references: [id], onDelete: SetNull)
 
-  preferences ShiftPreference[]
-  assigned    FormSignup[]      @relation("Assignment")
-  planned     FormSignup[]      @relation("Planned")
-  messages    Message[]
+  preferences  ShiftPreference[]
+  assigned     FormSignup[]      @relation("Assignment")
+  planned      FormSignup[]      @relation("Planned")
+  messages     Message[]
+  // Spots editors reserved for named volunteers. They come out of
+  // capacity: general volunteers get the rest.
+  reservations Reservation[]
 
   @@index([formId, startsAt])
   @@index([responsibleId])
@@ -449,11 +453,47 @@ model FormSignup {
 
   preferences   ShiftPreference[]
   groupRequests GroupRequest[]
+  // The reserved spot they signed up with, if any (see Reservation).
+  reservation   Reservation?
 
   @@unique([formId, volunteerId])
   @@index([volunteerId])
   @@index([assignedShiftId])
   @@index([plannedShiftId])
+}
+
+// A spot an editor reserved at a build for a named volunteer, in the form
+// editor. It comes out of the build's spots, so general volunteers get the
+// rest (src/lib/placement/load.ts). The volunteer is named by their Purdue
+// email, so they needn't have signed up before; the name is the editor's.
+// Once the form is published they can sign up for it, even before the form
+// opens, and are placed at that build whatever the placement rules say
+// (signup is then their signup). After the form closes, editors add them on
+// the Assignments tab. It's held until an editor removes it, or released
+// when they cancel. A volunteer has at most one a day.
+model Reservation {
+  id            String   @id @default(cuid())
+  email         String // lowercased
+  firstName     String
+  lastName      String
+  createdAt     DateTime @default(now())
+  // The editor who reserved it, copied as on SignupForm.
+  createdByName String
+
+  formId String
+  form   SignupForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  // A build volunteers chose is cancelled rather than deleted, so this only
+  // goes with a build nobody chose.
+  shiftId String
+  shift   Shift  @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  signupId String?     @unique
+  signup   FormSignup? @relation(fields: [signupId], references: [id], onDelete: SetNull)
+
+  @@unique([formId, email])
+  @@index([shiftId])
+  @@index([email])
 }
 
 // A build a volunteer said they could work at. Admins use these to place

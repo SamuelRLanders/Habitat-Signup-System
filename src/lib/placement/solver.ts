@@ -90,6 +90,13 @@ export type Travel = "rider" | "ownWay" | "driver";
 export type PlacementBuild = {
   id: string;
   capacity: number;
+  // Seats for riders brought by volunteers who are fixed at the build and
+  // aren't among the day's volunteers, less the seats their own riders
+  // need: negative when they need rides. They're volunteers with reserved
+  // spots (src/lib/placement/load.ts), whose spots aren't in capacity.
+  // Their riders get seats like anyone else's, but never at the cost of
+  // someone else's spot (see settleReserved()). 0 when left out.
+  reservedSeats?: number;
 };
 
 export type PlacementVolunteer = {
@@ -125,8 +132,15 @@ export const ASSUMED_CAR_SEATS = 4;
 const PASSENGERS_PER_HELD_SPOT = ASSUMED_CAR_SEATS - 1;
 
 // Seats a volunteer brings for riders: a driver's seats minus their own.
-function passengerSeats(volunteer: PlacementVolunteer) {
+function passengerSeats(volunteer: Pick<PlacementVolunteer, "travel" | "carSeats">) {
   return volunteer.travel === "driver" ? Math.max(0, volunteer.carSeats - 1) : 0;
+}
+
+// What a volunteer adds to the seats for riders at their build: a driver's
+// passenger seats, or −1 for a rider, who needs one. For a build's
+// reservedSeats.
+export function netSeats(volunteer: Pick<PlacementVolunteer, "travel" | "carSeats">) {
+  return volunteer.travel === "rider" ? -1 : passengerSeats(volunteer);
 }
 
 // The spots to hold for drivers at a build: one per assumed car needed by
@@ -184,9 +198,11 @@ export function tallyPlacement(day: Day, placement: Placement): Map<string, Buil
     if (volunteer.experienced) build.experienced += 1;
   }
   // Riders without a seat in a driver's car get one in a car we're waiting
-  // for, whose driver's spot is held.
-  for (const build of builds.values()) {
-    build.heldDriverSpots = heldDriverSpots(build.riders, build.passengerSeats);
+  // for, whose driver's spot is held. Reserved volunteers fixed there bring
+  // seats or need them too.
+  const reserved = new Map(day.builds.map((build) => [build.id, build.reservedSeats ?? 0]));
+  for (const [id, build] of builds) {
+    build.heldDriverSpots = heldDriverSpots(build.riders, build.passengerSeats + reserved.get(id)!);
   }
   return builds;
 }
@@ -358,9 +374,9 @@ function writeModel(day: Day, groups: Group[], goal: Goal): Model<Unknown, strin
     // Rule 1, room: (volunteers placed here) + (held spots) ≤ spots.
     constraints.set(`room at ${build.id}`, { max: build.capacity });
     // Rule 2, rides: (riders here) − (drivers' passenger seats here)
-    //                − 3 × (held spots) ≤ 0.
+    //                − 3 × (held spots) ≤ (reserved volunteers' seats).
     // That is, every rider has a seat in a car, real or assumed.
-    constraints.set(`rides at ${build.id}`, { max: 0 });
+    constraints.set(`rides at ${build.id}`, { max: build.reservedSeats ?? 0 });
 
     // Each held spot takes a spot and brings an assumed car's seats.
     unknowns.push([
@@ -506,6 +522,73 @@ export function signupChecker(day: Day) {
   };
 }
 
+// ─── Reserved spots ──────────────────────────────────────────────────────────
+
+// Volunteers with a reserved spot (src/lib/placement/load.ts) are fixed at
+// their build, outside the day's volunteers, and their spots aren't in its
+// capacity. They're always taken, even as a rider at a build with no room
+// left to hold a spot for another driver. So their riders' seats
+// (reservedSeats below 0) are covered where they can be, but never at the
+// cost of someone else: if covering them would leave out volunteers who
+// could otherwise be placed, as few of those seats are counted as it takes
+// to place them all again. The riders left without a seat show up for
+// admins as riders without a ride (see planForRoster()). Returns the day
+// with reservedSeats raised where needed.
+export function settleReserved(day: Day): Day {
+  const needs = (build: PlacementBuild) => (build.reservedSeats ?? 0) < 0;
+  if (!day.builds.some(needs)) return day;
+  if (search(day, "everyone").outcome === "found") return day;
+
+  const raised = (current: Day, buildId: string | null): Day => ({
+    ...current,
+    builds: current.builds.map((build) =>
+      buildId === null
+        ? { ...build, reservedSeats: Math.max(0, build.reservedSeats ?? 0) }
+        : build.id === buildId
+          ? { ...build, reservedSeats: (build.reservedSeats ?? 0) + 1 }
+          : build,
+    ),
+  });
+  // As many as can be placed with none of those seats counted. If the
+  // solver can't say for sure, none are counted, to be safe.
+  const relaxed = raised(day, null);
+  const target = search(relaxed, "most");
+  if (target.outcome !== "found" || !target.proven) return relaxed;
+  const placed = (current: Day) => {
+    const most = search(current, "most");
+    return most.outcome === "found" && most.proven ? most.placement.size : -1;
+  };
+
+  // Stop counting one seat at a time, where it places the most people,
+  // until everyone who could be placed is.
+  let current = day;
+  let now = placed(current);
+  while (now < target.placement.size) {
+    let best: { day: Day; placed: number } | null = null;
+    for (const build of current.builds) {
+      if (!needs(build)) continue;
+      const next = raised(current, build.id);
+      const count = placed(next);
+      if (!best || count > best.placed) best = { day: next, placed: count };
+    }
+    if (!best) return relaxed;
+    current = best.day;
+    now = best.placed;
+  }
+  return current;
+}
+
+// How many of the day's volunteers can't be placed: none, unless the day is
+// short. Null if the solver can't say for sure.
+export function leftOutCount(day: Day): number | null {
+  const everyone = search(day, "everyone");
+  if (everyone.outcome === "found") return 0;
+  if (everyone.outcome === "gave up") return null;
+  const most = search(day, "most");
+  if (most.outcome !== "found" || !most.proven) return null;
+  return day.volunteers.length - most.placement.size;
+}
+
 // Works out, for each build (by ID), who it has room for: a newcomer who
 // chose only that build. A newcomer who chooses several builds can sign up
 // if any one of them has room for them.
@@ -567,8 +650,9 @@ export function planDay(day: Day, timeLimitMs = 1000): DayPlan {
   const plan = (placement: Placement, proven: boolean): DayPlan => ({
     placement,
     leftOut: day.volunteers.filter((v) => !placement.has(v.id)).map((v) => v.id),
-    // A plan from search() always follows the rules, as does placing nobody.
-    builds: checkPlacement(day, placement)!,
+    // A plan from search() always follows the rules, as does placing
+    // nobody, unless reserved volunteers' riders need more than the build.
+    builds: checkPlacement(day, placement) ?? tallyPlacement(day, placement),
     proven,
   });
 
