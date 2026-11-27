@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDownIcon, ArrowUpIcon, PlusIcon, Trash2Icon } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,15 +22,16 @@ export function SectionFields({
   defaults: SectionDefaults[];
   errors: Record<number, SectionErrors>;
 }) {
+  // Each section's key, for its fields' IDs: numbered in order, so the
+  // server and the browser give the same ones.
   const [sections, setSections] = useState(() =>
-    defaults.map((section) => ({ ...section, key: crypto.randomUUID() })),
+    defaults.map((section, index) => ({ ...section, key: String(index) })),
   );
+  const nextKey = useRef(defaults.length);
 
   function add() {
-    setSections((current) => [
-      ...current,
-      { title: "", body: "", key: crypto.randomUUID() },
-    ]);
+    const key = String(nextKey.current++);
+    setSections((current) => [...current, { title: "", body: "", key }]);
   }
 
   function remove(index: number) {

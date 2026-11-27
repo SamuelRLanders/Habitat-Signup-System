@@ -5,6 +5,7 @@ import { textWhere } from "@/lib/admin/queries";
 import { requireEditor } from "@/lib/auth/dal";
 import type { ActionState } from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
+import { ALREADY_SIGNED_UP, ALREADY_WAITING } from "@/lib/reservations/save";
 import { formPhase } from "@/lib/signup-forms/phase";
 
 // Reserved spots (see Reservation): finding a volunteer to reserve one for,
@@ -126,10 +127,14 @@ export type ReserveCandidate = {
 
 const CANDIDATE_LIMIT = 6;
 
-// Volunteers matching a search, by name, email or phone. Whether they're free
-// that day is checked when the form is saved, since its day can still change
-// in the editor.
-export async function searchToReserve(query: string): Promise<{ matches: ReserveCandidate[]; more: boolean }> {
+// Volunteers matching a search, by name, email or phone. On a form that's
+// been saved (formId), anyone signed up on it, or waiting, can't be chosen:
+// they have their signup. Whether they're free that day is checked when the
+// form is saved, since its day can still change in the editor.
+export async function searchToReserve(
+  query: string,
+  formId?: string,
+): Promise<{ matches: ReserveCandidate[]; more: boolean }> {
   await requireEditor();
   const q = typeof query === "string" ? query.trim().slice(0, 100) : "";
   const where = q ? textWhere({ by: "any", q }) : null;
@@ -139,14 +144,30 @@ export async function searchToReserve(query: string): Promise<{ matches: Reserve
     where,
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }, { email: "asc" }],
     take: CANDIDATE_LIMIT + 1,
-    select: { id: true, email: true, firstName: true, lastName: true },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      signups: {
+        where: { formId: typeof formId === "string" ? formId : "", cancelledAt: null, reservation: null },
+        select: { waitlistedAt: true },
+      },
+    },
   });
   return {
-    matches: volunteers.slice(0, CANDIDATE_LIMIT).map((volunteer) => ({
+    matches: volunteers.slice(0, CANDIDATE_LIMIT).map(({ signups: [signup], ...volunteer }) => ({
       ...volunteer,
       name: `${volunteer.firstName} ${volunteer.lastName}`,
-      blocked: null,
+      blocked: signup ? sentence(signup.waitlistedAt ? ALREADY_WAITING : ALREADY_SIGNED_UP) : null,
     })),
     more: volunteers.length > CANDIDATE_LIMIT,
   };
+}
+
+// "is already signed up on this form, so…" → "Already signed up on this
+// form, so…", for a match in the search.
+function sentence(problem: string) {
+  const rest = problem.replace(/^is /, "");
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
 }

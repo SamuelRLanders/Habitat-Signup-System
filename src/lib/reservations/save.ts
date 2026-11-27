@@ -10,11 +10,13 @@ type Db = typeof prisma | Prisma.TransactionClient;
 
 const fullName = (reservation: ReservationInput) => `${reservation.firstName} ${reservation.lastName}`;
 
-// Problems with the reserved spots from the rest of the day, by build
-// position, or null: a volunteer can only be at one form a day, so they
-// can't have a reserved spot here if they have one on another of the day's
-// forms or are signed up (or waiting) through one. Forms whose event was
-// cancelled don't count.
+// Problems with the reserved spots, by build position, or null:
+//   - A volunteer can only be at one form a day, so they can't have a
+//     reserved spot here if they have one on another of the day's forms or
+//     are signed up (or waiting) through one. Forms whose event was
+//     cancelled don't count.
+//   - Someone already signed up on this form (or waiting) can't be given a
+//     new reserved spot: they have their signup.
 export async function reservationConflicts(
   db: Db,
   builds: BuildInput[],
@@ -24,7 +26,7 @@ export async function reservationConflicts(
   const emails = builds.flatMap((build) => build.reservations.map((reservation) => reservation.email));
   if (emails.length === 0) return null;
   const otherForm = { date, status: { not: "CANCELLED" as const }, ...(formId && { id: { not: formId } }) };
-  const [reserved, signedUp] = await Promise.all([
+  const [reserved, signedUp, thisForm] = await Promise.all([
     db.reservation.findMany({
       where: { email: { in: emails }, form: otherForm },
       select: { email: true, form: { select: { name: true } } },
@@ -33,22 +35,42 @@ export async function reservationConflicts(
       where: { cancelledAt: null, volunteer: { email: { in: emails } }, form: otherForm },
       select: { volunteer: { select: { email: true } }, form: { select: { name: true } } },
     }),
+    formId ? signedUpHere(db, formId, emails) : new Map<string, string>(),
   ]);
   const problems = new Map<string, string>();
-  for (const { email, form } of reserved) problems.set(email, `has a reserved spot on ${form.name} that day`);
-  for (const { volunteer, form } of signedUp) problems.set(volunteer.email, `is signed up through ${form.name} that day`);
+  for (const { email, form } of reserved) {
+    problems.set(email, `has a reserved spot on ${form.name} that day, and a volunteer can only be at one form a day.`);
+  }
+  for (const { volunteer, form } of signedUp) {
+    problems.set(volunteer.email, `is signed up through ${form.name} that day, and a volunteer can only be at one form a day.`);
+  }
+  for (const [email, problem] of thisForm) problems.set(email, problem);
 
   const errors: Record<number, BuildErrors> = {};
   builds.forEach((build, index) => {
     const conflict = build.reservations.find((reservation) => problems.has(reservation.email));
-    if (conflict) {
-      errors[index] = {
-        reservations: `${fullName(conflict)} ${problems.get(conflict.email)}, and a volunteer can only be at one form a day.`,
-      };
-    }
+    if (conflict) errors[index] = { reservations: `${fullName(conflict)} ${problems.get(conflict.email)}` };
   });
   return Object.keys(errors).length > 0 ? errors : null;
 }
+
+// Of these emails, those signed up on the form (or waiting) without a
+// reserved spot there, with why they can't be given one.
+async function signedUpHere(db: Db, formId: string, emails: string[]) {
+  const signups = await db.formSignup.findMany({
+    where: { formId, cancelledAt: null, reservation: null, volunteer: { email: { in: emails } } },
+    select: { waitlistedAt: true, volunteer: { select: { email: true } } },
+  });
+  return new Map(
+    signups.map((signup) => [
+      signup.volunteer.email,
+      signup.waitlistedAt ? ALREADY_WAITING : ALREADY_SIGNED_UP,
+    ]),
+  );
+}
+
+export const ALREADY_SIGNED_UP = "is already signed up on this form, so they don't need a reserved spot.";
+export const ALREADY_WAITING = "is already on this form's waitlist, so they can't be given a reserved spot.";
 
 // What changed when a form's reserved spots were saved.
 export type ReservationChanges = {
@@ -77,15 +99,15 @@ export class ReservationProblem extends Error {
 //     page is out of date.
 //   - New spots can't go at a cancelled build.
 //   - Nothing can change once the first build has started (locked).
-// A new spot for someone already signed up on the form (or waiting) is
-// theirs at once: their choice of builds becomes that build, they're off
-// the waitlist, and with custom assignments they're assigned there.
+//   - Someone already signed up on the form (or waiting) can't have a new
+//     one (see reservationConflicts(), checked again here in case they
+//     signed up meanwhile).
 export async function saveReservations(
   tx: Prisma.TransactionClient,
   formId: string,
   builds: BuildInput[],
   shiftIds: string[],
-  options: { createdByName: string; locked: boolean; assignmentsSaved: boolean },
+  options: { createdByName: string; locked: boolean },
 ): Promise<ReservationChanges> {
   const STALE = "This form's reserved spots were changed somewhere else. Refresh the page and make your changes again.";
   const existing = await tx.reservation.findMany({
@@ -117,32 +139,21 @@ export async function saveReservations(
     changes.released = true;
   }
 
+  const newEmails = [...sent.keys()].filter((email) => !byEmail.has(email));
+  const signedUp = newEmails.length > 0 ? await signedUpHere(tx, formId, newEmails) : new Map<string, string>();
   for (const [email, { reservation, shiftId, index }] of sent) {
     if (byEmail.has(email)) continue;
     if (options.locked) problem(LOCKED);
+    if (signedUp.has(email)) {
+      throw new ReservationProblem("", { [index]: { reservations: `${fullName(reservation)} ${signedUp.get(email)}` } });
+    }
     if (builds[index].cancelled) {
       throw new ReservationProblem("", {
         [index]: { reservations: "This build is cancelled. Restore it before reserving spots at it." },
       });
     }
-    const created = await tx.reservation.create({
-      data: { formId, shiftId, ...reservation, createdByName: options.createdByName },
-      select: { id: true },
-    });
+    await tx.reservation.create({ data: { formId, shiftId, ...reservation, createdByName: options.createdByName } });
     changes.added.add(shiftId);
-
-    const signup = await tx.formSignup.findFirst({
-      where: { formId, cancelledAt: null, volunteer: { email } },
-      select: { id: true },
-    });
-    if (!signup) continue;
-    await tx.reservation.update({ where: { id: created.id }, data: { signupId: signup.id } });
-    await tx.shiftPreference.deleteMany({ where: { signupId: signup.id } });
-    await tx.shiftPreference.create({ data: { signupId: signup.id, shiftId } });
-    await tx.formSignup.update({
-      where: { id: signup.id },
-      data: { waitlistedAt: null, ...(options.assignmentsSaved && { assignedShiftId: shiftId }) },
-    });
   }
   return changes;
 }

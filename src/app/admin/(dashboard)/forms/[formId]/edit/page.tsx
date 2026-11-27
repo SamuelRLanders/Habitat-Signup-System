@@ -99,7 +99,7 @@ export default async function EditSignupFormPage({
         adminId={admin.id}
         // Once the first build has started, the event is under way.
         reservationsLocked={form.placementSavedAt !== null}
-        formPath={`/signup/${form.id}`}
+        formId={form.id}
         submitLabel="Save changes"
         cancelHref={formHref}
       />

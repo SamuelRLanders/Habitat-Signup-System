@@ -1,7 +1,7 @@
 "use client";
 
 import { PlusIcon, Trash2Icon, XIcon } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { cn } from "cn";
 import { FieldError } from "@/components/field-error";
 import { TimeSelect } from "@/components/time-select";
@@ -64,7 +64,7 @@ export function BuildFields({
   admins,
   newResponsibleId,
   reservationsLocked = false,
-  formPath = null,
+  formId = null,
 }: {
   defaults: BuildDefaults[];
   errors: Record<number, BuildErrors>;
@@ -73,25 +73,26 @@ export function BuildFields({
   newResponsibleId: string;
   // The first build has started, so reserved spots can't change.
   reservationsLocked?: boolean;
-  // The public form's path, once the form exists, to send to volunteers
-  // with reserved spots.
-  formPath?: string | null;
+  // The form, once it exists: for its link, to send to volunteers with
+  // reserved spots, and to say who's signed up on it already.
+  formId?: string | null;
 }) {
+  // Each build's key, for its fields' IDs: numbered in order, so the server
+  // and the browser give the same ones.
   const [builds, setBuilds] = useState(() =>
-    defaults.map((build) => ({
+    defaults.map((build, index) => ({
       ...build,
       spots: Number(build.capacity) || null,
-      key: crypto.randomUUID(),
+      key: String(index),
     })),
   );
+  const nextKey = useRef(defaults.length);
   // Everyone with a reserved spot on the form: one each.
   const reservedEmails = new Set(builds.flatMap((build) => build.reservations.map((spot) => spot.email)));
 
   function add() {
-    setBuilds((current) => [
-      ...current,
-      { ...NEW_BUILD, responsibleId: newResponsibleId, spots: null, key: crypto.randomUUID() },
-    ]);
+    const key = String(nextKey.current++);
+    setBuilds((current) => [...current, { ...NEW_BUILD, responsibleId: newResponsibleId, spots: null, key }]);
   }
 
   function update(index: number, change: Partial<(typeof builds)[number]>) {
@@ -285,7 +286,7 @@ export function BuildFields({
                 full={build.spots !== null && build.reservations.length >= build.spots}
                 locked={reservationsLocked}
                 reservedEmails={reservedEmails}
-                formPath={formPath}
+                formId={formId}
                 error={buildErrors.reservations}
                 onChange={(reservations) => update(index, { reservations })}
               />
@@ -369,7 +370,7 @@ function Reservations({
   full,
   locked,
   reservedEmails,
-  formPath,
+  formId,
   error,
   onChange,
 }: {
@@ -380,7 +381,7 @@ function Reservations({
   full: boolean;
   locked: boolean;
   reservedEmails: Set<string>;
-  formPath: string | null;
+  formId: string | null;
   error?: string;
   onChange: (spots: ReservedSpot[]) => void;
 }) {
@@ -426,19 +427,20 @@ function Reservations({
           <ReserveDialog
             buildName={buildName}
             reservedEmails={reservedEmails}
+            formId={formId}
             disabled={full}
             onReserve={(spot) => onChange([...spots, spot])}
           />
-          {formPath && spots.length > 0 && <FormLinkDialog path={formPath} />}
+          {formId && spots.length > 0 && <FormLinkDialog path={`/signup/${formId}`} />}
         </div>
       )}
-      <p className="text-sm text-muted-foreground">
-        {locked
-          ? "The first build has started, so reserved spots can't change."
-          : full
-            ? "Every spot is reserved. Add spots to reserve another."
-            : "Each holds one of the build's spots for the volunteer named, who can sign up for it once the form is published, even before it opens. They aren't emailed: send them the form's link."}
-      </p>
+      {(locked || full) && (
+        <p className="text-sm text-muted-foreground">
+          {locked
+            ? "The first build has started, so reserved spots can't change."
+            : "Every spot is reserved. Add spots to reserve another."}
+        </p>
+      )}
       <FieldError field={`${id}-reservations`} error={error} />
     </div>
   );

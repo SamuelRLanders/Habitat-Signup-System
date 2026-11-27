@@ -34,15 +34,17 @@ export type ReservedSpot = {
 // volunteer to reserve it for, or entering the name and Purdue email of
 // someone who has never signed up. The spot is saved with the form.
 // reservedEmails are everyone with a spot on the form already, who can't
-// have another.
+// have another; on a saved form (formId), nor can anyone signed up on it.
 export function ReserveDialog({
   buildName,
   reservedEmails,
+  formId,
   disabled,
   onReserve,
 }: {
   buildName: string;
   reservedEmails: Set<string>;
+  formId: string | null;
   disabled: boolean;
   onReserve: (spot: ReservedSpot) => void;
 }) {
@@ -63,6 +65,7 @@ export function ReserveDialog({
         {/* Mounted only while open, so each opening starts fresh. */}
         <ReserveForm
           reservedEmails={reservedEmails}
+          formId={formId}
           onReserve={(spot) => {
             onReserve(spot);
             setOpen(false);
@@ -77,9 +80,11 @@ const TAKEN = "Already has a reserved spot on this form";
 
 function ReserveForm({
   reservedEmails,
+  formId,
   onReserve,
 }: {
   reservedEmails: Set<string>;
+  formId: string | null;
   onReserve: (spot: ReservedSpot) => void;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
@@ -90,13 +95,13 @@ function ReserveForm({
   const found = useRef(new Map<string, ReserveCandidate>());
 
   async function search(query: string) {
-    const result = await searchToReserve(query);
+    const result = await searchToReserve(query, formId ?? undefined);
     found.current = new Map(result.matches.map((match) => [match.id, match]));
     return {
       ...result,
       matches: result.matches.map((match) => ({
         ...match,
-        blocked: reservedEmails.has(match.email) ? TAKEN : null,
+        blocked: reservedEmails.has(match.email) ? TAKEN : match.blocked,
       })),
     };
   }

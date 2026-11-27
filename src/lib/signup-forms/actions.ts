@@ -205,7 +205,7 @@ export async function createSignupForm(
         });
         shiftIds.push(shift.id);
       }
-      await saveReservations(tx, form.id, builds, shiftIds, { createdByName, locked: false, assignmentsSaved: false });
+      await saveReservations(tx, form.id, builds, shiftIds, { createdByName, locked: false });
       return form;
     });
   } catch (error) {
@@ -268,7 +268,6 @@ export async function updateSignupForm(
       where: { id: formId },
       select: {
         askTransportation: true,
-        assignmentsSavedAt: true,
         placementSavedAt: true,
         shifts: { where: offeredShifts.where, select: { id: true, capacity: true, _count: offeredShifts.select._count } },
       },
@@ -329,7 +328,6 @@ export async function updateSignupForm(
     const reservations = await saveReservations(tx, formId, parsed.builds, shiftIds, {
       createdByName: admin.name || admin.email,
       locked: before.placementSavedAt !== null,
-      assignmentsSaved: before.assignmentsSavedAt !== null,
     });
     // A new reserved spot needs room: it can't leave out anyone signed up
     // who could be placed before.
