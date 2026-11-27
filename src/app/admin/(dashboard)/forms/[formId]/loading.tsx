@@ -6,9 +6,10 @@ import { BuildsSkeleton, FormHeaderSkeleton } from "../form-skeletons";
 // skeleton (the loading.tsx files under (tabs)).
 export default function Loading() {
   return (
-    <LoadingPage className="mx-auto flex max-w-6xl flex-col gap-8">
-      <FormHeaderSkeleton />
-      <BuildsSkeleton />
+    <LoadingPage className="mx-auto max-w-6xl">
+      <FormHeaderSkeleton>
+        <BuildsSkeleton />
+      </FormHeaderSkeleton>
     </LoadingPage>
   );
 }

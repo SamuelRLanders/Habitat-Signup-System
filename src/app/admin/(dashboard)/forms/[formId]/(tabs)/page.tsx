@@ -54,14 +54,12 @@ export default async function SignupFormPage({
         </h2>
         <p className="text-sm text-muted-foreground">
           {form.confirming
-            ? `Volunteers say which builds they could work at. The first build has started, so each build shows who went there; correct it on the ${tab} tab.`
+            ? `Who went to each build. Correct it on the ${tab} tab.`
             : custom
-              ? `Volunteers say which builds they could work at. Each build shows the custom assignments saved by ${form.assignmentsSavedByName ?? "an admin"}; change them on the ${tab} tab.`
+              ? `Who's going to each build, from the custom assignments saved by ${form.assignmentsSavedByName ?? "an admin"}. Change them on the ${tab} tab.`
               : assignmentsOpen(phase)
-                ? `Volunteers say which builds they could work at. Each build shows the app's placement; change it on the ${tab} tab.`
-                : "Volunteers say which builds they could work at. Each build shows a likely placement; it isn't final."}{" "}
-          Once the form closes, copy a build&apos;s emails to write to the
-          volunteers going there.
+                ? `Who's going to each build, from the app's placement. Change it on the ${tab} tab.`
+                : "Who'd likely go to each build if the form closed now. It isn't final."}
         </p>
       </div>
 

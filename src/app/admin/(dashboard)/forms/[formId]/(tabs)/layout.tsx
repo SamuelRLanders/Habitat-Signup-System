@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActionButton } from "@/components/action-button";
+import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import type { FormStatus } from "@/generated/prisma/enums";
 import { requireAdmin } from "@/lib/auth/dal";
@@ -11,7 +12,7 @@ import {
   deleteSignupForm,
   setSignupFormStatus,
 } from "@/lib/signup-forms/actions";
-import { today, totalSpots } from "@/lib/signup-forms/queries";
+import { today } from "@/lib/signup-forms/queries";
 import { formatDay } from "@/lib/time";
 import { BackLink } from "../../../admin-parts";
 import { PhaseBadge, phaseNote } from "../../form-parts";
@@ -40,61 +41,45 @@ export default async function SignupFormLayout({
     form.status !== "CANCELLED" &&
     form.day >= today() &&
     (form.status === "PUBLISHED" || form.signupCount > 0);
-  const spots = totalSpots(form.shifts);
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-8">
-      <div className="flex flex-col gap-4">
-        <BackLink href="/admin/forms">Back to forms</BackLink>
+    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+      <BackLink href="/admin/forms">Back to forms</BackLink>
 
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex min-w-0 flex-col gap-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold">{form.name}</h1>
-              <PhaseBadge phase={phase} />
-            </div>
-            <p className="font-medium">
-              {formatDay(form.day)}
-              {!form.listed && (
-                <span className="font-normal text-muted-foreground">
-                  {" "}
-                  · Not on the home page: share its link with volunteers
-                </span>
-              )}
-            </p>
-            <p className="text-sm text-muted-foreground">{phaseNote(phase, form)}</p>
-            <p className="text-sm">
-              {form.signupCount} {form.signupCount === 1 ? "volunteer has" : "volunteers have"} signed up
-              {spots > 0 && ` of ${spots} ${spots === 1 ? "spot" : "spots"}`}
-              {form.waitingCount > 0 && `, and ${form.waitingCount} ${form.waitingCount === 1 ? "is" : "are"} on the waitlist`}.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-start gap-2">
-            {form.status === "PUBLISHED" && <ShareDialog path={`/signup/${form.id}`} />}
-            {editor && form.status !== "CANCELLED" && (
-              <Link
-                href={`/admin/forms/${form.id}/edit`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                Edit form
-              </Link>
-            )}
-            {editor && (
-              <StatusActions
-                formId={form.id}
-                status={form.status}
-                signupCount={form.signupCount}
-              />
-            )}
-            {canCancel && (
-              <CancelEventButton formId={form.id} />
+      {/* The form's name and day, with its actions. */}
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold">{form.name}</h1>
+            <PhaseBadge phase={phase} />
+            {!form.listed && (
+              <Badge variant="outline" title="Share its link with volunteers">
+                Not on the home page
+              </Badge>
             )}
           </div>
+          <p className="font-medium">{formatDay(form.day)}</p>
+          {phase === "cancelled" && <p className="text-sm text-muted-foreground">{phaseNote(phase, form)}</p>}
+          <QuestionsNote questions={form} />
         </div>
 
-        {form.description && <p className="whitespace-pre-line">{form.description}</p>}
-        <QuestionsNote questions={form} />
+        <div className="flex flex-wrap items-start gap-2">
+          {form.status === "PUBLISHED" && <ShareDialog path={`/signup/${form.id}`} />}
+          {editor && form.status !== "CANCELLED" && (
+            <Link
+              href={`/admin/forms/${form.id}/edit`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              Edit form
+            </Link>
+          )}
+          {editor && <StatusActions formId={form.id} status={form.status} signupCount={form.signupCount} />}
+          {canCancel && <CancelEventButton formId={form.id} />}
+        </div>
+      </header>
+
+      {/* The tabs, set apart from the header, with the open tab below. */}
+      <div className="flex flex-col gap-6 border-t pt-6">
         <FormTabs
           formId={form.id}
           confirming={form.confirming}
@@ -102,9 +87,8 @@ export default async function SignupFormLayout({
           waitingCount={form.waitingCount}
           waitlist={form.waitlist}
         />
+        {children}
       </div>
-
-      {children}
     </div>
   );
 }

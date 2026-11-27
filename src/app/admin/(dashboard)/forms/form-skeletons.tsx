@@ -4,10 +4,11 @@ import { LinesSkeleton, PillSkeleton } from "../skeletons";
 // Skeletons of the signup form pages, for their loading.tsx files.
 
 // The top of a form's page (see [formId]/(tabs)/layout.tsx): back pill,
-// name and badge, day, notes, action pills, then the tabs.
-export function FormHeaderSkeleton() {
+// name and badge, day, action pills, then the tabs below a line. children
+// is the open tab's skeleton.
+export function FormHeaderSkeleton({ children }: { children?: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <PillSkeleton className="w-32" />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-2">
@@ -16,8 +17,6 @@ export function FormHeaderSkeleton() {
             <Skeleton className="h-5 w-16 rounded-full" />
           </div>
           <Skeleton className="h-5 w-48" />
-          <Skeleton className="h-4 w-72 max-w-full" />
-          <Skeleton className="h-4 w-60 max-w-full" />
         </div>
         <div className="flex gap-2">
           <PillSkeleton className="w-20" />
@@ -25,7 +24,10 @@ export function FormHeaderSkeleton() {
           <PillSkeleton className="w-20" />
         </div>
       </div>
-      <Skeleton className="h-9 w-96 max-w-full rounded-full" />
+      <div className="flex flex-col gap-6 border-t pt-6">
+        <Skeleton className="h-9 w-96 max-w-full rounded-full" />
+        {children}
+      </div>
     </div>
   );
 }
