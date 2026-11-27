@@ -26,6 +26,7 @@ import {
 import { saveAssignments } from "@/lib/signup-forms/assignment-actions";
 import { NO_SHOW, type Attendance } from "@/lib/signup-forms/attendance";
 import { removeAdded, saveAttendance } from "@/lib/signup-forms/attendance-actions";
+import { AddVolunteer } from "./add-volunteer";
 
 export type BoardBuild = AssignmentBuild & { time: string };
 
@@ -182,13 +183,11 @@ export function AssignmentBoard({
       {!readOnly && (
         <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-background/95 px-1 py-2 backdrop-blur">
           <p className="text-sm text-muted-foreground">
-            {changed.length > 0
-              ? `${changed.length} ${changed.length === 1 ? "person" : "people"} moved. Not saved yet.`
-              : confirmed
-                ? "Use a person's Move menu to show where they went, or that they didn't come."
-                : "Use a person's Move menu to move them to another build."}
+            {changed.length > 0 &&
+              `${changed.length} ${changed.length === 1 ? "person" : "people"} moved. Not saved yet.`}
           </p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {confirmed && <AddVolunteer formId={formId} />}
             {changed.length > 0 && (
               <Button type="button" variant="outline" size="sm" onClick={() => setMoves({})} disabled={pending}>
                 Discard changes

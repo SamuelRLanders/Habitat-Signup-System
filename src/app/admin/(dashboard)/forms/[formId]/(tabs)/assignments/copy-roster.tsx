@@ -49,11 +49,9 @@ export function CopyRoster({ text, warnings }: { text: string | null; warnings: 
             </>
           )}
         </Button>
-        <p className="text-sm text-muted-foreground">
-          {text
-            ? "For Purdue: who's going to each build, who's driving, and who rides with them, from the saved assignments."
-            : "Nobody is going to a build yet, so there's no travel roster."}
-        </p>
+        {!text && (
+          <p className="text-sm text-muted-foreground">Nobody is going to a build yet, so there&apos;s no travel roster.</p>
+        )}
       </div>
       {text && warnings.length > 0 && (
         <ul className="flex flex-col gap-1 rounded-2xl border-l-4 border-gold bg-gold/15 px-4 py-3 text-sm">

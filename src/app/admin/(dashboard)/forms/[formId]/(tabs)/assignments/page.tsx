@@ -14,7 +14,6 @@ import { shiftTime } from "@/lib/signup-forms/queries";
 import { DEFAULT_TIME_ZONE, formatDateTime } from "@/lib/time";
 import { seatsLabel } from "@/lib/volunteers";
 import { formTitle, loadForm, loadFormPlan } from "../data";
-import { AddVolunteer } from "./add-volunteer";
 import { AssignmentBoard, type BoardVolunteer } from "./assignment-board";
 import { CopyRoster } from "./copy-roster";
 
@@ -108,7 +107,6 @@ export default async function AssignmentsPage({
         </div>
         {!readOnly && (
           <div className="flex flex-wrap gap-2">
-            {confirmed && <AddVolunteer formId={form.id} />}
             {confirmed && (form.attendanceConfirmedAt || anyAdded) && (
               <ActionButton
                 action={revertAttendance.bind(null, form.id)}
@@ -139,7 +137,8 @@ export default async function AssignmentsPage({
 
       <CopyRoster {...rosterFor(form, active, plan, custom)} />
 
-      {volunteers.length === 0 ? (
+      {/* A confirmed board shows even when empty, to add people who came. */}
+      {volunteers.length === 0 && !confirmed ? (
         <p className="text-muted-foreground">Nobody signed up or joined the waitlist through this form.</p>
       ) : (
         <AssignmentBoard
@@ -218,24 +217,17 @@ function PlannedNote({
 function ConfirmedNote({ form, readOnly }: { form: LoadedPlan["form"]; readOnly: boolean }) {
   return (
     <>
-      <p className="flex flex-wrap items-center gap-2 text-sm">
-        {form.attendanceConfirmedAt ? (
-          <>
-            <Badge>Confirmed</Badge>
-            Saved by {form.attendanceConfirmedByName ?? "an admin"} on{" "}
-            {formatDateTime(form.attendanceConfirmedAt, DEFAULT_TIME_ZONE)}.
-          </>
-        ) : (
-          <>
-            <Badge variant="secondary">Not confirmed yet</Badge>
-            The planned assignments, as they were when the first build started.
-          </>
-        )}
+      <p className="text-sm text-muted-foreground">
+        {form.attendanceConfirmedAt
+          ? `Last saved by ${form.attendanceConfirmedByName ?? "an admin"} on ${formatDateTime(form.attendanceConfirmedAt, DEFAULT_TIME_ZONE)}.`
+          : form.assignmentsSavedAt
+            ? `These are the custom assignments ${form.assignmentsSavedByName ?? "an admin"} saved before the first build—they haven't been modified since.`
+            : "These are assignments made by the algorithm—they haven't been modified."}
       </p>
       <p className="text-sm text-muted-foreground">
         {readOnly
           ? "Who went where, for the Data page. As a viewer, you can't change them."
-          : "Move people to show who actually went where, for the Data page: anyone who didn't come and didn't cancel goes in No-shows, and anyone who came without signing up can be added. Nobody is emailed."}
+          : "Move people to show who actually went where, for the Data page: anyone who didn't come and didn't cancel goes in No-shows, and anyone who came without signing up can be added."}
       </p>
     </>
   );
