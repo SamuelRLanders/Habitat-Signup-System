@@ -23,6 +23,8 @@ type ActionButtonProps = {
   label: string;
   variant?: Variant;
   size?: "default" | "sm";
+  // An icon before the label, such as <RotateCcwIcon data-icon="inline-start" />.
+  icon?: React.ReactNode;
   // When set, asks for confirmation in a dialog before running the action.
   // An action that sends email has to say who will get one.
   confirm?: {
@@ -46,12 +48,14 @@ function DirectButton({
   label,
   variant = "outline",
   size = "sm",
+  icon,
 }: Omit<ActionButtonProps, "confirm">) {
   const [state, formAction, pending] = useActionState(action, {});
 
   return (
     <form action={formAction} className="flex flex-col items-end gap-1">
       <Button type="submit" variant={variant} size={size} loading={pending}>
+        {!pending && icon}
         {label}
       </Button>
       {state.error && (
@@ -68,6 +72,7 @@ function ConfirmButton({
   label,
   variant = "outline",
   size = "sm",
+  icon,
   confirm,
 }: ActionButtonProps & { confirm: NonNullable<ActionButtonProps["confirm"]> }) {
   const [open, setOpen] = useState(false);
@@ -75,6 +80,7 @@ function ConfirmButton({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={<Button variant={variant} size={size} />}>
+        {icon}
         {label}
       </DialogTrigger>
       <DialogContent>

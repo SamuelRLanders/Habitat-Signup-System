@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangleIcon } from "lucide-react";
+import { AlertTriangleIcon, RotateCcwIcon } from "lucide-react";
 import { cn } from "cn";
 import { ActionButton } from "@/components/action-button";
 import { useState, useTransition } from "react";
@@ -206,6 +206,7 @@ export function AssignmentBoard({
                 <ActionButton
                   action={(confirmed ? revertAttendance : revertAssignments).bind(null, formId)}
                   label={confirmed ? "Revert to planned" : "Revert to default"}
+                  icon={<RotateCcwIcon data-icon="inline-start" />}
                   confirm={
                     confirmed
                       ? {
