@@ -189,7 +189,8 @@ function ShiftPlan({
   );
 }
 
-// "Reserved for: Jane Doe (signed up), Sam Lee (not signed up yet)".
+// "Reserved for: jdoe@purdue.edu (signed up), slee@purdue.edu (not signed
+// up yet)".
 function ReservedHere({ reservations }: { reservations: LoadedPlan["reservations"] }) {
   if (reservations.length === 0) return null;
   return (
@@ -198,7 +199,7 @@ function ReservedHere({ reservations }: { reservations: LoadedPlan["reservations
       {reservations
         .map(
           (reservation) =>
-            `${reservation.firstName} ${reservation.lastName} (${reservation.signupId ? "signed up" : "not signed up yet"})`,
+            `${reservation.email} (${reservation.signupId ? "signed up" : "not signed up yet"})`,
         )
         .join(", ")}
     </p>

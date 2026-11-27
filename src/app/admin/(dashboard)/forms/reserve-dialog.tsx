@@ -20,19 +20,17 @@ import { searchToReserve, type ReserveCandidate } from "@/lib/reservations/actio
 import { isVolunteerEmail, PURDUE_EMAIL_DOMAIN } from "@/lib/volunteers";
 import { VolunteerSearch } from "../volunteer-search";
 
-// A volunteer a spot is reserved for, in the form editor.
+// A volunteer a spot is reserved for, in the form editor, by email.
 export type ReservedSpot = {
   email: string;
-  firstName: string;
-  lastName: string;
   // They've signed up with it, so it can't be removed or moved here: it's
   // released if they cancel.
   signedUp: boolean;
 };
 
 // The "Reserve a spot" pill on a build in the form editor: finding the
-// volunteer to reserve it for, or entering the name and Purdue email of
-// someone who has never signed up. The spot is saved with the form.
+// volunteer to reserve it for, or entering the Purdue email of someone who
+// has never signed up. The spot is saved with the form.
 // reservedEmails are everyone with a spot on the form already, who can't
 // have another; on a saved form (formId), nor can anyone signed up on it.
 export function ReserveDialog({
@@ -109,18 +107,11 @@ function ReserveForm({
   function reserveFound() {
     const match = selected ? found.current.get(selected) : undefined;
     if (!match) return;
-    onReserve({ email: match.email, firstName: match.firstName, lastName: match.lastName, signedUp: false });
+    onReserve({ email: match.email, signedUp: false });
   }
 
   function reserveTyped(formData: FormData) {
-    const value = (name: string) => String(formData.get(name) ?? "").trim();
-    const spot = {
-      firstName: value("reserveFirstName"),
-      lastName: value("reserveLastName"),
-      email: value("reserveEmail").toLowerCase(),
-      signedUp: false,
-    };
-    if (!spot.firstName || !spot.lastName) return setError("Enter their first and last name.");
+    const spot = { email: String(formData.get("reserveEmail") ?? "").trim().toLowerCase(), signedUp: false };
     if (!/^[^\s@]+@[^\s@]+$/.test(spot.email) || !isVolunteerEmail(spot.email)) {
       return setError(`Enter their ${PURDUE_EMAIL_DOMAIN} email.`);
     }
@@ -140,16 +131,6 @@ function ReserveForm({
           reserveTyped(fieldsOf(event.currentTarget));
         }}
       >
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="reserve-first">First name</Label>
-            <Input id="reserve-first" name="reserveFirstName" autoComplete="off" autoFocus maxLength={100} />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="reserve-last">Last name</Label>
-            <Input id="reserve-last" name="reserveLastName" autoComplete="off" maxLength={100} />
-          </div>
-        </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="reserve-email">Purdue email</Label>
           <Input
@@ -157,6 +138,7 @@ function ReserveForm({
             name="reserveEmail"
             type="email"
             autoComplete="off"
+            autoFocus
             maxLength={254}
             placeholder={`name${PURDUE_EMAIL_DOMAIN}`}
           />
@@ -196,7 +178,7 @@ function ReserveForm({
           }}
           className="w-fit text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
         >
-          Not found? Enter their name and email
+          Not found? Enter their email
         </button>
       </div>
       <DialogFooter>

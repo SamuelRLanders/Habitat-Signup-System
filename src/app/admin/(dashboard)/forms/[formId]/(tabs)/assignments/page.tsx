@@ -134,7 +134,6 @@ export default async function AssignmentsPage({
                   .filter((reservation) => !reservation.signupId)
                   .map((reservation) => ({
                     id: reservation.id,
-                    name: `${reservation.firstName} ${reservation.lastName}`,
                     email: reservation.email,
                     buildId: reservation.shiftId,
                     known: reservation.known,

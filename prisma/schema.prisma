@@ -465,7 +465,7 @@ model FormSignup {
 // A spot an editor reserved at a build for a named volunteer, in the form
 // editor. It comes out of the build's spots, so general volunteers get the
 // rest (src/lib/placement/load.ts). The volunteer is named by their Purdue
-// email, so they needn't have signed up before; the name is the editor's.
+// email, so they needn't have signed up before.
 // Once the form is published they can sign up for it, even before the form
 // opens, and are placed at that build whatever the placement rules say
 // (signup is then their signup). After the form closes, editors add them on
@@ -474,8 +474,6 @@ model FormSignup {
 model Reservation {
   id            String   @id @default(cuid())
   email         String // lowercased
-  firstName     String
-  lastName      String
   createdAt     DateTime @default(now())
   // The editor who reserved it, copied as on SignupForm.
   createdByName String

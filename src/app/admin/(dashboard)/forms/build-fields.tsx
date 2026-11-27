@@ -151,9 +151,7 @@ export function BuildFields({
             <input
               type="hidden"
               name="buildReservations"
-              value={JSON.stringify(
-                build.reservations.map(({ email, firstName, lastName }) => ({ email, firstName, lastName })),
-              )}
+              value={JSON.stringify(build.reservations.map(({ email }) => ({ email })))}
             />
 
             <div className="flex items-center justify-between gap-2">
@@ -392,15 +390,9 @@ function Reservations({
           {spots.map((spot) => (
             <li
               key={spot.email}
-              title={spot.email}
               className="flex items-center gap-1.5 rounded-full py-1 pr-1 pl-3 text-sm ring-1 ring-foreground/10"
             >
-              <span className="flex flex-col leading-tight">
-                <span className="font-medium">
-                  {spot.firstName} {spot.lastName}
-                </span>
-                <span className="text-xs text-muted-foreground">{spot.email}</span>
-              </span>
+              <span className="font-medium">{spot.email}</span>
               {spot.signedUp ? (
                 <Badge variant="secondary" className="mr-1">
                   Signed up
@@ -412,7 +404,7 @@ function Reservations({
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => onChange(spots.filter((other) => other.email !== spot.email))}
-                    aria-label={`Remove ${spot.firstName} ${spot.lastName}'s reserved spot`}
+                    aria-label={`Remove the reserved spot for ${spot.email}`}
                   >
                     <XIcon />
                   </Button>

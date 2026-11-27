@@ -8,8 +8,6 @@ import { prisma } from "@/lib/prisma";
 
 type Db = typeof prisma | Prisma.TransactionClient;
 
-const fullName = (reservation: ReservationInput) => `${reservation.firstName} ${reservation.lastName}`;
-
 // Problems with the reserved spots, by build position, or null:
 //   - A volunteer can only be at one form a day, so they can't have a
 //     reserved spot here if they have one on another of the day's forms or
@@ -49,7 +47,7 @@ export async function reservationConflicts(
   const errors: Record<number, BuildErrors> = {};
   builds.forEach((build, index) => {
     const conflict = build.reservations.find((reservation) => problems.has(reservation.email));
-    if (conflict) errors[index] = { reservations: `${fullName(conflict)} ${problems.get(conflict.email)}` };
+    if (conflict) errors[index] = { reservations: `${conflict.email} ${problems.get(conflict.email)}` };
   });
   return Object.keys(errors).length > 0 ? errors : null;
 }
@@ -145,7 +143,7 @@ export async function saveReservations(
     if (byEmail.has(email)) continue;
     if (options.locked) problem(LOCKED);
     if (signedUp.has(email)) {
-      throw new ReservationProblem("", { [index]: { reservations: `${fullName(reservation)} ${signedUp.get(email)}` } });
+      throw new ReservationProblem("", { [index]: { reservations: `${email} ${signedUp.get(email)}` } });
     }
     if (builds[index].cancelled) {
       throw new ReservationProblem("", {

@@ -45,10 +45,10 @@ export async function addReserved(formId: string, reservationId: string): Promis
     }
     const reservation = await tx.reservation.findFirst({
       where: { id: reservationId, formId, signupId: null, shift: { cancelledAt: null } },
-      select: { id: true, email: true, firstName: true, lastName: true, shiftId: true },
+      select: { id: true, email: true, shiftId: true },
     });
     if (!reservation) return { error: "This reserved spot has changed. Refresh the page." };
-    const name = `${reservation.firstName} ${reservation.lastName}`;
+    const name = reservation.email;
 
     const volunteer = await tx.volunteer.findUnique({
       where: { email: reservation.email },
@@ -120,8 +120,6 @@ export type ReserveCandidate = {
   id: string;
   name: string;
   email: string;
-  firstName: string;
-  lastName: string;
   blocked: string | null;
 };
 
@@ -156,9 +154,9 @@ export async function searchToReserve(
     },
   });
   return {
-    matches: volunteers.slice(0, CANDIDATE_LIMIT).map(({ signups: [signup], ...volunteer }) => ({
+    matches: volunteers.slice(0, CANDIDATE_LIMIT).map(({ signups: [signup], firstName, lastName, ...volunteer }) => ({
       ...volunteer,
-      name: `${volunteer.firstName} ${volunteer.lastName}`,
+      name: `${firstName} ${lastName}`,
       blocked: signup ? sentence(signup.waitlistedAt ? ALREADY_WAITING : ALREADY_SIGNED_UP) : null,
     })),
     more: volunteers.length > CANDIDATE_LIMIT,

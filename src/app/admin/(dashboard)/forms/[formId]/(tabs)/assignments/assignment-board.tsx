@@ -57,7 +57,7 @@ export type BoardVolunteer = AssignmentVolunteer & {
 // A spot reserved at a build for a volunteer who hasn't signed up with it
 // (see Reservation). known: they've signed up for something before, so the
 // app has their details to add them.
-export type BoardReservation = { id: string; name: string; email: string; buildId: string; known: boolean };
+export type BoardReservation = { id: string; email: string; buildId: string; known: boolean };
 
 // The columns for volunteers who aren't at any build: signed up but not
 // placed, waiting, and (on the confirmed assignments) no-shows.
@@ -514,13 +514,10 @@ function ReservedCard({
   pending: boolean;
 }) {
   return (
-    <li
-      title={reservation.email}
-      className="flex items-start gap-2 rounded-lg border border-dashed p-2 text-sm text-muted-foreground"
-    >
+    <li className="flex items-start gap-2 rounded-lg border border-dashed p-2 text-sm text-muted-foreground">
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex flex-wrap items-center gap-1.5 font-medium">
-          {reservation.name}
+        <span className="flex flex-wrap items-center gap-1.5 font-medium break-all">
+          {reservation.email}
           <Badge variant="outline">Reserved</Badge>
         </span>
         <span className="text-xs">

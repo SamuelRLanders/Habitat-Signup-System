@@ -33,7 +33,7 @@ export default async function EditSignupFormPage({
           _count: { select: { preferences: true } },
           reservations: {
             orderBy: { createdAt: "asc" },
-            select: { email: true, firstName: true, lastName: true, signupId: true },
+            select: { email: true, signupId: true },
           },
         },
       },

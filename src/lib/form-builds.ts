@@ -12,13 +12,8 @@ import { firstErrors } from "@/lib/forms";
 export const MAX_BUILDS = 30;
 const MAX_SPOTS = 500;
 
-// A volunteer a spot is reserved for: their Purdue email, and their name as
-// the editor gave it.
-const reservationSchema = z.object({
-  email: groupEmailSchema,
-  firstName: z.string().trim().min(1, "Enter their first name.").max(100, "Keep the name under 100 characters."),
-  lastName: z.string().trim().min(1, "Enter their last name.").max(100, "Keep the name under 100 characters."),
-});
+// A volunteer a spot is reserved for, by their Purdue email.
+const reservationSchema = z.object({ email: groupEmailSchema });
 
 export type ReservationInput = z.output<typeof reservationSchema>;
 
@@ -124,7 +119,7 @@ export function parseBuilds(formData: FormData) {
       if (reserved.has(reservation.email)) {
         errors[index] = {
           ...errors[index],
-          reservations: `${reservation.firstName} ${reservation.lastName} has more than one reserved spot on this form.`,
+          reservations: `${reservation.email} has more than one reserved spot on this form.`,
         };
       }
       reserved.add(reservation.email);

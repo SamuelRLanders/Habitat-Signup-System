@@ -46,7 +46,7 @@ export const loadFormPlan = cache(async (formId: string) => {
   const reservations = await prisma.reservation.findMany({
     where: { formId, shiftId: { in: form.shifts.map((shift) => shift.id) } },
     orderBy: { createdAt: "asc" },
-    select: { id: true, email: true, firstName: true, lastName: true, shiftId: true, signupId: true },
+    select: { id: true, email: true, shiftId: true, signupId: true },
   });
   const known = new Set(
     (
