@@ -14,6 +14,7 @@ import { cancelSignup, submitSignup } from "@/lib/form-signups/actions";
 import {
   cancelDeadline,
   getAskedToGroupWith,
+  getMyReservation,
   getMySignup,
   sameDayMessage,
   sameDaySignup,
@@ -24,6 +25,7 @@ import { formatPhone } from "@/lib/phone";
 import { loadPlacementDay } from "@/lib/placement/load";
 import type { BuildRoom } from "@/lib/placement/room";
 import { buildRoom } from "@/lib/placement/solver";
+import { MIN_CAR_SEATS } from "@/lib/volunteers";
 import { prisma } from "@/lib/prisma";
 import type { FormPhase } from "@/lib/signup-forms/phase";
 import { shiftLabel, shiftTime, type OfferedShift } from "@/lib/signup-forms/queries";
@@ -46,7 +48,8 @@ type SignupAreaProps = {
     sections: { id: string; title: string; body: string }[];
   };
   phase: FormPhase;
-  // On a closed form, show signing in to cancel without its button first.
+  // On a closed form, or one not open yet, show signing in without its
+  // button first.
   startOpen?: boolean;
 };
 
@@ -57,10 +60,13 @@ type SignupAreaProps = {
 // can sign up. After it closes, volunteers who signed up can still see and
 // cancel their signup until the day's first build starts; signing in for
 // that is behind a button, since most visitors to a closed form aren't
-// signed up.
+// signed up. Before it opens, volunteers with a reserved spot (see
+// Reservation) can sign in, also behind a button, and sign up for it. With
+// a reserved spot, the form offers only its build, which always has room.
 export async function SignupArea({ form, phase, startOpen = false }: SignupAreaProps) {
   const canCancel = new Date() < cancelDeadline(form.day, form.shifts);
-  if (phase !== "open" && !(phase === "closed" && canCancel)) return null;
+  const early = phase === "not-open";
+  if (phase !== "open" && !early && !(phase === "closed" && canCancel)) return null;
   const open = phase === "open";
 
   const email = await getVerifiedEmail();
@@ -77,7 +83,9 @@ export async function SignupArea({ form, phase, startOpen = false }: SignupAreaP
         emailHint={
           open
             ? "Use your @purdue.edu email. It's how we match you to Purdue's records, such as its approved driver list."
-            : "Use the @purdue.edu email you signed up with."
+            : early
+              ? "Use the @purdue.edu email your spot was reserved for."
+              : "Use the @purdue.edu email you signed up with."
         }
       />
     );
@@ -90,12 +98,18 @@ export async function SignupArea({ form, phase, startOpen = false }: SignupAreaP
       </Panel>
     ) : (
       <Panel>
-        <Reveal label="Cancel your signup if you signed up for this build" startOpen={startOpen}>
+        <Reveal
+          label={early ? "Have a reserved spot? Sign in to sign up early" : "Cancel your signup if you signed up for this build"}
+          startOpen={startOpen}
+        >
           <div className="flex flex-col gap-1">
-            <h2 className="text-lg font-semibold">Sign in to see your signup</h2>
+            <h2 className="text-lg font-semibold">
+              {early ? "Sign in to use your reserved spot" : "Sign in to see your signup"}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              Confirm your email address to see your signup and cancel it if
-              you need to. We&apos;ll send you a 6-digit code.
+              {early
+                ? "If an organizer reserved a spot for you, you can sign up for it now. Confirm your email address first: we'll send you a 6-digit code."
+                : "Confirm your email address to see your signup and cancel it if you need to. We'll send you a 6-digit code."}
             </p>
           </div>
           {signIn}
@@ -106,13 +120,17 @@ export async function SignupArea({ form, phase, startOpen = false }: SignupAreaP
 
   const mine = await getMySignup(form.id, email);
   const active = mine?.signup && !mine.signup.cancelledAt ? mine.signup : null;
+  // The build where a spot is reserved for them, if any.
+  const reservation = await getMyReservation(prisma, form.id, email, form.shifts);
+  const reservedBuild = reservation && form.shifts.find((shift) => shift.id === reservation.shiftId)!;
   // On a day with more than one build, volunteers can ask to be placed with
   // friends (src/lib/placement), unless the form doesn't ask. Who has
   // already asked for them:
   const grouping = form.askGroups && form.shifts.length > 1;
   const askedBy = grouping ? await getAskedToGroupWith(form.id, email) : [];
   // A volunteer can only be signed up on one of a day's forms.
-  const sameDay = open && !active ? await sameDaySignup(prisma, form.id, form.date, email) : null;
+  const sameDay =
+    (open || (early && reservedBuild)) && !active ? await sameDaySignup(prisma, form.id, form.date, email) : null;
 
   let content;
   if (active) {
@@ -122,6 +140,7 @@ export async function SignupArea({ form, phase, startOpen = false }: SignupAreaP
       <Panel title="Your signup">
         <Summary
           waiting={waiting}
+          reserved={reservation?.signupId === active.id ? reservedBuild : null}
           open={open}
           email={email}
           details={mine!.details}
@@ -145,7 +164,13 @@ export async function SignupArea({ form, phase, startOpen = false }: SignupAreaP
             variant="outline"
             size="default"
             confirm={
-              waiting
+              reservation?.signupId === active.id
+                ? {
+                    title: "Cancel your signup?",
+                    description: `You'll be taken off the list for ${day}, and your reserved spot will go to someone else. ${open ? "You can sign up again while the form is open, if there's still room." : early ? "You can sign up again once the form opens, if there's still room." : "The form has closed, so you won't be able to sign up again."}`,
+                    confirmLabel: "Cancel signup",
+                  }
+                : waiting
                 ? {
                     title: "Leave the waitlist?",
                     description: open
@@ -165,7 +190,15 @@ export async function SignupArea({ form, phase, startOpen = false }: SignupAreaP
         </div>
       </Panel>
     );
-  } else if (!open) {
+  } else if (early && !reservedBuild) {
+    content = (
+      <Panel title="Signups aren't open yet">
+        <p className="text-sm text-muted-foreground">
+          We don&apos;t have a reserved spot for {email} on this day. Come back once signups open to sign up.
+        </p>
+      </Panel>
+    );
+  } else if (!open && !early) {
     content = mine?.signup ? (
       <Cancelled>The form has closed, so you can&apos;t sign up again.</Cancelled>
     ) : (
@@ -187,6 +220,31 @@ export async function SignupArea({ form, phase, startOpen = false }: SignupAreaP
           .
         </p>
       </Panel>
+    );
+  } else if (reservedBuild) {
+    // Their reserved spot is the only build offered, and always has room.
+    const room = { rider: true, ownWay: true, driverMinSeats: MIN_CAR_SEATS };
+    content = (
+      <>
+        {mine?.signup?.cancelledAt && <Cancelled>You can sign up again below.</Cancelled>}
+        <Panel>
+          <p role="status" className="rounded-2xl border-l-4 border-gold bg-gold/15 px-4 py-3 text-sm font-medium">
+            A spot is held for you at {reservedBuild.name} ({shiftTime(reservedBuild)}). Sign up below to take it.
+          </p>
+        </Panel>
+        <SignupFields
+          action={submitSignup.bind(null, form.id)}
+          sections={form.sections}
+          builds={[toChoice(reservedBuild, room)]}
+          defaults={mine ? toDefaults(mine.details) : null}
+          driver={mine?.driver ?? { status: "none" }}
+          savedCarSeats={mine?.carSeats ?? null}
+          askTransportation={form.askTransportation}
+          grouping={grouping ? { askedBy: askedBy.map((asker) => asker.name) } : null}
+          waitlist={false}
+          reserved
+        />
+      </>
     );
   } else {
     // Who each build has room for, given everyone already signed up.
@@ -289,6 +347,7 @@ function SignedIn({ email }: { email: string }) {
 
 function Summary({
   waiting,
+  reserved,
   open,
   email,
   details,
@@ -301,6 +360,8 @@ function Summary({
 }: {
   // On the waitlist rather than signed up.
   waiting: boolean;
+  // The build of the reserved spot they signed up with.
+  reserved: OfferedShift | null;
   // The form is still open.
   open: boolean;
   email: string;
@@ -333,7 +394,9 @@ function Summary({
           {waiting ? "You're on the waitlist" : "You're signed up"}
         </h3>
         <p className="text-sm text-muted-foreground">
-          {!waiting
+          {reserved
+            ? `Your spot at ${reserved.name} was reserved for you.`
+            : !waiting
             ? `We'll email ${email} to let you know which build you're placed at.`
             : open
               ? "You're not placed at a build yet. If someone cancels, you'll be added automatically and contacted."
@@ -366,7 +429,9 @@ function Summary({
       </dl>
 
       <div className="flex flex-col gap-2 text-sm">
-        <p className="font-medium">{waiting ? "Builds you're waiting for" : "Builds you could work at"}</p>
+        <p className="font-medium">
+          {reserved ? "Your build" : waiting ? "Builds you're waiting for" : "Builds you could work at"}
+        </p>
         {chosenShifts.length === 0 ? (
           <p className="text-muted-foreground">
             None of the builds you chose are still scheduled. Cancel your

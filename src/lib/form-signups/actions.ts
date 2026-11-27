@@ -23,7 +23,7 @@ import {
   type SignupField,
 } from "./details";
 import { alertAdminsOfCancellation } from "./closed-cancellation";
-import { cancelDeadline, sameDayMessage, sameDaySignup } from "./queries";
+import { cancelDeadline, getMyReservation, sameDayMessage, sameDaySignup } from "./queries";
 import { fillFromWaitlist } from "./waitlist";
 
 // Volunteers signing up through a form and cancelling their signup. A
@@ -31,7 +31,9 @@ import { fillFromWaitlist } from "./waitlist";
 // to change it, they cancel and sign up again. Anyone can post to these,
 // so everything is checked here: the confirmed email comes from the
 // session cookie, never the form, and the form has to be open (or, to
-// cancel, its first build not started).
+// cancel, its first build not started). A volunteer with a reserved spot
+// (see Reservation) can sign up as soon as the form is published, for that
+// build only, and is always taken.
 
 export type SignupFormState = {
   errors?: Partial<Record<SignupField | "form", string>>;
@@ -74,7 +76,8 @@ async function loadForm(formId: string) {
 // ("waitlistShiftId"), but not both: with room somewhere they're simply
 // signed up there. Signing up again after cancelling counts as a new
 // signup, but someone already signed up (or waiting) can't sign up again
-// over it.
+// over it. With a reserved spot, the builds sent are ignored: they sign up
+// for its build.
 export async function submitSignup(
   formId: string,
   _prev: SignupFormState,
@@ -84,15 +87,17 @@ export async function submitSignup(
   if (!email) return { errors: { form: SESSION_EXPIRED } };
 
   const form = await loadForm(formId);
-  if (!form || formPhase(form) !== "open") {
+  const reserved = form && (await getMyReservation(prisma, formId, email, form.shifts));
+  const phase = form && formPhase(form);
+  if (!form || !(phase === "open" || (phase === "not-open" && reserved))) {
     return { errors: { form: "This form isn't taking signups right now. Refresh the page to see why." } };
   }
 
   // ── Check the answers.
   const values = formValues(formData);
   const parsed = detailsSchema.safeParse(values);
-  const shiftIds = [...new Set(formData.getAll("shiftId").map(String))];
-  const waitlistIds = [...new Set(formData.getAll("waitlistShiftId").map(String))];
+  const shiftIds = reserved ? [reserved.shiftId] : [...new Set(formData.getAll("shiftId").map(String))];
+  const waitlistIds = reserved ? [] : [...new Set(formData.getAll("waitlistShiftId").map(String))];
   const joining = waitlistIds.length > 0;
   const errors: SignupFormState["errors"] = parsed.success ? {} : firstErrors(parsed.error);
   if (shiftIds.length === 0 && !joining) errors.shifts = "Choose at least one build you could work at.";
@@ -204,14 +209,21 @@ export async function submitSignup(
         });
         if (active) return { outcome: "already" as const };
 
+        // An editor may have reserved or removed their spot since the page
+        // loaded.
+        const held = await getMyReservation(tx, formId, email, form.shifts);
+        if (held?.shiftId !== reserved?.shiftId || (held?.signupId ?? null) !== null) {
+          return { outcome: "reservation" as const };
+        }
+
         // A day can have several forms, but a volunteer can only be at one.
         const sameDay = await sameDaySignup(tx, formId, form.date, email);
         if (sameDay) return { outcome: "same-day" as const, formName: sameDay.name };
 
         // There has to be a way to place everyone at a build they chose,
         // them included, with a ride for everyone who needs one. Anyone can
-        // join a waitlist.
-        if (!joining) {
+        // join a waitlist, and a reserved spot is always theirs.
+        if (!joining && !held) {
           const day = await loadPlacementDay(tx, formId, form.shifts, asksTransportation);
           if (!signupChecker(day)(newcomer)) {
             return { outcome: "full" as const, rooms: Object.fromEntries(buildRoom(day)) };
@@ -255,6 +267,7 @@ export async function submitSignup(
         await tx.groupRequest.createMany({
           data: [...groupEmails].map((friend) => ({ signupId: signup.id, email: friend })),
         });
+        if (held) await tx.reservation.update({ where: { id: held.id }, data: { signupId: signup.id } });
 
         // Room may have opened up that nobody has been added to yet, such
         // as from a build that was restored. Going through the waitlist in
@@ -291,6 +304,14 @@ export async function submitSignup(
       },
     };
   }
+  if (result.outcome === "reservation") {
+    revalidateSignup(formId);
+    return {
+      errors: {
+        form: "Your reserved spot was just changed. Refresh the page to see it. Your answers will need to be re-entered.",
+      },
+    };
+  }
   if (result.outcome === "no-waitlist") {
     revalidateSignup(formId);
     return {
@@ -323,9 +344,11 @@ export async function cancelSignup(formId: string): Promise<ActionState> {
   const email = await getVerifiedEmail();
   if (!email) return { error: SESSION_EXPIRED };
 
+  // Someone with a reserved spot can sign up, and so cancel, before the
+  // form opens.
   const form = await loadForm(formId);
   const now = new Date();
-  if (!form || now < form.opensAt || now >= cancelDeadline(form.day, form.shifts)) {
+  if (!form || now >= cancelDeadline(form.day, form.shifts)) {
     return { error: "Signups for this day can't be cancelled here anymore. Please contact the organizers." };
   }
 
@@ -341,6 +364,8 @@ export async function cancelSignup(formId: string): Promise<ActionState> {
       });
       if (!signup) return null;
       await tx.formSignup.update({ where: { id: signup.id }, data: { cancelledAt: now } });
+      // A reserved spot they signed up with goes back to everyone.
+      await tx.reservation.deleteMany({ where: { signupId: signup.id } });
       // While the form is open, whoever's waiting can have their spot.
       if (!signup.waitlistedAt) await fillFromWaitlist(tx, formId);
       return signup;

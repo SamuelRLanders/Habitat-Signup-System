@@ -29,7 +29,8 @@ import {
 // Volunteers confirming their email address on a signup form. Only Purdue
 // emails can be used. Anyone can call these, so codes are only sent while a
 // form is open, or after it closes for cancelling until the day's first
-// shift. The same rate limits as admin sign-in apply, and codes stop once
+// shift, or before it opens to an email with a reserved spot on it (see
+// Reservation), which can sign up early. The same rate limits as admin sign-in apply, and codes stop once
 // the day's volunteer emails run out (VOLUNTEER_EMAIL_CAP).
 
 const NOT_PURDUE = `Use your Purdue email, ending in ${PURDUE_EMAIL_DOMAIN}.`;
@@ -56,7 +57,18 @@ export async function sendSignupCode(
       shifts: { where: offeredShifts.where, select: { startsAt: true } },
     },
   });
-  if (!form || !canUseForm(form)) {
+  if (form && formPhase(form) === "not-open") {
+    const reserved = await prisma.reservation.findUnique({
+      where: { formId_email: { formId, email } },
+      select: { shift: { select: { cancelledAt: true } } },
+    });
+    if (!reserved || reserved.shift.cancelledAt) {
+      return {
+        status: "error",
+        message: "There's no reserved spot for this email on this form. Come back once signups open.",
+      };
+    }
+  } else if (!form || !canUseForm(form)) {
     return {
       status: "error",
       message: "This form isn't taking signups right now. Refresh the page to see why.",

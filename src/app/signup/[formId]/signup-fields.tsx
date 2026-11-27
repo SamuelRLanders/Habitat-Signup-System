@@ -81,6 +81,8 @@ type SignupFieldsProps = {
   // Whether volunteers can join the waitlist for builds that are full for
   // them.
   waitlist: boolean;
+  // The one build is where a spot is reserved for them.
+  reserved?: boolean;
 };
 
 type Errors = Partial<Record<SignupField | "form", string>>;
@@ -127,6 +129,7 @@ export function SignupFields({
   askTransportation,
   grouping,
   waitlist,
+  reserved = false,
 }: SignupFieldsProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const [license, setLicense] = useState(defaults?.hasDriversLicense ?? null);
@@ -411,7 +414,7 @@ export function SignupFields({
     >
       {onlyBuild && (
         <section className="flex flex-col gap-1 rounded-3xl bg-muted/40 p-5 ring-1 ring-foreground/5 sm:p-6">
-          <p className="text-sm text-muted-foreground">The build</p>
+          <p className="text-sm text-muted-foreground">{reserved ? "Your reserved spot" : "The build"}</p>
           <h2 className="text-lg font-semibold">{onlyBuild.buildName}</h2>
           <p className="text-sm">
             {onlyBuild.time} · {onlyBuild.address}

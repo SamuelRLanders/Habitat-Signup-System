@@ -73,6 +73,23 @@ export async function getMySignup(formId: string, email: string) {
 
 export type MySignup = NonNullable<Awaited<ReturnType<typeof getMySignup>>>;
 
+// The build where a spot is reserved for this email on the form (see
+// Reservation), if the form still offers it, or null. Pass the transaction
+// client when signing up.
+export async function getMyReservation(
+  db: typeof prisma | Prisma.TransactionClient,
+  formId: string,
+  email: string,
+  offered: { id: string }[],
+) {
+  const reservation = await db.reservation.findUnique({
+    where: { formId_email: { formId, email } },
+    select: { id: true, shiftId: true, signupId: true },
+  });
+  if (!reservation || !offered.some((shift) => shift.id === reservation.shiftId)) return null;
+  return reservation;
+}
+
 // Volunteers signed up for this form who asked to be placed with this
 // email. One request is enough, so they don't need to be asked for back.
 export async function getAskedToGroupWith(formId: string, email: string) {
