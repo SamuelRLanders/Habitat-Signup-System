@@ -27,7 +27,7 @@ export default async function SignupFormPage({
 
   const loaded = await loadFormPlan(formId);
   if (!loaded) notFound();
-  const { form, active, custom, plan } = loaded;
+  const { form, active, custom, saved, plan } = loaded;
   const { phase } = form;
 
   // The emails of the volunteers going to each shift (by ID), A–Z, for
@@ -101,7 +101,7 @@ export default async function SignupFormPage({
                 </p>
               )}
               <ShiftPlan
-                custom={custom}
+                custom={saved}
                 build={plan.builds.get(shift.id)!}
                 pendingDrivers={plan.pendingDrivers.get(shift.id) ?? 0}
               />

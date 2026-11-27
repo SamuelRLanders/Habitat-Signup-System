@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { placementStored, savePastPlacements } from "@/lib/data/final-placement";
 import { getFormRoster } from "@/lib/form-signups/rosters";
 import { planForRoster } from "@/lib/placement/load";
 import { prisma } from "@/lib/prisma";
@@ -19,7 +20,12 @@ export const loadForm = cache(async (formId: string) => {
 // The form, everyone signed up, waiting or cancelled, and where those
 // signed up are going: a likely
 // placement (src/lib/placement), or admins' custom assignments once saved.
+// Once the day is over, it's the placement saved then (custom is still
+// whether admins made custom assignments; saved is whether either is
+// stored).
 export const loadFormPlan = cache(async (formId: string) => {
+  // So a day that's over shows the placement the Data page counts.
+  await savePastPlacements();
   const form = await loadForm(formId);
   if (!form) return null;
   const roster = await getFormRoster(form.id, form.day, form.shifts);
@@ -30,8 +36,9 @@ export const loadFormPlan = cache(async (formId: string) => {
     .sort((a, b) => a.waitlistedAt!.getTime() - b.waitlistedAt!.getTime());
   const cancelled = roster.filter((signup) => signup.cancelledAt);
   const custom = form.assignmentsSavedAt !== null;
-  const plan = planForRoster(form.shifts, active, form, custom);
-  return { form, active, waiting, cancelled, custom, plan };
+  const saved = placementStored(form);
+  const plan = planForRoster(form.shifts, active, form, saved);
+  return { form, active, waiting, cancelled, custom, saved, plan };
 });
 
 // "Volunteers: Delta Gamma build, Oct 24", for a tab's page title.

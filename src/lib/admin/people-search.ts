@@ -1,7 +1,7 @@
 import type { TShirtSize } from "@/generated/prisma/enums";
 import { T_SHIRT_SIZES } from "@/lib/volunteers";
 
-// The admin People page's search and filters. They live in the URL, so a
+// The Data page People tab's search and filters. They live in the URL, so a
 // search survives a refresh and the CSV download exports exactly what's on
 // screen. This file only reads and writes those URL options; the database
 // query is in queries.ts.
@@ -133,7 +133,7 @@ export function toQueryString(search: PeopleSearch) {
 
 export function peopleHref(search: PeopleSearch) {
   const query = toQueryString(search);
-  return query ? `/admin/people?${query}` : "/admin/people";
+  return query ? `/admin/data/people?${query}` : "/admin/data/people";
 }
 
 // The same search with no filters, back on page 1.

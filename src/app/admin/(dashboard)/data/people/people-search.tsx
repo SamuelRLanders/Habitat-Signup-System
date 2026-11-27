@@ -36,6 +36,7 @@ import {
   type SearchField,
   type YesNoFilter,
 } from "@/lib/admin/people-search";
+import { Group, Pill } from "../filter-parts";
 
 const PLACEHOLDERS: Record<SearchField, string> = {
   any: "Search by name, email, or phone",
@@ -299,24 +300,6 @@ function FiltersForm({
   );
 }
 
-function Group({
-  legend,
-  hint,
-  children,
-}: {
-  legend: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <fieldset className="flex flex-col gap-2">
-      <legend className="mb-2 text-sm font-medium">{legend}</legend>
-      <div className="flex flex-wrap items-center gap-1.5">{children}</div>
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-    </fieldset>
-  );
-}
-
 // Any / yes / no.
 function YesNoGroup({ filter, search }: { filter: YesNoFilter; search: PeopleSearch }) {
   const { label, yes, no } = YES_NO_FILTERS[filter];
@@ -327,35 +310,5 @@ function YesNoGroup({ filter, search }: { filter: YesNoFilter; search: PeopleSea
       <Pill type="radio" name={filter} value="yes" label={yes} defaultChecked={value === "yes"} />
       <Pill type="radio" name={filter} value="no" label={no} defaultChecked={value === "no"} />
     </Group>
-  );
-}
-
-// A checkbox or radio button drawn as a pill that fills in when chosen.
-function Pill({
-  type,
-  name,
-  value,
-  label,
-  defaultChecked,
-}: {
-  type: "checkbox" | "radio";
-  name: string;
-  value: string;
-  label: string;
-  defaultChecked: boolean;
-}) {
-  return (
-    <label className="cursor-pointer">
-      <input
-        type={type}
-        name={name}
-        value={value}
-        defaultChecked={defaultChecked}
-        className="peer sr-only"
-      />
-      <span className="flex h-7 items-center hover-gold rounded-full border border-border px-3 text-[0.8rem] font-medium transition-colors select-none hover:bg-muted peer-checked:border-primary peer-checked:bg-primary peer-checked:text-primary-foreground peer-checked:hover:bg-primary/80 peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50">
-        {label}
-      </span>
-    </label>
   );
 }

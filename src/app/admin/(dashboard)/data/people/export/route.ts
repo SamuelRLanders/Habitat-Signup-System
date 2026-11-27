@@ -2,13 +2,14 @@ import type { NextRequest } from "next/server";
 import { parsePeopleSearch } from "@/lib/admin/people-search";
 import { exportPeople } from "@/lib/admin/queries";
 import { getAdmin } from "@/lib/auth/dal";
+import { savePastPlacements } from "@/lib/data/final-placement";
 import { toCsv } from "@/lib/csv";
 import { DEFAULT_TIME_ZONE, toDateInput, toDay } from "@/lib/time";
 
-// Downloads every volunteer matching the People page's current search
-// (every page of it) as a CSV. Columns use the Volunteer table's names,
-// leaving out IDs. Details are each volunteer's latest; createdAt is when
-// they first signed up.
+// Downloads every volunteer matching the Data page People tab's current
+// search (every page of it), or everyone before a search, as a CSV.
+// Columns use the Volunteer table's names, leaving out IDs. Details are
+// each volunteer's latest; createdAt is when they first signed up.
 const HEADER = [
   "email",
   "firstName",
@@ -29,6 +30,8 @@ export async function GET(request: NextRequest) {
     return new Response("Sign in as an admin to download this file.", { status: 401 });
   }
 
+  // So builds are counted as on the rest of the Data page.
+  await savePastPlacements();
   const people = await exportPeople(parsePeopleSearch(request.nextUrl.searchParams));
   const rows = people.map((person) => [
     person.email,

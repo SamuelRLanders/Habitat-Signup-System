@@ -488,7 +488,7 @@ async function seed() {
 
   console.log(`
 Test data created. See it at ${SITE}/admin/forms and
-${SITE}/admin/people. Volunteers see published forms at ${SITE}/.
+${SITE}/admin/data. Volunteers see published forms at ${SITE}/.
 
 Signup forms:
   Sat, Oct 10   open; Maple and Cedar Lane, and Oak Avenue (cancelled,

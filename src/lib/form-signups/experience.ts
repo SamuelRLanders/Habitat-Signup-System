@@ -9,17 +9,20 @@ import { SIGNED_UP } from "./status";
 // days, plus any adjustment an admin made by editing the number
 // (Volunteer.buildsAdjustment). Attendance isn't taken, so a signup counts
 // unless it was cancelled, was only on the waitlist, its event was
-// cancelled, or admins saved custom
-// assignments that didn't place them at a build. Callers must run
-// requireAdmin() first.
+// cancelled, or the saved assignments (admins' custom ones, or the app's
+// placement saved after the day: src/lib/data/final-placement.ts) didn't
+// place them at a build. Callers must run requireAdmin() first.
 
 // A signup for an event day before this one that they went to, as far as
 // the app knows.
-function pastBuild(before: string): Prisma.FormSignupWhereInput {
+export function pastBuild(before: string): Prisma.FormSignupWhereInput {
   return {
     ...SIGNED_UP,
     form: { status: "PUBLISHED", date: { lt: fromDay(before) } },
-    OR: [{ form: { assignmentsSavedAt: null } }, { assignedShiftId: { not: null } }],
+    OR: [
+      { form: { assignmentsSavedAt: null, placementSavedAt: null } },
+      { assignedShiftId: { not: null } },
+    ],
   };
 }
 

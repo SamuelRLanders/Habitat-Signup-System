@@ -1,13 +1,13 @@
 "use client";
 
-import { CarIcon, ClipboardListIcon, ShieldIcon, UsersIcon } from "lucide-react";
+import { CarIcon, ChartColumnIcon, ClipboardListIcon, ShieldIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
 
 const tabs = [
   { href: "/admin/forms", label: "Forms", icon: ClipboardListIcon },
-  { href: "/admin/people", label: "People", icon: UsersIcon },
+  { href: "/admin/data", label: "Data", icon: ChartColumnIcon },
   { href: "/admin/drivers", label: "Drivers", icon: CarIcon },
 ];
 

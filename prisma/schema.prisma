@@ -244,6 +244,13 @@ model SignupForm {
   assignmentsSavedAt     DateTime?
   assignmentsSavedByName String?
 
+  // When the app saved where everyone went, once the event day was over
+  // (src/lib/data/final-placement.ts). From then on each signup's
+  // assignedShift is final: admins' custom assignments if they saved any,
+  // or else the app's placement as it was then. Attendance isn't taken, so
+  // the Data page counts everyone placed as having gone.
+  placementSavedAt DateTime?
+
   shifts   Shift[]
   sections FormSection[]
   signups  FormSignup[]
