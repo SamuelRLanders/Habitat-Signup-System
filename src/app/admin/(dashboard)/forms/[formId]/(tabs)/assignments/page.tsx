@@ -1,14 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { ActionButton } from "@/components/action-button";
 import { requireAdmin } from "@/lib/auth/dal";
 import { canEdit } from "@/lib/auth/roles";
 import { cancelDeadline } from "@/lib/form-signups/queries";
 import type { RosterSignup } from "@/lib/form-signups/rosters";
 import { travelOf, travelRosterFor } from "@/lib/placement/load";
-import { revertAssignments } from "@/lib/signup-forms/assignment-actions";
 import { NO_SHOW } from "@/lib/signup-forms/attendance";
-import { revertAttendance } from "@/lib/signup-forms/attendance-actions";
 import { shiftTime } from "@/lib/signup-forms/queries";
 import { DEFAULT_TIME_ZONE, formatDateTime } from "@/lib/time";
 import { seatsLabel } from "@/lib/volunteers";
@@ -96,41 +93,11 @@ export default async function AssignmentsPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex max-w-2xl flex-col gap-1">
-          {confirmed ? (
-            <ConfirmedNote form={form} readOnly={readOnly} />
-          ) : (
-            <PlannedNote form={form} custom={custom} readOnly={readOnly} anyWaiting={waiting.length > 0} />
-          )}
-        </div>
-        {!readOnly && (
-          <div className="flex flex-wrap gap-2">
-            {confirmed && (form.attendanceConfirmedAt || anyAdded) && (
-              <ActionButton
-                action={revertAttendance.bind(null, form.id)}
-                label="Revert to planned"
-                confirm={{
-                  title: "Revert to the planned assignments?",
-                  description:
-                    "Everyone goes back to the build they were planned for when the first build started, no-shows are cleared, and people you added are taken off. Anyone moved from the waitlist stays signed up, in Not placed. This can't be undone.",
-                  confirmLabel: "Revert",
-                }}
-              />
-            )}
-            {!confirmed && custom && (
-              <ActionButton
-                action={revertAssignments.bind(null, form.id)}
-                label="Revert to default"
-                confirm={{
-                  title: "Revert to the app's assignments?",
-                  description:
-                    "Your custom assignments are replaced by the app's placement. This can't be undone. Volunteers aren't emailed.",
-                  confirmLabel: "Revert",
-                }}
-              />
-            )}
-          </div>
+      <div className="flex max-w-2xl flex-col gap-1">
+        {confirmed ? (
+          <ConfirmedNote form={form} readOnly={readOnly} />
+        ) : (
+          <PlannedNote form={form} custom={custom} readOnly={readOnly} anyWaiting={waiting.length > 0} />
         )}
       </div>
 
@@ -154,6 +121,9 @@ export default async function AssignmentsPage({
           savedAt={savedAt}
           askTransportation={form.askTransportation}
           readOnly={readOnly}
+          // There's something to go back from: custom planned assignments,
+          // or confirmed ones that were saved or have people added.
+          revertable={confirmed ? form.attendanceConfirmedAt !== null || anyAdded : custom}
           roster={rosterFor(form, active, plan, custom)}
         />
       )}

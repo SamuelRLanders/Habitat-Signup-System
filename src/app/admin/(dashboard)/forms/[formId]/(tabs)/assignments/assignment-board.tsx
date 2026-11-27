@@ -2,6 +2,7 @@
 
 import { AlertTriangleIcon } from "lucide-react";
 import { cn } from "cn";
+import { ActionButton } from "@/components/action-button";
 import { useState, useTransition } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,9 +24,9 @@ import {
   type Assignments,
   type AssignmentVolunteer,
 } from "@/lib/placement/assignments";
-import { saveAssignments } from "@/lib/signup-forms/assignment-actions";
+import { revertAssignments, saveAssignments } from "@/lib/signup-forms/assignment-actions";
 import { NO_SHOW, type Attendance } from "@/lib/signup-forms/attendance";
-import { removeAdded, saveAttendance } from "@/lib/signup-forms/attendance-actions";
+import { removeAdded, revertAttendance, saveAttendance } from "@/lib/signup-forms/attendance-actions";
 import { AddVolunteer } from "./add-volunteer";
 import { CopyRosterButton, RosterWarnings, type Roster } from "./copy-roster";
 
@@ -77,6 +78,7 @@ export function AssignmentBoard({
   savedAt,
   askTransportation,
   readOnly,
+  revertable,
   roster,
 }: {
   formId: string;
@@ -90,6 +92,9 @@ export function AssignmentBoard({
   savedAt: string | null;
   askTransportation: boolean;
   readOnly: boolean;
+  // Whether there's a revert button: back to the app's placement (planned)
+  // or to the planned assignments (confirmed).
+  revertable: boolean;
   // Purdue's travel roster from the saved assignments, copied from the
   // button bar, with its warnings below it.
   roster: Roster;
@@ -197,6 +202,27 @@ export function AssignmentBoard({
           {!readOnly && (
             <>
               {confirmed && <AddVolunteer formId={formId} />}
+              {revertable && (
+                <ActionButton
+                  action={(confirmed ? revertAttendance : revertAssignments).bind(null, formId)}
+                  label={confirmed ? "Revert to planned" : "Revert to default"}
+                  confirm={
+                    confirmed
+                      ? {
+                          title: "Revert to the planned assignments?",
+                          description:
+                            "Everyone goes back to the build they were planned for when the first build started, no-shows are cleared, and people you added are taken off. Anyone moved from the waitlist stays signed up, in Not placed. This can't be undone.",
+                          confirmLabel: "Revert",
+                        }
+                      : {
+                          title: "Revert to the app's assignments?",
+                          description:
+                            "Your custom assignments are replaced by the app's placement. This can't be undone. Volunteers aren't emailed.",
+                          confirmLabel: "Revert",
+                        }
+                  }
+                />
+              )}
               {changed.length > 0 && (
                 <Button type="button" variant="outline" size="sm" onClick={() => setMoves({})} disabled={pending}>
                   Discard changes
