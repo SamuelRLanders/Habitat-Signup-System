@@ -444,9 +444,11 @@ function PersonCard({
           <SelectTrigger size="sm" aria-label={`Move ${volunteer.name}`} className="shrink-0 text-xs">
             Move
           </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false} align="end">
+          {/* As wide as the longest build name, with room for the check. */}
+          <SelectContent alignItemWithTrigger={false} align="end" className="w-max max-w-[min(24rem,calc(100vw-2rem))]">
             {columns.map((column) => (
-              <SelectItem key={column.value} value={column.value}>
+              // A very long name wraps, rather than running under the check.
+              <SelectItem key={column.value} value={column.value} className="*:first:whitespace-normal">
                 {column.label}
               </SelectItem>
             ))}
