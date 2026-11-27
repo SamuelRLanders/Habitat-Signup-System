@@ -1,10 +1,11 @@
 "use client";
 
-import { LoaderCircleIcon } from "lucide-react";
+import { ChevronRightIcon, LoaderCircleIcon } from "lucide-react";
 import Link, { useLinkStatus } from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { cn } from "cn";
+import { TableCell, TableHead, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -52,18 +53,57 @@ export function UrlDialog({
   );
 }
 
+// A table row that opens one of those popups when it's clicked anywhere,
+// except on a link or button in it (such as an email address), or when
+// text in it is being selected. It's highlighted on hover and ends with a
+// chevron, so it reads as clickable. Keyboard users open the popup with
+// the DialogLink in the row, so the row itself isn't a tab stop. Give it
+// one more column than the rows above it (see DialogRowHead).
+export function DialogRow({ href, children }: { href: string; children: React.ReactNode }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  return (
+    <TableRow
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("a, button")) return;
+        if (window.getSelection()?.toString()) return;
+        startTransition(() => router.push(href, { scroll: false }));
+      }}
+      className={cn("group cursor-pointer hover:bg-gold/10", pending && "bg-gold/10")}
+    >
+      {children}
+      <TableCell className="w-8 pr-3 text-right">
+        {pending ? (
+          <LoaderCircleIcon aria-hidden="true" className="ml-auto size-4 animate-spin text-muted-foreground" />
+        ) : (
+          <ChevronRightIcon
+            aria-hidden="true"
+            className="ml-auto size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+          />
+        )}
+      </TableCell>
+    </TableRow>
+  );
+}
+
+// The header cell above DialogRow's chevrons.
+export function DialogRowHead() {
+  return (
+    <TableHead className="w-8">
+      <span className="sr-only">Details</span>
+    </TableHead>
+  );
+}
+
 // A link that opens one of those popups, with a spinner beside it while
-// the popup loads. stretch makes the whole table row (which must be
-// relative) open it.
+// the popup loads.
 export function DialogLink({
   href,
-  stretch = false,
   className,
   children,
   ...props
 }: {
   href: string;
-  stretch?: boolean;
   className?: string;
   children: React.ReactNode;
   "aria-label"?: string;
@@ -76,7 +116,6 @@ export function DialogLink({
       prefetch={false}
       className={cn(
         "rounded-sm font-medium hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
-        stretch && "after:absolute after:inset-0",
         className,
       )}
       {...props}

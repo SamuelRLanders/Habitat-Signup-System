@@ -30,7 +30,7 @@ import {
   TabHeader,
   withParam,
 } from "../search-parts";
-import { DialogLink } from "../url-dialog";
+import { DialogLink, DialogRow, DialogRowHead } from "../url-dialog";
 
 export const metadata: Metadata = { title: "Builds" };
 
@@ -112,21 +112,19 @@ export default async function BuildsPage({ searchParams }: PageProps<"/admin/dat
                   <TableHead>Name</TableHead>
                   <TableHead>Address</TableHead>
                   <TableHead className="text-right">Spots</TableHead>
+                  <DialogRowHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {results.builds.map((row) => (
-                  // The name's link covers the row.
-                  <TableRow key={row.id} className="relative cursor-pointer">
+                  <DialogRow key={row.id} href={withParam(here, "build", row.id)}>
                     <TableCell className="whitespace-nowrap">{formatDay(row.day, "short")}</TableCell>
                     <TableCell>
-                      <DialogLink href={withParam(here, "build", row.id)} stretch>
-                        {row.name}
-                      </DialogLink>
+                      <DialogLink href={withParam(here, "build", row.id)}>{row.name}</DialogLink>
                     </TableCell>
                     <TableCell className="text-muted-foreground">{row.address}</TableCell>
                     <TableCell className="text-right tabular-nums">{row.capacity}</TableCell>
-                  </TableRow>
+                  </DialogRow>
                 ))}
               </TableBody>
             </Table>

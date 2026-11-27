@@ -102,7 +102,7 @@ export function NoResults({ what, clearHref }: { what: string; clearHref: string
   );
 }
 
-// "24 total results · Showing 1–100"
+// "24 total results · Showing 1–100 · Click a row to see details"
 export function ResultCount({
   total,
   first,
@@ -124,6 +124,7 @@ export function ResultCount({
           {" · "}Showing {first.toLocaleString("en-US")}–{last.toLocaleString("en-US")}
         </>
       )}
+      {total > 0 && " · Click a row to see details"}
     </p>
   );
 }

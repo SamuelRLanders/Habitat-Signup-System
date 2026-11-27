@@ -31,7 +31,7 @@ import {
   TabHeader,
   withParam,
 } from "../search-parts";
-import { DialogLink } from "../url-dialog";
+import { DialogLink, DialogRow, DialogRowHead } from "../url-dialog";
 
 export const metadata: Metadata = { title: "People" };
 
@@ -106,11 +106,12 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/dat
                   <TableHead>Name</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Email</TableHead>
+                  <DialogRowHead />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {results.people.map((row) => (
-                  <TableRow key={row.id}>
+                  <DialogRow key={row.id} href={withParam(here, "person", row.id)}>
                     <TableCell>
                       <DialogLink
                         href={withParam(here, "person", row.id)}
@@ -125,7 +126,7 @@ export default async function PeoplePage({ searchParams }: PageProps<"/admin/dat
                         {row.email}
                       </a>
                     </TableCell>
-                  </TableRow>
+                  </DialogRow>
                 ))}
               </TableBody>
             </Table>
