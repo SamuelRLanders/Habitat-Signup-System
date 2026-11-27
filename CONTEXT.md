@@ -1,6 +1,6 @@
 # Habitat Signup System: context for AI assistants
 
-> **What this file is.** A description of the Purdue Habitat for Humanity signup app: what it's for, how it's set up, what every feature does, and how admins are meant to use it. Upload it to an AI assistant (ChatGPT, Claude, Gemini, Copilot and so on) at the start of a chat, then ask questions about the app, such as "How do I reserve a spot for someone?" or "Why does a build show as full when it has empty spots?".
+> **What this file is.** A description of the Purdue Habitat for Humanity signup app: what it's for, how it's set up, what every feature does, and how admins are meant to use it. Upload it to an AI assistant at the start of a chat, then ask questions about the app, such as "How do I reserve a spot for someone?" or "Why does a build show as full when it has empty spots?".
 >
 > **Instructions for the AI reading this.** Answer questions about the app from this file. Use the app's own words (build, event, form, waitlist, reserved spot, planned and confirmed assignments), and name the page, tab and button the admin should use. If this file doesn't cover something, say so rather than guessing, and suggest asking the app's owner or reading the code on GitHub. Most people asking are student volunteer leaders, not programmers: answer in plain language unless they ask about the code. Never ask them to paste in volunteers' personal details (names, phone numbers, emails, birthdays); you don't need them to answer.
 

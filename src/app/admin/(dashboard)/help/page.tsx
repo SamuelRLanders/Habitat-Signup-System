@@ -25,8 +25,7 @@ export default async function HelpPage() {
         <CardContent className="flex flex-col gap-3">
           <h2 className="font-semibold">Ask an AI about this app</h2>
           <p className="text-sm text-muted-foreground">
-            Attach CONTEXT.md (or paste its text) in a chat with an AI assistant, such as ChatGPT,
-            Claude or Gemini, then ask it how anything in the app works. Don&apos;t share
+            Attach CONTEXT.md (or paste its text) in a chat with an AI assistant, then ask it how anything in the app works. Don&apos;t share
             volunteers&apos; personal details with it.
           </p>
           <div className="flex flex-wrap items-start gap-2">

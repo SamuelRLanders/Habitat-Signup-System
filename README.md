@@ -2,7 +2,7 @@
 
 A web app for the Purdue Habitat for Humanity chapter. Admins (the chapter's leaders) publish a signup form for each build day, listing the day's builds. Volunteers open a form from the home page or a shared link, confirm their email with a 6-digit code, and say which builds they could work at. The app makes sure everyone can be placed at a build with a ride, runs waitlists, and gives admins the assignments, Purdue's travel roster and the chapter's statistics. Volunteers don't need an account; only admins sign in.
 
-> **Questions about the app?** [CONTEXT.md](CONTEXT.md) describes what it's for, how it's set up and how every feature is meant to be used. Upload it to an AI assistant (ChatGPT, Claude, Gemini…) and ask away. Admins can also download it from the admin **Help** page. Update it whenever a feature changes.
+> **Questions about the app?** [CONTEXT.md](CONTEXT.md) describes what it's for, how it's set up and how every feature is meant to be used. Upload it to an AI assistant and ask away. Admins can also download it from the admin **Help** page. Update it whenever a feature changes.
 
 In the app, a **build** is one group working at one address on a day (the code calls it a `Shift`), and an **event** is a day of builds.
 
