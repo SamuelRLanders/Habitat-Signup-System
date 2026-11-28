@@ -46,6 +46,9 @@ export type SignupFormState = {
 const SESSION_EXPIRED =
   "Your email confirmation has expired. Refresh the page and confirm your email again. Your answers will need to be re-entered.";
 
+const NOT_OFFERED =
+  "One of the builds you chose is no longer offered that day. Refresh the page to see the current builds.";
+
 function revalidateSignup(formId: string) {
   revalidatePath(`/signup/${formId}`);
   revalidatePath("/admin", "layout");
@@ -165,13 +168,7 @@ export async function submitSignup(
   const offered = new Map(form.shifts.map((shift) => [shift.id, shift]));
   // The builds they chose, to work at or to wait for.
   const chosenIds = joining ? waitlistIds : shiftIds;
-  if (!chosenIds.every((id) => offered.has(id))) {
-    return {
-      errors: {
-        shifts: "One of the builds you chose is no longer offered that day. Refresh the page to see the current builds.",
-      },
-    };
-  }
+  if (!chosenIds.every((id) => offered.has(id))) return { errors: { shifts: NOT_OFFERED } };
 
   const details = { ...parsed.data, dateOfBirth: fromDay(parsed.data.dateOfBirth) };
   // How they count when placing volunteers (src/lib/placement).
@@ -209,12 +206,22 @@ export async function submitSignup(
         });
         if (active) return { outcome: "already" as const };
 
+        // The builds as they are now, under the lock: an editor may have
+        // changed their spots or reserved spots, or cancelled one, since
+        // the form was loaded above.
+        const shifts = await tx.shift.findMany({
+          where: { formId, ...offeredShifts.where },
+          select: offeredShifts.select,
+        });
+
         // An editor may have reserved or removed their spot since the page
         // loaded.
-        const held = await getMyReservation(tx, formId, email, form.shifts);
+        const held = await getMyReservation(tx, formId, email, shifts);
         if (held?.shiftId !== reserved?.shiftId || (held?.signupId ?? null) !== null) {
           return { outcome: "reservation" as const };
         }
+        const offeredNow = new Set(shifts.map((shift) => shift.id));
+        if (!chosenIds.every((id) => offeredNow.has(id))) return { outcome: "not-offered" as const };
 
         // A day can have several forms, but a volunteer can only be at one.
         const sameDay = await sameDaySignup(tx, formId, form.date, email);
@@ -224,7 +231,7 @@ export async function submitSignup(
         // them included, with a ride for everyone who needs one. Anyone can
         // join a waitlist, and a reserved spot is always theirs.
         if (!joining && !held) {
-          const day = await loadPlacementDay(tx, formId, form.shifts, asksTransportation);
+          const day = await loadPlacementDay(tx, formId, shifts, asksTransportation);
           if (!signupChecker(day)(newcomer)) {
             return { outcome: "full" as const, rooms: Object.fromEntries(buildRoom(day)) };
           }
@@ -317,6 +324,10 @@ export async function submitSignup(
     return {
       errors: { shifts: "This form's waitlist was just closed. Refresh the page to see which builds have room." },
     };
+  }
+  if (result.outcome === "not-offered") {
+    revalidateSignup(formId);
+    return { errors: { shifts: NOT_OFFERED } };
   }
   if (result.outcome === "same-day") {
     return { errors: { form: sameDayMessage(result.formName) } };
