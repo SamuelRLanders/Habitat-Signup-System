@@ -115,7 +115,8 @@ export function FormEditor({
         <p className="text-sm text-muted-foreground">
           Times are in Eastern (Indiana) time. Once the form is published,
           volunteers can see it right away, but can only fill it out while
-          it&apos;s open. It has to close by the end of the event day.
+          it&apos;s open. It has to close by the time the day&apos;s first
+          build starts.
         </p>
       </fieldset>
 

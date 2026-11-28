@@ -19,7 +19,12 @@ import { fromDay, toDay } from "@/lib/time";
 //
 // It runs when an admin page that shows assignments or counts from them
 // loads, rather than on a schedule, so it's done for every event that has
-// started before it's needed. Callers must run requireAdmin() first.
+// started before it's needed. It also runs first in every admin action that
+// changes what the placement is worked out from (driver decisions, editing,
+// publishing or unpublishing a form, a volunteer's build count, adding a
+// reserved volunteer), so a change made after the day started can't alter
+// it. Drivers count as they were on the day. Callers must run
+// requireAdmin() first.
 
 // Every published form that has closed and started, and whose placement
 // isn't saved yet. Once per request.
@@ -52,7 +57,10 @@ async function savePlacement(formId: string) {
   // custom assignments, each signup's assignedShift already says.
   const placement = new Map<string, string | null>();
   if (form.assignmentsSavedAt === null) {
-    const roster = await getFormRoster(form.id, form.day, form.shifts);
+    // Drivers as they were on the day: an approval that ended since still
+    // counts. Admins' decisions since can't have changed it, since every
+    // action that changes the placement saves it first.
+    const roster = await getFormRoster(form.id, form.day, form.shifts, { driversOnDay: true });
     const active = roster.filter((signup) => !signup.cancelledAt && !signup.waitlistedAt);
     const plan = planForRoster(form.shifts, active, form);
     for (const signup of active) placement.set(signup.id, plan.placement.get(signup.id) ?? null);

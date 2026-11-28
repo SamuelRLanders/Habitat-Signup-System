@@ -22,15 +22,17 @@ export function currentApproval(today = driverToday()) {
   };
 }
 
-// Each volunteer's status, by volunteer ID.
-export async function driverStatuses(volunteerIds: string[]) {
+// Each volunteer's status, by volunteer ID. Approvals count if they last
+// until day ("2026-10-24", today by default), such as a past build day:
+// an approval that ended since still counts for it.
+export async function driverStatuses(volunteerIds: string[], day = driverToday()) {
   const volunteers = await prisma.volunteer.findMany({
     where: { id: { in: volunteerIds } },
     select: {
       id: true,
       driverRequestedAt: true,
       driverApprovals: {
-        where: currentApproval(),
+        where: currentApproval(day),
         orderBy: { approvedUntil: "desc" },
         take: 1,
         select: { approvedUntil: true },

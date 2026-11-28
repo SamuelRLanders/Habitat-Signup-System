@@ -40,8 +40,15 @@ const rosterSelect = {
 // plannedShiftId, noShow and addedAt are for the confirmed assignments
 // (see FormSignup). reservedShiftId is the build of the reserved spot they
 // signed up with, if the form still offers it. builds is how many builds
-// they'd been on before the form's day ("2026-10-24").
-export async function getFormRoster(formId: string, day: string, shifts: OfferedShift[]) {
+// they'd been on before the form's day ("2026-10-24"). driver is their
+// status today, or on the form's day with driversOnDay (for saving the
+// placement once the day has started, which may be days later).
+export async function getFormRoster(
+  formId: string,
+  day: string,
+  shifts: OfferedShift[],
+  { driversOnDay = false } = {},
+) {
   const offered = new Set(shifts.map((shift) => shift.id));
   const signups = await prisma.formSignup.findMany({
     where: { formId },
@@ -49,7 +56,10 @@ export async function getFormRoster(formId: string, day: string, shifts: Offered
     select: { ...rosterSelect, groupRequests: { select: { email: true } } },
   });
   const volunteerIds = signups.map((s) => s.volunteer.id);
-  const [drivers, builds] = await Promise.all([driverStatuses(volunteerIds), buildsDone(volunteerIds, day)]);
+  const [drivers, builds] = await Promise.all([
+    driversOnDay ? driverStatuses(volunteerIds, day) : driverStatuses(volunteerIds),
+    buildsDone(volunteerIds, day),
+  ]);
   return signups.map(({ volunteer, preferences, groupRequests, assignedShiftId, reservation, ...signup }) => ({
     ...signup,
     reservedShiftId: reservedAt(reservation, offered),

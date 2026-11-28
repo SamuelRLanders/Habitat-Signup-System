@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import * as z from "zod";
 import { textWhere } from "@/lib/admin/queries";
 import { requireEditor } from "@/lib/auth/dal";
+import { saveStartedPlacements } from "@/lib/data/final-placement";
 import type { ActionState, FormState } from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
 import { formatDay, fromDay, toDay } from "@/lib/time";
@@ -12,7 +13,9 @@ import { matchPurdueList, type ListCheck } from "./purdue-match";
 import { currentApproval, driverStatuses, driverToday } from "./status";
 
 // Admins deciding on volunteers' driver approvals. Every action calls
-// requireEditor() first, and each decision keeps the admin's name.
+// requireEditor() first, and each decision keeps the admin's name. Each
+// decision first saves the placement of any event that has started
+// (saveStartedPlacements()), so it can't change where people went.
 
 function revalidateDrivers() {
   revalidatePath("/admin", "layout");
@@ -29,6 +32,7 @@ export async function approveDriver(
   formData: FormData,
 ): Promise<ApproveDriverState> {
   const admin = await requireEditor();
+  await saveStartedPlacements();
 
   const until = untilSchema.safeParse(formData.get("approvedUntil"));
   if (!until.success) return { errors: { approvedUntil: until.error.issues[0].message } };
@@ -138,6 +142,7 @@ export async function searchDriverCandidates(query: string): Promise<DriverCandi
 // request is decided.
 export async function addPendingDriver(volunteerId: string): Promise<ActionState> {
   const admin = await requireEditor();
+  await saveStartedPlacements();
 
   const volunteer = await prisma.volunteer.findUnique({
     where: { id: volunteerId },
@@ -214,6 +219,7 @@ export async function approveFromPurdueList(
   entries: { volunteerId: string; until: string }[],
 ): Promise<ListApprovalResult> {
   const admin = await requireEditor();
+  await saveStartedPlacements();
 
   const parsed = listApprovalsSchema.safeParse(entries);
   if (!parsed.success) return { error: "Nothing to approve." };
@@ -246,6 +252,7 @@ export async function approveFromPurdueList(
 // They're asked again on their next signup.
 export async function declineDriver(volunteerId: string): Promise<ActionState> {
   const admin = await requireEditor();
+  await saveStartedPlacements();
 
   const volunteer = await prisma.volunteer.findUnique({
     where: { id: volunteerId },
@@ -277,6 +284,7 @@ export async function declineDriver(volunteerId: string): Promise<ActionState> {
 // Ends an approval early. The record is kept, marked revoked.
 export async function revokeDriver(approvalId: string): Promise<ActionState> {
   const admin = await requireEditor();
+  await saveStartedPlacements();
 
   const { count } = await prisma.driverApproval.updateMany({
     where: { id: approvalId, decision: "APPROVED", revokedAt: null },

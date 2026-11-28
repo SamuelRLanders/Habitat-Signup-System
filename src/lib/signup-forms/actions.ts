@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import * as z from "zod";
 import { requireEditor } from "@/lib/auth/dal";
+import { saveStartedPlacements } from "@/lib/data/final-placement";
 import { fillFromWaitlist } from "@/lib/form-signups/waitlist";
 import {
   firstErrors,
@@ -21,6 +22,7 @@ import {
   addDays,
   DEFAULT_TIME_ZONE,
   formatDay,
+  formatWeekdayTime,
   fromDay,
   toDay,
   zonedDateTime,
@@ -98,6 +100,19 @@ function parseSignupForm(formData: FormData, previousDay?: string) {
       errors.closesTime = "The form has to close after it opens.";
     } else if (closesAt > dayEnds) {
       errors.closesDate = "The form has to close by the end of the event day.";
+    } else if (builds.ok) {
+      // The day is underway once its first build starts: the planned
+      // assignments are saved and nobody can cancel (cancelDeadline()).
+      // So a form can't still be open then, or be opened again afterwards.
+      // One that has already closed is left as it is, so a past event can
+      // still be edited.
+      const starts = builds.builds
+        .filter((build) => !build.cancelled)
+        .map((build) => zonedDateTime(date, build.startTime, DEFAULT_TIME_ZONE).getTime());
+      const firstStart = starts.length > 0 ? new Date(Math.min(...starts)) : null;
+      if (firstStart && closesAt > firstStart && closesAt > new Date()) {
+        errors.closesTime = `The form has to close by the time the day's first build starts, ${formatWeekdayTime(firstStart, DEFAULT_TIME_ZONE)}.`;
+      }
     }
     values = { ...rest, date: fromDay(date), opensAt, closesAt };
   }
@@ -228,6 +243,9 @@ export async function updateSignupForm(
   formData: FormData,
 ): Promise<SignupFormState> {
   const admin = await requireEditor();
+  // Before any change, so an edit after the day started can't alter
+  // where people went.
+  await saveStartedPlacements();
 
   const existing = await prisma.signupForm.findUnique({
     where: { id: formId },
@@ -389,6 +407,9 @@ export async function setSignupFormStatus(
   status: z.infer<typeof statusSchema>,
 ): Promise<ActionState> {
   await requireEditor();
+  // Only published forms' placements are saved, so save one before it's
+  // unpublished.
+  await saveStartedPlacements();
 
   const next = statusSchema.safeParse(status);
   if (!next.success) return { error: "Unknown status." };
@@ -398,7 +419,7 @@ export async function setSignupFormStatus(
     select: {
       status: true,
       closesAt: true,
-      _count: { select: { shifts: { where: { cancelledAt: null } } } },
+      shifts: { where: { cancelledAt: null }, orderBy: { startsAt: "asc" }, take: 1, select: { startsAt: true } },
     },
   });
   if (!form) return { error: "This form no longer exists." };
@@ -408,8 +429,14 @@ export async function setSignupFormStatus(
     if (form.closesAt <= new Date()) {
       return { error: "The form's close time has passed. Change it before publishing." };
     }
-    if (form._count.shifts === 0) {
+    const [first] = form.shifts;
+    if (!first) {
       return { error: "This form has no builds. Edit the form to add one before publishing." };
+    }
+    // As when saving the form (parseSignupForm()), for a form saved before
+    // that was checked.
+    if (form.closesAt > first.startsAt) {
+      return { error: "The form closes after the day's first build starts. Change its close time before publishing." };
     }
   }
 

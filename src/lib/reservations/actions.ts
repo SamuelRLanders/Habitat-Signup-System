@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { textWhere } from "@/lib/admin/queries";
 import { requireEditor } from "@/lib/auth/dal";
+import { saveStartedPlacements } from "@/lib/data/final-placement";
 import type { ActionState } from "@/lib/forms";
 import { prisma } from "@/lib/prisma";
 import { ALREADY_SIGNED_UP, ALREADY_WAITING } from "@/lib/reservations/save";
@@ -23,6 +24,9 @@ import { formPhase } from "@/lib/signup-forms/phase";
 export async function addReserved(formId: string, reservationId: string): Promise<ActionState> {
   await requireEditor();
   if (typeof formId !== "string" || typeof reservationId !== "string") return { error: "Choose someone to add." };
+  // Once the day's first build starts, its placement is saved, so the
+  // check below refuses: they're added on the confirmed assignments instead.
+  await saveStartedPlacements();
 
   const result = await prisma.$transaction(async (tx): Promise<ActionState> => {
     // Locked, as a signup does, so nothing else changes the form meanwhile.

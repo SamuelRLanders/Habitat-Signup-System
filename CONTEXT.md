@@ -66,7 +66,7 @@ Lists signup forms under **Upcoming** and **Past**. Editors see **New form**.
 
 **Creating or editing a form** (Edit form). Fields:
 
-- **Name**, **Event day**, **Opens** and **Closes** (date and time, Indiana time), **Description**.
+- **Name**, **Event day**, **Opens** and **Closes** (date and time, Indiana time), **Description**. A form has to close by the time the day's first build starts, and can't be reopened after that.
 - **Options** (switches):
   - **List on the home page**: off, the form is only reachable through its link (for an outside group, say).
   - **Ask how volunteers are getting there**: off, nobody is asked about rides or driver approval, and everyone counts as getting there on their own (for a group with its own transport).

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import * as z from "zod";
 import { requireEditor } from "@/lib/auth/dal";
+import { saveStartedPlacements } from "@/lib/data/final-placement";
 import { MAX_BUILDS } from "@/lib/experience";
 import { countBuilds } from "@/lib/form-signups/experience";
 import type { FormState } from "@/lib/forms";
@@ -26,6 +27,9 @@ export type BuildsState = FormState<"builds">;
 // later still add on.
 export async function setBuilds(volunteerId: string, _prev: BuildsState, formData: FormData): Promise<BuildsState> {
   await requireEditor();
+  // Experience counts when placing volunteers, so save any started event's
+  // placement first.
+  await saveStartedPlacements();
 
   const raw = formData.get("builds");
   const parsed = buildsSchema.safeParse(typeof raw === "string" && raw.trim() !== "" ? raw : undefined);
